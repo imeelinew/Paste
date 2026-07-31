@@ -17,6 +17,7 @@
 "Clipboard" = "剪贴板";
 "Clipboard changes from these apps won't be recorded." = "不会记录来自这些应用的剪贴板内容。";
 "Clipboard History" = "剪贴板历史";
+"Code" = "代码";
 "Clipboard history is empty" = "剪贴板历史为空";
 "Control how much history Paste keeps and which apps are recorded." = "控制 Paste 保留历史的时长以及记录哪些应用。";
 "Copied" = "复制时间";

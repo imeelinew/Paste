@@ -177,7 +177,7 @@ enum ClipboardActionsMenu {
 
     private static func headerText(_ item: ClipboardItem) -> String {
         switch item.kind {
-        case .text:
+        case .text, .code:
             // Collapse whitespace/newlines to single spaces so a multi-line copy stays a clean one-line title.
             let oneLine = (item.text ?? "").split(whereSeparator: \.isWhitespace).joined(
                 separator: " ")
@@ -227,7 +227,7 @@ private struct ClipboardRow: View {
     private var previewText: String {
         switch item.kind {
         // Single-line row, so cap before trimming — never walk a multi-MB clipboard string per row.
-        case .text:
+        case .text, .code:
             return String((item.text ?? "").prefix(200)).trimmingCharacters(
                 in: .whitespacesAndNewlines)
         case .image: return ""
@@ -239,6 +239,8 @@ private struct ClipboardRow: View {
         switch item.kind {
         case .text:
             glyphTile("doc.text")
+        case .code:
+            glyphTile("chevron.left.forwardslash.chevron.right")
         case .image:
             AsyncThumbnail(url: imageURL, maxPixel: 64) { image in
                 image
@@ -330,6 +332,8 @@ struct ClipboardPreview: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .overlayScroller()
             }
+        case .code:
+            CodePreview(code: item.text ?? "")
         case .image:
             AsyncThumbnail(url: store.imageURL(for: item), maxPixel: Self.previewMaxPixel) {
                 image in
@@ -425,8 +429,11 @@ private struct ClipboardInfoSection: View {
             rows.append(InfoRow(label: "Source", value: source.name, icon: source.icon))
         }
         switch item.kind {
-        case .text:
-            rows.append(InfoRow(label: "Type", value: "Text", localizesValue: true))
+        case .text, .code:
+            rows.append(
+                InfoRow(
+                    label: "Type", value: item.kind == .code ? "Code" : "Text",
+                    localizesValue: true))
             if let characters = details.characters {
                 rows.append(
                     InfoRow(

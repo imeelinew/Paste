@@ -18,6 +18,11 @@ in-memory history).
 Image capture (TIFF→PNG re-encode + blob write) runs off the main actor via detached tasks; row
 inserts, search, and pruning stay on the main actor.
 
+Text payloads are conservatively classified as either `text` or `code`. Strong declarations,
+structured JSON/markup, or several weaker syntax signals produce `code`; existing stored text rows
+are reclassified when loaded. Code keeps its original plain-text pasteboard representation while
+the preview applies lightweight, system-adaptive syntax highlighting.
+
 ## Pinned entries
 
 A row's ⌘K Actions menu carries **Pin Entry / Unpin Entry** (⌘P), persisted as a `pinned_at` column

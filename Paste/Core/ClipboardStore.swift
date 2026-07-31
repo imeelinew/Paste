@@ -4,7 +4,7 @@ import SQLite3
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 struct ClipboardItem: Identifiable, Hashable, Sendable {
-    enum Kind: String, Sendable { case text, image }
+    enum Kind: String, Sendable { case text, code, image }
 
     let id: UUID
     let kind: Kind
@@ -21,7 +21,8 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
 
     init(text: String, sourceBundleID: String?) {
         self.init(
-            id: UUID(), kind: .text, text: text, imagePath: nil, createdAt: Date(),
+            id: UUID(), kind: ClipboardTextClassifier.kind(for: text), text: text,
+            imagePath: nil, createdAt: Date(),
             sourceBundleID: sourceBundleID)
     }
 
@@ -200,7 +201,7 @@ final class ClipboardStore: ObservableObject {
     }
 
     func addText(_ text: String, sourceBundleID: String?) {
-        if items.first?.kind == .text, items.first?.text == text { return }
+        if items.first?.kind != .image, items.first?.text == text { return }
         insert(ClipboardItem(text: text, sourceBundleID: sourceBundleID))
     }
 
@@ -225,7 +226,7 @@ final class ClipboardStore: ObservableObject {
         // Oldest first so newest ends up with the highest rowid (load orders by rowid DESC).
         for item in entries.sorted(by: { $0.createdAt < $1.createdAt }) {
             switch item.kind {
-            case .text:
+            case .text, .code:
                 guard let text = item.text, !seenText.contains(text), !textExists(text) else {
                     continue
                 }
@@ -564,10 +565,16 @@ final class ClipboardStore: ObservableObject {
     private static func row(_ stmt: OpaquePointer?) -> ClipboardItem? {
         guard let idString = columnString(stmt, 0), let id = UUID(uuidString: idString),
             let kindString = columnString(stmt, 1),
-            let kind = ClipboardItem.Kind(rawValue: kindString)
+            let storedKind = ClipboardItem.Kind(rawValue: kindString)
         else { return nil }
+        let text = columnString(stmt, 2)
+        // Reclassify shipped text rows on load so existing code history gains the new presentation
+        // without a destructive schema migration. A later promote/reinsert persists the code kind.
+        let kind: ClipboardItem.Kind =
+            storedKind == .text && text.map({ ClipboardTextClassifier.kind(for: $0) == .code }) == true
+            ? .code : storedKind
         return ClipboardItem(
-            id: id, kind: kind, text: columnString(stmt, 2), imagePath: columnString(stmt, 3),
+            id: id, kind: kind, text: text, imagePath: columnString(stmt, 3),
             createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4)),
             sourceBundleID: columnString(stmt, 5), pinnedAt: columnDate(stmt, 6))
     }
@@ -581,5 +588,57 @@ final class ClipboardStore: ObservableObject {
         guard let ptr = sqlite3_column_text(stmt, index) else { return nil }
         let count = Int(sqlite3_column_bytes(stmt, index))
         return String(decoding: UnsafeBufferPointer(start: ptr, count: count), as: UTF8.self)
+    }
+}
+
+/// Conservative text/code classification for clipboard payloads. Strong syntax forms classify on
+/// their own; weaker punctuation signals must combine, keeping prose, URLs, and ordinary messages
+/// as text. Only a bounded prefix is inspected so a large copy cannot stall capture.
+enum ClipboardTextClassifier {
+    private static let sampleLimit = 12_000
+
+    static func kind(for text: String) -> ClipboardItem.Kind {
+        isCode(text) ? .code : .text
+    }
+
+    static func isCode(_ text: String) -> Bool {
+        let sample = String(text.prefix(sampleLimit)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard sample.count >= 4 else { return false }
+
+        if sample.hasPrefix("```") || sample.hasPrefix("#!") { return true }
+        if isJSONObject(sample) { return true }
+
+        let strongSyntax = #"(?m)^\s*(?:(?:import\s+.+(?:\s+from\s+)?[\"'<])|(?:export\s+(?:default\s+)?)|(?:(?:const|let|var)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*(?::[^=\n]+)?=)|(?:(?:func|function|def|class|struct|enum|protocol|extension|interface|type|fn)\s+[A-Za-z_][A-Za-z0-9_]*)|(?:(?:public|private|protected|internal|open|static|final|pub)\s+(?:class|struct|enum|func|fn|let|var|const)\b)|(?:#include\s*[<\"])|(?:(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER)\b.+\b(?:FROM|INTO|TABLE|SET)\b))"#
+        if matches(strongSyntax, in: sample) { return true }
+
+        let standaloneCall = #"^\s*[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\s*\([^\n]*\)\s*;?\s*$"#
+        if matches(standaloneCall, in: sample) { return true }
+
+        let markup = #"(?s)<[A-Za-z][^>]*>.*</[A-Za-z][^>]*>"#
+        if matches(markup, in: sample) { return true }
+
+        var score = 0
+        if sample.contains("{") && sample.contains("}") { score += 1 }
+        if sample.contains("=>") || sample.contains("::") || sample.contains("?.") { score += 1 }
+        if matches(#"(?m);\s*$"#, in: sample) { score += 1 }
+        if matches(#"\b(?:return|await|throw|guard|switch|case|while|foreach|impl|lambda)\b"#, in: sample) {
+            score += 1
+        }
+        if matches(#"(?m)^\s{2,}\S+"#, in: sample) && sample.contains("\n") { score += 1 }
+        if matches(#"\b[A-Za-z_$][A-Za-z0-9_$]*\s*\([^\n)]*\)"#, in: sample) {
+            score += 1
+        }
+        return score >= 3
+    }
+
+    private static func matches(_ pattern: String, in text: String) -> Bool {
+        text.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    private static func isJSONObject(_ text: String) -> Bool {
+        guard let first = text.first, first == "{" || first == "[", let data = text.data(using: .utf8),
+            let object = try? JSONSerialization.jsonObject(with: data)
+        else { return false }
+        return object is [String: Any] || object is [Any]
     }
 }

@@ -87,7 +87,7 @@ enum Paster {
     private static func write(_ item: ClipboardItem, store: ClipboardStore) -> Bool {
         let pb = NSPasteboard.general
         switch item.kind {
-        case .text:
+        case .text, .code:
             guard let text = item.text else { return false }
             pb.clearContents()
             pb.declareTypes([.string, ClipboardManager.internalType], owner: nil)

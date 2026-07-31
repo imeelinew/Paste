@@ -20,6 +20,7 @@ struct ClipboardTests {
         pinsLeadFilteredSearches()
         persistence()
         migrationFromShippedDatabase()
+        codeClassification()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -194,6 +195,27 @@ struct ClipboardTests {
             sqlite(db, "SELECT name FROM sqlite_master WHERE type = 'index'")
                 .contains("items_pinned_at"),
             "and indexed")
+    }
+
+    static func codeClassification() {
+        withStore { store, _ in
+            store.addText(
+                "import { StrictMode } from 'react'\ncreateRoot(document.getElementById('root')).render(<App />)",
+                sourceBundleID: nil)
+            expect(store.items.first?.kind == .code, "JavaScript is classified as code")
+
+            store.addText("let answer = 42", sourceBundleID: nil)
+            expect(store.items.first?.kind == .code, "a declaration is classified as code")
+
+            store.addText("{\"enabled\": true, \"count\": 3}", sourceBundleID: nil)
+            expect(store.items.first?.kind == .code, "JSON is classified as code")
+
+            store.addText("Paste keeps your clipboard history close at hand.", sourceBundleID: nil)
+            expect(store.items.first?.kind == .text, "ordinary prose remains text")
+
+            store.addText("https://example.com/path?q=value", sourceBundleID: nil)
+            expect(store.items.first?.kind == .text, "a URL remains text")
+        }
     }
 
     // MARK: - Harness
