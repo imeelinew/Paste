@@ -5,6 +5,7 @@
 "Actions" = "Actions";
 "A tiny, native macOS clipboard history." = "A tiny, native macOS clipboard history.";
 "App Language" = "App Language";
+"Appearance" = "Appearance";
 "Built from TinyCast" = "Built from TinyCast";
 "Cancel" = "Cancel";
 "Characters" = "Characters";
@@ -20,13 +21,16 @@
 "Control how much history Paste keeps and which apps are recorded." = "Control how much history Paste keeps and which apps are recorded.";
 "Copied" = "Copied";
 "Copy to Clipboard" = "Copy to Clipboard";
-"Customize Paste's language and startup behavior." = "Customize Paste's language and startup behavior.";
+"Choose Paste's visual appearance." = "Choose Paste's visual appearance.";
+"Customize Paste's language, appearance, and system behavior." = "Customize Paste's language, appearance, and system behavior.";
 "Danger Zone" = "Danger Zone";
+"Dark" = "Dark";
 "Delete All Entries" = "Delete All Entries";
 "Delete Entry" = "Delete Entry";
 "Derived from TinyCast · Released under AGPL-3.0" = "Derived from TinyCast · Released under AGPL-3.0";
 "Dimensions" = "Dimensions";
 "Disabled Applications" = "Disabled Applications";
+"Disable System Clipboard History" = "Disable System Clipboard History";
 "Earlier" = "Earlier";
 "English" = "English";
 "Entries older than this are deleted automatically." = "Entries older than this are deleted automatically.";
@@ -40,6 +44,7 @@
 "Information" = "Information";
 "Keep history for" = "Keep history for";
 "Language" = "Language";
+"Light" = "Light";
 "Launch at Login" = "Launch at Login";
 "Lets Paste paste a clipboard item into the app you were using." = "Lets Paste paste a clipboard item into the app you were using.";
 "License" = "License";
@@ -60,11 +65,9 @@
 "Permissions" = "Permissions";
 "Pin Entry" = "Pin Entry";
 "Pinned" = "Pinned";
-"Quit Paste" = "Quit Paste";
 "Record Shortcut" = "Record Shortcut";
 "Search apps…" = "Search apps…";
 "Settings" = "Settings";
-"Settings..." = "Settings...";
 "Shortcut" = "Shortcut";
 "Show in Finder" = "Show in Finder";
 "Show in launcher" = "Show in launcher";
@@ -72,7 +75,10 @@
 "Size" = "Size";
 "Source" = "Source";
 "Startup" = "Startup";
+"Stop Spotlight from saving and searching clipboard history. Copy and paste keep working." = "Stop Spotlight from saving and searching clipboard history. Copy and paste keep working.";
+"System Clipboard" = "System Clipboard";
 "Text" = "Text";
+"Theme" = "Theme";
 "This can't be undone." = "This can't be undone.";
 "This Month" = "This Month";
 "This Week" = "This Week";

@@ -1,29 +1,19 @@
 import AppKit
-import SwiftUI
 
 @main
-struct PasteApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @AppStorage(SettingsKey.showInMenuBar) private var showInMenuBar = true
-    @ObservedObject private var settings = AppCore.shared.settings
+enum PasteApp {
+    @MainActor private static let delegate = AppDelegate()
 
-    var body: some Scene {
-        MenuBarExtra(
-            "Paste", systemImage: "macwindow.on.rectangle", isInserted: $showInMenuBar
-        ) {
-            Button("Clipboard History") { AppCore.shared.showPalette() }
-            Divider()
-            Button("Settings...") { AppCore.shared.showSettings() }
-                .keyboardShortcut(",")
-            Divider()
-            Button("Quit Paste") { NSApp.terminate(nil) }
-                .keyboardShortcut("q")
-        }
-        .environment(\.locale, settings.language.locale)
+    @MainActor
+    static func main() {
+        let application = NSApplication.shared
+        application.delegate = delegate
+        application.run()
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor
+private final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppCore.shared.start()
     }

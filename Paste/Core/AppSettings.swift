@@ -1,8 +1,5 @@
+import AppKit
 import SwiftUI
-
-enum SettingsKey {
-    static let showInMenuBar = "showInMenuBar"
-}
 
 enum AppLanguage: String, CaseIterable, Identifiable {
     case system
@@ -28,6 +25,31 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: return "Follow System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+
+    @MainActor
+    func apply() {
+        switch self {
+        case .system: NSApp.appearance = nil
+        case .light: NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
@@ -38,6 +60,7 @@ final class AppSettings: ObservableObject {
         static let openOnCursorScreen = "openOnCursorScreen"
         static let launchAtLogin = "launchAtLogin"
         static let language = "appLanguage"
+        static let appearance = "appAppearance"
     }
 
     @Published var clipboardRetention: ClipboardRetention {
@@ -63,6 +86,13 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(language.rawValue, forKey: Key.language) }
     }
 
+    @Published var appearance: AppAppearance {
+        didSet {
+            defaults.set(appearance.rawValue, forKey: Key.appearance)
+            appearance.apply()
+        }
+    }
+
     init() {
         clipboardRetention =
             ClipboardRetention(rawValue: defaults.integer(forKey: Key.clipboardRetention))
@@ -76,5 +106,8 @@ final class AppSettings: ObservableObject {
         launchAtLogin = LaunchAtLogin.isEnabled
         language =
             defaults.string(forKey: Key.language).flatMap(AppLanguage.init(rawValue:)) ?? .system
+        appearance =
+            defaults.string(forKey: Key.appearance).flatMap(AppAppearance.init(rawValue:))
+            ?? .system
     }
 }

@@ -11,6 +11,7 @@ final class AppCore: ObservableObject {
     let hotKeys = HotKeyManager()
     let palette = PaletteViewModel()
     let installedApplications = InstalledApplications()
+    let systemClipboardHistory = SystemClipboardHistory()
 
     private lazy var windowController = PaletteWindowController(core: self)
     private let auxWindows = AuxWindowController()
@@ -21,7 +22,7 @@ final class AppCore: ObservableObject {
 
     func start() {
         NSApp.setActivationPolicy(.accessory)
-        NSApp.appearance = NSAppearance(named: .aqua)
+        settings.appearance.apply()
 
         clipboardStore.maxAge = settings.clipboardRetention.maxAge
         Task { clipboardStore.load() }

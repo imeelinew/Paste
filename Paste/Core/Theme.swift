@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Central design tokens for Paste's light palette UI.
+/// Central design tokens for Paste's adaptive palette UI.
 enum Theme {
     enum Spacing {
         static let xxs: CGFloat = 2
@@ -106,20 +106,20 @@ enum Theme {
 
     enum Colors {
         /// Selection fill: a soft neutral translucent layer shared by launcher and clipboard so both lists look identical.
-        static let selection = Color.black.opacity(0.10)
+        static let selection = Color.primary.opacity(0.10)
         /// Mouse hover — a fainter layer that follows the cursor, visually distinct from selection.
-        static let rowHover = Color.black.opacity(0.05)
-        static let menuHover = Color.black.opacity(0.10)
-        static let separator = Color.black.opacity(0.10)
+        static let rowHover = Color.primary.opacity(0.05)
+        static let menuHover = Color.primary.opacity(0.10)
+        static let separator = Color.primary.opacity(0.10)
         /// Small control surfaces: kbd chips, glyph tiles.
-        static let controlSurface = Color.black.opacity(0.08)
+        static let controlSurface = Color.primary.opacity(0.08)
         /// Control borders: outlined kbd chips.
-        static let border = Color.black.opacity(0.20)
-        static let textSecondary = Color.black.opacity(0.60)
-        static let textTertiary = Color.black.opacity(0.40)
+        static let border = Color.primary.opacity(0.20)
+        static let textSecondary = Color.primary.opacity(0.60)
+        static let textTertiary = Color.primary.opacity(0.40)
         /// Settings grouped "card": a faint raised surface whose hairline border doubles as the inset row divider.
-        static let cardFill = Color.black.opacity(0.04)
-        static let cardStroke = Color.black.opacity(0.10)
+        static let cardFill = Color.primary.opacity(0.04)
+        static let cardStroke = Color.primary.opacity(0.10)
         /// Whitish tint layered into the Liquid Glass floating controls (action group + menu circle) so the glass reads frosted rather than clear.
         static let glassFrost = Color.white.opacity(0.05)
         /// The violet of the app mark. The one non-white hue in the system, used only to tint the About support callout.
