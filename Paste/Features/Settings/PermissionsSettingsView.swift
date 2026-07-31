@@ -13,7 +13,6 @@ struct PermissionsSettingsView: View {
                 ) {
                     statusBadge
                 }
-                SettingsDivider(hasLeadingIcon: false)
                 let actionTitle: LocalizedStringKey =
                     accessibilityTrusted ? "Manage in System Settings" : "Grant access"
                 let buttonTitle: LocalizedStringKey =

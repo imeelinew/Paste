@@ -40,7 +40,6 @@ struct ClipboardSettingsView: View {
                     DisabledAppRow(bundleID: bundleID) {
                         settings.clipboardDisabledApps.removeAll { $0 == bundleID }
                     }
-                    SettingsDivider()
                 }
 
                 HStack(spacing: Theme.Spacing.lg) {
@@ -112,8 +111,6 @@ private struct DisabledAppRow: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, Theme.Spacing.xl)
-        .padding(.vertical, Theme.Spacing.lg)
     }
 
     private var genericIcon: NSImage {

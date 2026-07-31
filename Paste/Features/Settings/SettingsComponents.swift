@@ -1,65 +1,38 @@
+import AppKit
 import SwiftUI
 
 /// Reusable building blocks for the Settings window; all metrics come from `Theme` so Settings shares one vocabulary with the palette.
 
 // MARK: - Pane scaffold
 
-/// Standard layout for a settings pane (title header, then scrollable content) so headers,
-/// insets and scroll behaviour stay identical across the app.
+/// Obelisk-style settings detail: a compact title followed by native grouped Form sections.
 struct SettingsPane<Content: View>: View {
     let title: LocalizedStringKey
     @ViewBuilder var content: Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                SettingsHeader(title: title)
-                content
-            }
-            // Ignore the transparent-titlebar safe area and use one fixed `xxl` inset every side instead (the titlebar band is taller than the rhythm we want; traffic lights sit over the sidebar, so nothing collides).
-            .padding(Theme.Spacing.xxl)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Settings use the native thin overlay scroller (not the palette's SwiftUI `thinScrollbar`), matching the other windowed setting lists.
+        Form { content }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .contentMargins(.horizontal, 18, for: .scrollContent)
+            .contentMargins(.top, 0, for: .scrollContent)
             .overlayScroller()
-        }
-        .ignoresSafeArea(edges: .top)
-    }
-}
-
-/// The title at the top of every pane.
-struct SettingsHeader: View {
-    let title: LocalizedStringKey
-
-    var body: some View {
-        Text(title)
-            .font(.title2.weight(.bold))
+            .navigationTitle(title)
     }
 }
 
 // MARK: - Grouped card
 
-/// A rounded, hairline-bordered container grouping related rows — the macOS System Settings "card" (rows split by inset dividers via `SettingsRow`/`SettingsDivider`).
+/// Native grouped Form section, matching Obelisk's settings surfaces and automatic separators.
 struct SettingsCard<Content: View>: View {
     var header: LocalizedStringKey? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            if let header {
-                Text(header)
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, Theme.Spacing.xs)
-            }
-            VStack(spacing: 0) { content }
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                        .fill(Theme.Colors.cardFill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                        .strokeBorder(Theme.Colors.cardStroke, lineWidth: 1)
-                )
+        if let header {
+            Section(header) { content }
+        } else {
+            Section { content }
         }
     }
 }
@@ -81,7 +54,6 @@ struct FeatureSwitchCard: View {
                     .toggleStyle(.switch)
                     .accessibilityLabel(enableTitle)
             }
-            SettingsDivider(hasLeadingIcon: false)
             SettingsRow(
                 title: "Show in launcher"
             ) {
@@ -97,23 +69,6 @@ struct FeatureSwitchCard: View {
     }
 }
 
-/// Inset divider between rows inside a `SettingsCard`, aligned under the row's title (past the icon).
-struct SettingsDivider: View {
-    var hasLeadingIcon = true
-
-    var body: some View {
-        Rectangle()
-            .fill(Theme.Colors.cardStroke)
-            .frame(height: 1)
-            .padding(
-                .leading,
-                hasLeadingIcon
-                    ? Theme.Spacing.xl + Theme.Size.settingsRowIcon + Theme.Spacing.lg
-                    : Theme.Spacing.xl
-            )
-    }
-}
-
 // MARK: - Row
 
 /// A single settings line (title and trailing control); fixed vertical rhythm keeps every card
@@ -125,21 +80,18 @@ struct SettingsRow<Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.lg) {
+        LabeledContent {
+            trailing
+        } label: {
             HStack(spacing: Theme.Spacing.sm) {
                 Text(title)
-                    .font(.body)
                 if let statusDot {
                     Circle()
                         .fill(statusDot)
                         .frame(width: Theme.Size.statusDot, height: Theme.Size.statusDot)
                 }
             }
-            Spacer(minLength: Theme.Spacing.xl)
-            trailing
         }
-        .padding(.horizontal, Theme.Spacing.xl)
-        .padding(.vertical, Theme.Spacing.lg)
     }
 }
 
@@ -190,5 +142,27 @@ extension SettingsCallout where Trailing == EmptyView {
         systemImage: String = "info.circle", tint: Color = .secondary
     ) {
         self.init(title: title, message: message, systemImage: systemImage, tint: tint) { EmptyView() }
+    }
+}
+
+/// Makes the hosting NSWindow transparent so the root `.hudWindow` material samples content
+/// behind the window, exactly like Obelisk's window-level transparency configurator.
+struct SettingsWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { Probe() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in
+            guard let window = nsView?.window else { return }
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.titlebarAppearsTransparent = true
+            window.invalidateShadow()
+            window.contentView?.needsDisplay = true
+        }
+    }
+
+    private final class Probe: NSView {
+        override var isOpaque: Bool { false }
+        override func draw(_ dirtyRect: NSRect) {}
     }
 }

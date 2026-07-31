@@ -4,7 +4,7 @@ extension Notification.Name {
     static let pasteSelectSettingsTab = Notification.Name("PasteSelectSettingsTab")
 }
 
-enum SettingsTab: Int, CaseIterable, Identifiable {
+enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
     case general, clipboard, permissions, about
 
     var id: Int { rawValue }
@@ -20,20 +20,38 @@ enum SettingsTab: Int, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
-        case .general: return "gearshape"
-        case .clipboard: return "doc.on.clipboard"
-        case .permissions: return "lock.shield"
-        case .about: return "info.circle"
+        case .general: return "gearshape.fill"
+        case .clipboard: return "doc.on.clipboard.fill"
+        case .permissions: return "lock.shield.fill"
+        case .about: return "info.circle.fill"
         }
     }
 
-    var tint: Color {
+    var iconGradient: LinearGradient {
+        let colors: [Color]
         switch self {
-        case .general: return .gray
-        case .clipboard: return .orange
-        case .permissions: return .blue
-        case .about: return .pink
+        case .general:
+            colors = [
+                Color(red: 0.52, green: 0.64, blue: 0.78),
+                Color(red: 0.28, green: 0.38, blue: 0.52),
+            ]
+        case .clipboard:
+            colors = [
+                Color(red: 1.0, green: 0.50, blue: 0.40),
+                Color(red: 0.96, green: 0.28, blue: 0.24),
+            ]
+        case .permissions:
+            colors = [
+                Color(red: 0.72, green: 0.52, blue: 1.0),
+                Color(red: 0.42, green: 0.24, blue: 0.86),
+            ]
+        case .about:
+            colors = [
+                Color(red: 0.36, green: 0.72, blue: 1.0),
+                Color(red: 0.12, green: 0.46, blue: 0.92),
+            ]
         }
+        return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }
 
@@ -46,9 +64,9 @@ struct SettingsRootView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        NavigationSplitView {
             sidebar
-
+        } detail: {
             Group {
                 switch tab {
                 case .general: GeneralSettingsView()
@@ -58,12 +76,16 @@ struct SettingsRootView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                VisualEffectView(material: .contentBackground, blending: .behindWindow)
-                    .ignoresSafeArea()
-            )
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationSplitViewStyle(.balanced)
+        .toolbar(removing: .sidebarToggle)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .background {
+            VisualEffectView(material: .hudWindow, blending: .behindWindow)
+                .ignoresSafeArea()
+            SettingsWindowConfigurator()
+                .frame(width: 0, height: 0)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .pasteSelectSettingsTab)) { note in
             if let target = note.object as? SettingsTab { tab = target }
         }
@@ -71,69 +93,34 @@ struct SettingsRootView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs / 2) {
+        List(selection: tabSelection) {
             ForEach(SettingsTab.allCases) { item in
-                SidebarRow(
-                    title: item.title,
-                    systemImage: item.systemImage,
-                    tint: item.tint,
-                    isSelected: tab == item
-                ) { tab = item }
+                HStack(spacing: 8) {
+                    Image(systemName: item.systemImage)
+                        .symbolRenderingMode(.monochrome)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(item.iconGradient)
+                        .frame(width: 18, height: 18)
+                    Text(item.title)
+                        .fontWeight(tab == item ? .semibold : .regular)
+                    Spacer(minLength: 0)
+                }
+                .tag(item)
             }
-            Spacer()
         }
-        .padding(.top, Theme.Spacing.md)
-        .padding(.horizontal, Theme.Spacing.md)
-        .frame(width: Theme.Size.settingsSidebar)
-        .frame(maxHeight: .infinity)
-        .background(
-            ZStack(alignment: .trailing) {
-                VisualEffectView(material: .sidebar, blending: .behindWindow)
-                Rectangle()
-                    .fill(Color(nsColor: .separatorColor))
-                    .frame(width: 1)
-            }
-            .ignoresSafeArea()
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .navigationSplitViewColumnWidth(
+            min: 150,
+            ideal: Theme.Size.settingsSidebar,
+            max: Theme.Size.settingsSidebar
         )
     }
-}
 
-private struct SidebarRow: View {
-    let title: LocalizedStringKey
-    let systemImage: String
-    let tint: Color
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: Theme.Spacing.lg) {
-                RoundedRectangle(cornerRadius: Theme.Radius.menu, style: .continuous)
-                    .fill(tint.gradient)
-                    .frame(width: 22, height: 22)
-                    .overlay(
-                        Image(systemName: systemImage)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
-                    )
-                    .shadow(color: .black.opacity(0.2), radius: 0.5, y: 0.5)
-                Text(title).font(Theme.Typography.rowTitle)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.sm)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
-                    .fill(background)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .focusEffectDisabled()
-    }
-
-    private var background: Color {
-        if isSelected { return Theme.Colors.selection }
-        return .clear
+    private var tabSelection: Binding<SettingsTab?> {
+        Binding(
+            get: { tab },
+            set: { if let newValue = $0 { tab = newValue } }
+        )
     }
 }

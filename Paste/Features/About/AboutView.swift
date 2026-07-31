@@ -13,20 +13,18 @@ struct AboutView: View {
     private static let iconSize: CGFloat = 88
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: Theme.Spacing.xl) {
-                    hero
-                    links
-                    attribution
-                }
-                .padding(Theme.Spacing.xxl)
-                .frame(maxWidth: .infinity)
-                .overlayScroller()
+        SettingsPane(title: "About") {
+            SettingsCard {
+                hero
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Theme.Spacing.xl)
             }
-            footer.padding(.bottom, Theme.Spacing.xxl)
+            links
+            SettingsCard { attribution }
+            SettingsCard {
+                footer.frame(maxWidth: .infinity)
+            }
         }
-        .ignoresSafeArea(edges: .top)
     }
 
     private var hero: some View {
@@ -56,13 +54,9 @@ struct AboutView: View {
 
     private var links: some View {
         SettingsCard(header: "Links") {
-            VStack(spacing: 0) {
-                ForEach(AboutLink.all) { link in
-                    if link.id != AboutLink.all.first?.id { SettingsDivider() }
-                    AboutLinkRow(link: link)
-                }
+            ForEach(AboutLink.all) { link in
+                AboutLinkRow(link: link)
             }
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         }
     }
 
@@ -122,9 +116,7 @@ private struct AboutLinkRow: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(hovered ? .secondary : .tertiary)
             }
-            .padding(.horizontal, Theme.Spacing.xl)
-            .padding(.vertical, Theme.Spacing.lg)
-            .background(hovered ? Theme.Colors.rowHover : .clear)
+            .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -159,7 +151,7 @@ final class AuxWindowController: NSObject, NSWindowDelegate {
             window.title = title
             if seamlessTitleBar {
                 window.titlebarAppearsTransparent = true
-                window.titleVisibility = .hidden
+                window.titleVisibility = .visible
                 window.isMovableByWindowBackground = true
             }
             window.isReleasedWhenClosed = false
