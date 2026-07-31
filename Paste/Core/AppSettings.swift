@@ -4,6 +4,30 @@ enum SettingsKey {
     static let showInMenuBar = "showInMenuBar"
 }
 
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system
+    case english
+    case simplifiedChinese
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: return "Follow System"
+        case .english: return "English"
+        case .simplifiedChinese: return "Simplified Chinese"
+        }
+    }
+
+    var locale: Locale {
+        switch self {
+        case .system: return .autoupdatingCurrent
+        case .english: return Locale(identifier: "en")
+        case .simplifiedChinese: return Locale(identifier: "zh-Hans")
+        }
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
@@ -13,6 +37,7 @@ final class AppSettings: ObservableObject {
         static let clipboardDisabledApps = "clipboardDisabledApps"
         static let openOnCursorScreen = "openOnCursorScreen"
         static let launchAtLogin = "launchAtLogin"
+        static let language = "appLanguage"
     }
 
     @Published var clipboardRetention: ClipboardRetention {
@@ -34,6 +59,10 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published var language: AppLanguage {
+        didSet { defaults.set(language.rawValue, forKey: Key.language) }
+    }
+
     init() {
         clipboardRetention =
             ClipboardRetention(rawValue: defaults.integer(forKey: Key.clipboardRetention))
@@ -45,5 +74,7 @@ final class AppSettings: ObservableObject {
             defaults.object(forKey: Key.openOnCursorScreen) == nil
             || defaults.bool(forKey: Key.openOnCursorScreen)
         launchAtLogin = LaunchAtLogin.isEnabled
+        language =
+            defaults.string(forKey: Key.language).flatMap(AppLanguage.init(rawValue:)) ?? .system
     }
 }

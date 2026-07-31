@@ -53,9 +53,11 @@ final class AppCore: ObservableObject {
         showPalette()
     }
 
-    func showSettings(tab: SettingsTab = .clipboard) {
+    func showSettings(tab: SettingsTab = .general) {
         let isNew = auxWindows.show(
-            id: "settings", title: "Settings", size: CGSize(width: 720, height: 550),
+            id: "settings",
+            title: String(localized: "Settings", locale: settings.language.locale),
+            size: CGSize(width: 720, height: 550),
             seamlessTitleBar: true
         ) {
             SettingsRootView(initialTab: tab)

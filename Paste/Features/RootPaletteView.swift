@@ -4,6 +4,7 @@ struct RootPaletteView: View {
     @EnvironmentObject private var core: AppCore
     @EnvironmentObject private var vm: PaletteViewModel
     @EnvironmentObject private var store: ClipboardStore
+    @ObservedObject private var settings = AppCore.shared.settings
 
     @FocusState private var searchFocused: Bool
     @State private var showActions = false
@@ -202,6 +203,7 @@ struct RootPaletteView: View {
             core.togglePinnedClip(clipResults[selection])
             return .handled
         }
+        .environment(\.locale, settings.language.locale)
     }
 
     private var header: some View {
@@ -240,7 +242,7 @@ struct RootPaletteView: View {
         HStack(spacing: 2) {
             BarButton(action: activateSelection) {
                 HStack(spacing: Theme.Spacing.sm) {
-                    Text(vm.pasteTarget?.pasteTitle ?? "Paste")
+                    Text(vm.pasteTarget?.pasteTitle ?? LocalizedStringKey("Paste"))
                         .font(Theme.Typography.bar)
                         .foregroundStyle(.primary)
                     KeyCapChip(text: "↵", style: .outline)
@@ -367,7 +369,7 @@ extension View {
 }
 
 struct EmptyResults: View {
-    let text: String
+    let text: LocalizedStringKey
 
     var body: some View {
         VStack(spacing: 8) {

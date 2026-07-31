@@ -5,7 +5,7 @@ struct SectionHeader: View {
     var isFirst = false
 
     var body: some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(Theme.Typography.sectionHeader)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)

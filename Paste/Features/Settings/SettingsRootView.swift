@@ -5,12 +5,13 @@ extension Notification.Name {
 }
 
 enum SettingsTab: Int, CaseIterable, Identifiable {
-    case clipboard, permissions, about
+    case general, clipboard, permissions, about
 
     var id: Int { rawValue }
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
+        case .general: return "General"
         case .clipboard: return "Clipboard"
         case .permissions: return "Permissions"
         case .about: return "About"
@@ -19,6 +20,7 @@ enum SettingsTab: Int, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
+        case .general: return "gearshape"
         case .clipboard: return "doc.on.clipboard"
         case .permissions: return "lock.shield"
         case .about: return "info.circle"
@@ -27,6 +29,7 @@ enum SettingsTab: Int, CaseIterable, Identifiable {
 
     var tint: Color {
         switch self {
+        case .general: return .gray
         case .clipboard: return .orange
         case .permissions: return .blue
         case .about: return .pink
@@ -36,8 +39,9 @@ enum SettingsTab: Int, CaseIterable, Identifiable {
 
 struct SettingsRootView: View {
     @State private var tab: SettingsTab
+    @ObservedObject private var settings = AppCore.shared.settings
 
-    init(initialTab: SettingsTab = .clipboard) {
+    init(initialTab: SettingsTab = .general) {
         _tab = State(initialValue: initialTab)
     }
 
@@ -47,6 +51,7 @@ struct SettingsRootView: View {
 
             Group {
                 switch tab {
+                case .general: GeneralSettingsView()
                 case .clipboard: ClipboardSettingsView()
                 case .permissions: PermissionsSettingsView()
                 case .about: AboutView()
@@ -62,6 +67,7 @@ struct SettingsRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .pasteSelectSettingsTab)) { note in
             if let target = note.object as? SettingsTab { tab = target }
         }
+        .environment(\.locale, settings.language.locale)
     }
 
     private var sidebar: some View {
@@ -93,7 +99,7 @@ struct SettingsRootView: View {
 }
 
 private struct SidebarRow: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let tint: Color
     let isSelected: Bool

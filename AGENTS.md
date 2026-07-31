@@ -7,6 +7,7 @@
 - `AppCore.shared` owns all long-lived managers and window controllers.
 - `PaletteWindowController` alone owns the panel frame; the hosting view must keep `sizingOptions = []`.
 - The app is locked to `.aqua`; palette colors use a dark-alpha ramp over the unobscured system material.
+- User-facing strings must remain localized in both `en.lproj` and `zh-Hans.lproj`. The language preference defaults to the system locale and supports live switching.
 - Clipboard writes must retain the private internal marker so Paste never captures its own synthetic writes.
 - Keep `ClipboardStore.swift` Foundation + SQLite3 only so `Tools/clipboard-test.swift` can compile it standalone.
 - Do not modify `Core/EdgeDissolve.swift` or `Core/ThinScrollbar.swift` unless the task explicitly changes their appearance.

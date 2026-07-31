@@ -5,6 +5,7 @@ import SwiftUI
 struct PasteApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @AppStorage(SettingsKey.showInMenuBar) private var showInMenuBar = true
+    @ObservedObject private var settings = AppCore.shared.settings
 
     var body: some Scene {
         MenuBarExtra(
@@ -18,6 +19,7 @@ struct PasteApp: App {
             Button("Quit Paste") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
+        .environment(\.locale, settings.language.locale)
     }
 }
 

@@ -31,7 +31,7 @@ struct ClipboardSettingsView: View {
                 ) {
                     Picker("", selection: $settings.clipboardRetention) {
                         ForEach(ClipboardRetention.allCases) { retention in
-                            Text(retention.title).tag(retention)
+                            Text(LocalizedStringKey(retention.title)).tag(retention)
                         }
                     }
                     .labelsHidden()

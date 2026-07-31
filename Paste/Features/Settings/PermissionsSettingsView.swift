@@ -20,13 +20,17 @@ struct PermissionsSettingsView: View {
                     statusBadge
                 }
                 SettingsDivider()
+                let actionTitle: LocalizedStringKey =
+                    accessibilityTrusted ? "Manage in System Settings" : "Grant access"
+                let buttonTitle: LocalizedStringKey =
+                    accessibilityTrusted ? "Open…" : "Open Settings…"
                 SettingsRow(
-                    title: accessibilityTrusted ? "Manage in System Settings" : "Grant access",
+                    title: actionTitle,
                     subtitle: "Opens Privacy & Security › Accessibility.",
                     systemImage: "arrow.up.forward.app",
                     tint: .secondary
                 ) {
-                    Button(accessibilityTrusted ? "Open…" : "Open Settings…") {
+                    Button(buttonTitle) {
                         Permissions.openAccessibilitySettings()
                     }
                 }
@@ -45,7 +49,9 @@ struct PermissionsSettingsView: View {
                 systemName: accessibilityTrusted
                     ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
             )
-            Text(accessibilityTrusted ? "Granted" : "Not granted")
+            Text(
+                accessibilityTrusted
+                    ? LocalizedStringKey("Granted") : LocalizedStringKey("Not granted"))
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(accessibilityTrusted ? Color.green : Color.orange)

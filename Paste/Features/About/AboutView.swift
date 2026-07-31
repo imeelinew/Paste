@@ -2,10 +2,10 @@ import AppKit
 import SwiftUI
 
 struct AboutView: View {
-    private static var version: String {
+    private static var version: Text {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
-        return "Version \(short) (\(build))"
+        return Text("Version \(short) (\(build))")
     }
 
     @MainActor private static let appIcon: NSImage =
@@ -39,7 +39,7 @@ struct AboutView: View {
 
             VStack(spacing: Theme.Spacing.sm) {
                 Text("Paste").font(.title.weight(.bold))
-                Text(Self.version)
+                Self.version
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, Theme.Spacing.md)
@@ -85,11 +85,11 @@ struct AboutView: View {
 private struct AboutLink: Identifiable {
     let id: String
     let systemImage: String
-    let title: String
+    let title: LocalizedStringKey
     let detail: String
     let url: URL
 
-    static let all: [AboutLink] = [
+    @MainActor static let all: [AboutLink] = [
         AboutLink(
             id: "source", systemImage: "chevron.left.forwardslash.chevron.right",
             title: "TinyCast Source", detail: "github.com/abue-ammar/tinycast",

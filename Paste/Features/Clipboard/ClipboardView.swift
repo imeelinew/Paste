@@ -203,10 +203,16 @@ private struct ClipboardRow: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.lg) {
             thumbnail
-            Text(previewText)
-                .font(Theme.Typography.menuRow)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            Group {
+                if item.kind == .image {
+                    Text("Image")
+                } else {
+                    Text(previewText)
+                }
+            }
+            .font(Theme.Typography.menuRow)
+            .lineLimit(1)
+            .truncationMode(.tail)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Theme.Spacing.md)
@@ -224,7 +230,7 @@ private struct ClipboardRow: View {
         case .text:
             return String((item.text ?? "").prefix(200)).trimmingCharacters(
                 in: .whitespacesAndNewlines)
-        case .image: return "Image"
+        case .image: return ""
         }
     }
 
@@ -351,6 +357,7 @@ private struct ClipboardInfoSection: View {
     let imageURL: URL?
 
     @State private var details = Details()
+    @ObservedObject private var settings = AppCore.shared.settings
 
     private struct Details: Equatable, Sendable {
         var characters: Int?
@@ -362,6 +369,7 @@ private struct ClipboardInfoSection: View {
     private struct InfoRow: Identifiable {
         let label: String
         let value: String
+        var localizesValue = false
         var icon: NSImage?
         var id: String { label }
     }
@@ -385,14 +393,22 @@ private struct ClipboardInfoSection: View {
                 ForEach(rows) { row in
                     if row.id != rows.first?.id { Divider() }
                     HStack(spacing: Theme.Spacing.sm) {
-                        Text(row.label).foregroundStyle(.secondary)
+                        Text(LocalizedStringKey(row.label)).foregroundStyle(.secondary)
                         Spacer(minLength: Theme.Spacing.lg)
                         if let icon = row.icon {
                             Image(nsImage: icon)
                                 .resizable()
                                 .frame(width: 20, height: 20)
                         }
-                        Text(row.value).lineLimit(1).truncationMode(.middle)
+                        Group {
+                            if row.localizesValue {
+                                Text(LocalizedStringKey(row.value))
+                            } else {
+                                Text(row.value)
+                            }
+                        }
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                     }
                     .font(.callout)
                     .padding(.vertical, Theme.Spacing.sm)
@@ -410,15 +426,22 @@ private struct ClipboardInfoSection: View {
         }
         switch item.kind {
         case .text:
-            rows.append(InfoRow(label: "Type", value: "Text"))
+            rows.append(InfoRow(label: "Type", value: "Text", localizesValue: true))
             if let characters = details.characters {
-                rows.append(InfoRow(label: "Characters", value: characters.formatted()))
+                rows.append(
+                    InfoRow(
+                        label: "Characters",
+                        value: characters.formatted(
+                            .number.locale(settings.language.locale))))
             }
             if let words = details.words {
-                rows.append(InfoRow(label: "Words", value: words.formatted()))
+                rows.append(
+                    InfoRow(
+                        label: "Words",
+                        value: words.formatted(.number.locale(settings.language.locale))))
             }
         case .image:
-            rows.append(InfoRow(label: "Type", value: "Image"))
+            rows.append(InfoRow(label: "Type", value: "Image", localizesValue: true))
             if let size = details.pixelSize {
                 rows.append(
                     InfoRow(label: "Dimensions", value: "\(Int(size.width))×\(Int(size.height))"))
@@ -426,9 +449,12 @@ private struct ClipboardInfoSection: View {
             if let bytes = details.fileBytes {
                 rows.append(
                     InfoRow(
-                        label: "Size", value: Int64(bytes).formatted(.byteCount(style: .file))))
+                        label: "Size",
+                        value: Int64(bytes).formatted(
+                            .byteCount(style: .file).locale(settings.language.locale))))
             }
         }
+        Self.copiedFormatter.locale = settings.language.locale
         rows.append(
             InfoRow(label: "Copied", value: Self.copiedFormatter.string(from: item.createdAt)))
         return rows
