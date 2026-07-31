@@ -1,25 +1,34 @@
 {
-  "fill": "automatic",
-  "groups": [
+  "fill" : "automatic",
+  "groups" : [
     {
-      "layers": [
+      "layers" : [
         {
-          "image-name": "thunder.svg",
-          "name": "thunder"
+          "image-name" : "clipboard.svg",
+          "name" : "clipboard",
+          "position" : {
+            "scale" : 30,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
-      "shadow": {
-        "kind": "neutral",
-        "opacity": 0.5
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
       },
-      "translucency": {
-        "enabled": true,
-        "value": 0.5
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
       }
     }
   ],
-  "supported-platforms": {
-    "circles": ["watchOS"],
-    "squares": "shared"
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
   }
 }
