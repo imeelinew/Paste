@@ -18,7 +18,7 @@ final class PalettePanel: NSPanel {
 
     private func setSearchCaretHidden(_ hidden: Bool) {
         guard let editor = firstResponder as? NSTextView else { return }
-        editor.insertionPointColor = hidden ? .clear : .white
+        editor.insertionPointColor = hidden ? .clear : .textColor
         editor.updateInsertionPointStateAndRestartTimer(!hidden)
     }
 

@@ -114,7 +114,6 @@ struct RootPaletteView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.black.opacity(Theme.Colors.panelDimming))
         .background(VisualEffectView())
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
         .onChange(of: vm.focusToken) {
@@ -214,7 +213,7 @@ struct RootPaletteView: View {
             )
             .textFieldStyle(.plain)
             .font(Theme.Typography.searchField)
-            .tint(.white)
+            .tint(Color.primary)
             .focused($searchFocused)
             .onSubmit(activateSelection)
         }

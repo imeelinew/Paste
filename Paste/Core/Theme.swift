@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Central design tokens for the palette UI (dark design system per `docs/ui.md`; the app forces `.darkAqua`, so colors are literal white/black alphas).
+/// Central design tokens for Paste's light palette UI.
 enum Theme {
     enum Spacing {
         static let xxs: CGFloat = 2
@@ -105,23 +105,21 @@ enum Theme {
     }
 
     enum Colors {
-        /// Black opacity of the panel's surface tint over the behind-window material.
-        static let panelDimming: CGFloat = 0.4
         /// Selection fill: a soft neutral translucent layer shared by launcher and clipboard so both lists look identical.
-        static let selection = Color.white.opacity(0.10)
+        static let selection = Color.black.opacity(0.10)
         /// Mouse hover — a fainter layer that follows the cursor, visually distinct from selection.
-        static let rowHover = Color.white.opacity(0.05)
-        static let menuHover = Color.white.opacity(0.10)
-        static let separator = Color.white.opacity(0.10)
+        static let rowHover = Color.black.opacity(0.05)
+        static let menuHover = Color.black.opacity(0.10)
+        static let separator = Color.black.opacity(0.10)
         /// Small control surfaces: kbd chips, glyph tiles.
-        static let controlSurface = Color.white.opacity(0.10)
+        static let controlSurface = Color.black.opacity(0.08)
         /// Control borders: outlined kbd chips.
-        static let border = Color.white.opacity(0.20)
-        static let textSecondary = Color.white.opacity(0.60)
-        static let textTertiary = Color.white.opacity(0.40)
+        static let border = Color.black.opacity(0.20)
+        static let textSecondary = Color.black.opacity(0.60)
+        static let textTertiary = Color.black.opacity(0.40)
         /// Settings grouped "card": a faint raised surface whose hairline border doubles as the inset row divider.
-        static let cardFill = Color.white.opacity(0.05)
-        static let cardStroke = Color.white.opacity(0.10)
+        static let cardFill = Color.black.opacity(0.04)
+        static let cardStroke = Color.black.opacity(0.10)
         /// Whitish tint layered into the Liquid Glass floating controls (action group + menu circle) so the glass reads frosted rather than clear.
         static let glassFrost = Color.white.opacity(0.05)
         /// The violet of the app mark. The one non-white hue in the system, used only to tint the About support callout.
@@ -160,7 +158,7 @@ struct KeyCapChip: View {
 }
 
 extension View {
-    /// A floating Liquid Glass control surface (action group + menu button), interactive for native lensing with a whitish frost tint so it reads brighter than clear glass.
+    /// A floating Liquid Glass control surface (action group + menu button), interactive for native lensing with a subtle frost tint.
     func frosted(in shape: some Shape) -> some View {
         glassEffect(.regular.interactive().tint(Theme.Colors.glassFrost), in: shape)
             .tint(.clear)

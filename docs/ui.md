@@ -10,18 +10,17 @@ Read this before touching any view body, `Theme` value, or the panel chrome.
 
 ## The look, in one paragraph
 
-Tinycast is a **Raycast-style dark command palette**: a borderless floating panel whose surface is
-just the OS behind-window blur under a 40% black scrim — there is no gray chrome. Everything on that
-surface is white at a fixed alpha ramp. The header and bottom bar **float over the list as fully
+Paste is a **Raycast-style light command palette**: a borderless floating panel whose surface is
+the unobscured OS behind-window material. Content uses a dark alpha ramp over that material. The header and bottom bar **float over the list as fully
 transparent overlays**; there are no hard-edged bars, strips, or dividers. Rows don't clip under the
 bars, they **dissolve**: a scroll-driven gradient mask ghosts them as they pass beneath. Floating
 controls (the action pill, the menu circle, popover menus) are **Liquid Glass**. The whole app is
-locked to dark mode because the glass material is tuned for a deep dark surface.
+locked to the light Aqua appearance.
 
 Five load-bearing ideas, in priority order:
 
-1. **Surface = 40% black over behind-window blur.** No solid backgrounds. Depth comes from the desktop showing through.
-2. **White-alpha ramp, never grays.** Text and surfaces are `Color.white.opacity(…)` at fixed stops.
+1. **Surface = unobscured behind-window material.** No solid backgrounds. Depth comes from the desktop showing through.
+2. **Dark-alpha ramp, never opaque grays.** Text and surfaces use black at fixed alpha stops.
 3. **Floating bars, not chrome.** Header/footer are transparent overlays; the list fills the whole panel.
 4. **Edges dissolve, they don't clip.** Scroll-driven mask, no separators between list and bars.
 5. **Glass only on floating controls.** The main surface is never glass; pills/menus/circles are.
@@ -32,13 +31,13 @@ Five load-bearing ideas, in priority order:
 
 These are the things that quietly break the look if changed. Preserve them unless the task is explicitly to change them.
 
-- **Forced dark.** `AppCore.start()` sets `NSApp.appearance = .darkAqua`. All colors are literal white/black alphas, not adaptive `Color`s. Don't introduce semantic/adaptive colors or a light variant.
-- **No grays, no opaque fills on the surface.** Reach for `Theme.Colors.*` (white-alpha) instead of `.gray`, `NSColor.windowBackground`, etc.
+- **Forced light.** `AppCore.start()` sets `NSApp.appearance = .aqua`. Palette colors use literal dark alphas tuned for this light surface.
+- **No grays, no opaque fills on the surface.** Reach for `Theme.Colors.*` (dark-alpha) instead of `.gray`, `NSColor.windowBackground`, etc.
 - **No hard dividers between the list and the bars.** The header and bottom bar are `safeAreaInset` overlays with no background; separation comes from `edgeDissolve()`, nothing else. (One deliberate exception: the vertical hairline between the clipboard list and its preview pane.)
-- **The panel corner is clipped once, at the root.** `RootPaletteView.body` ends with `.background(black 40%) → .background(VisualEffectView()) → .clipShape(RoundedRectangle(26, .continuous))`. Keep that order; the scrim goes _over_ the vibrancy, and the clip is last.
+- **The panel corner is clipped once, at the root.** `RootPaletteView.body` ends with `.background(VisualEffectView()) → .clipShape(RoundedRectangle(26, .continuous))`; the clip remains last.
 - **Don't use the native scroll edge effect.** Inside a transparent panel it renders a hard-bounded rectangle. Use `edgeDissolve()`.
 - **Test over a light desktop.** Transparency and corner masking bugs only show over bright wallpaper. Dark wallpaper hides them.
-- **No `NSAlert`, no `NSSlider`, no system popovers.** Every confirmation, failure report, value prompt and transient readout is Tinycast's own SwiftUI surface (see "Modals & HUD"). An Aqua alert on a white-alpha-over-vibrancy app reads as a different product, and its `runModal` run loop keeps Carbon hotkeys firing underneath.
+- **No `NSAlert`, no `NSSlider`, no system popovers.** Every confirmation, failure report, value prompt and transient readout is Tinycast's own SwiftUI surface (see "Modals & HUD"). A stock alert beside the custom palette surface reads as a different product, and its `runModal` run loop keeps Carbon hotkeys firing underneath.
 
 ---
 
@@ -84,25 +83,24 @@ System fonts only — **no fixed point sizes in views** (honors Dynamic Type). `
 explicit size (20pt regular). Use `rowTitle` (`.body`), `sectionHeader` (`.subheadline.medium`),
 `rowTrailing`/`bar`/`menuRow`/`keyCap` etc. as named.
 
-### Colors (`Theme.Colors`) — the white-alpha ramp
+### Colors (`Theme.Colors`) — the dark-alpha ramp
 
 | Token            | Value          | Use                                              |
 | ---------------- | -------------- | ------------------------------------------------ |
-| `panelDimming`   | black **0.40** | the panel scrim over vibrancy                    |
-| `selection`      | white 0.10     | selected row fill (keyboard/active selection)    |
-| `rowHover`       | white 0.05     | mouse-hover fill (always fainter than selection) |
-| `menuHover`      | white 0.10     | popover-menu row hover                           |
-| `separator`      | white 0.10     | the clipboard list↔preview hairline              |
-| `controlSurface` | white 0.10     | filled keycaps, glyph tiles                      |
-| `border`         | white 0.20     | outlined keycap borders                          |
-| `textSecondary`  | white 0.60     | secondary labels                                 |
-| `textTertiary`   | white 0.40     | placeholders, trailing kind labels               |
-| `cardFill`       | white 0.05     | settings/calc card fill                          |
-| `cardStroke`     | white 0.10     | settings/calc card border + inset dividers       |
+| `selection`      | black 0.10     | selected row fill (keyboard/active selection)    |
+| `rowHover`       | black 0.05     | mouse-hover fill (always fainter than selection) |
+| `menuHover`      | black 0.10     | popover-menu row hover                           |
+| `separator`      | black 0.10     | the clipboard list↔preview hairline              |
+| `controlSurface` | black 0.08     | filled keycaps, glyph tiles                      |
+| `border`         | black 0.20     | outlined keycap borders                          |
+| `textSecondary`  | black 0.60     | secondary labels                                 |
+| `textTertiary`   | black 0.40     | placeholders, trailing kind labels               |
+| `cardFill`       | black 0.04     | settings/calc card fill                          |
+| `cardStroke`     | black 0.10     | settings/calc card border + inset dividers       |
 | `glassFrost`     | white 0.01     | whitish tint layered into the floating glass     |
 
 Beyond these, `.secondary`/`.tertiary` foreground styles are fine for SF Symbols (they resolve against
-the forced-dark environment). **Selection always beats hover** when a row is both.
+the forced-light environment). **Selection always beats hover** when a row is both.
 
 ---
 
@@ -174,7 +172,7 @@ Glass is **only** for floating controls, never the main surface.
 Tinycast owns its dialogs; `NSAlert` is never used. `ModalWindowController` is owned by `AppCore` (the
 sole owner rule) and is the only presenter, so every confirmation in the app looks and behaves alike.
 
-- **Surface.** A modal reuses the palette's recipe `black panelDimming` → `VisualEffectView()` →
+- **Surface.** A modal reuses the palette's recipe `VisualEffectView()` →
   `clipShape(RoundedRectangle(modal 20))`, in that order at `modalWidth 420`. Glass is reserved for
   the buttons, matching the "glass only on floating controls" rule. The HUD is the exception: it is a
   floating control with no content of its own, so it is stock `glassEffect` throughout.

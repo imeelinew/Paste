@@ -21,7 +21,7 @@ final class AppCore: ObservableObject {
 
     func start() {
         NSApp.setActivationPolicy(.accessory)
-        NSApp.appearance = NSAppearance(named: .darkAqua)
+        NSApp.appearance = NSAppearance(named: .aqua)
 
         clipboardStore.maxAge = settings.clipboardRetention.maxAge
         Task { clipboardStore.load() }
