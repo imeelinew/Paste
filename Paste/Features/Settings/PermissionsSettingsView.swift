@@ -6,29 +6,20 @@ struct PermissionsSettingsView: View {
     private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        SettingsPane(
-            title: "Permissions",
-            subtitle: "Access Paste needs to work with other apps."
-        ) {
+        SettingsPane(title: "Permissions") {
             SettingsCard(header: "Accessibility") {
                 SettingsRow(
-                    title: "Accessibility",
-                    subtitle: "Lets Paste paste a clipboard item into the app you were using.",
-                    systemImage: "accessibility",
-                    tint: .blue
+                    title: "Accessibility"
                 ) {
                     statusBadge
                 }
-                SettingsDivider()
+                SettingsDivider(hasLeadingIcon: false)
                 let actionTitle: LocalizedStringKey =
                     accessibilityTrusted ? "Manage in System Settings" : "Grant access"
                 let buttonTitle: LocalizedStringKey =
                     accessibilityTrusted ? "Open…" : "Open Settings…"
                 SettingsRow(
-                    title: actionTitle,
-                    subtitle: "Opens Privacy & Security › Accessibility.",
-                    systemImage: "arrow.up.forward.app",
-                    tint: .secondary
+                    title: actionTitle
                 ) {
                     Button(buttonTitle) {
                         Permissions.openAccessibilitySettings()

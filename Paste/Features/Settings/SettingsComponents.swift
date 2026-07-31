@@ -4,16 +4,16 @@ import SwiftUI
 
 // MARK: - Pane scaffold
 
-/// Standard layout for a settings pane (title + subtitle header, then scrollable content) so headers, insets and scroll behaviour stay identical across the app.
+/// Standard layout for a settings pane (title header, then scrollable content) so headers,
+/// insets and scroll behaviour stay identical across the app.
 struct SettingsPane<Content: View>: View {
     let title: LocalizedStringKey
-    let subtitle: LocalizedStringKey
     @ViewBuilder var content: Content
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                SettingsHeader(title: title, subtitle: subtitle)
+                SettingsHeader(title: title)
                 content
             }
             // Ignore the transparent-titlebar safe area and use one fixed `xxl` inset every side instead (the titlebar band is taller than the rhythm we want; traffic lights sit over the sidebar, so nothing collides).
@@ -26,19 +26,13 @@ struct SettingsPane<Content: View>: View {
     }
 }
 
-/// The title + subtitle block at the top of every pane.
+/// The title at the top of every pane.
 struct SettingsHeader: View {
     let title: LocalizedStringKey
-    let subtitle: LocalizedStringKey
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(title)
-                .font(.title2.weight(.bold))
-            Text(subtitle)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
+        Text(title)
+            .font(.title2.weight(.bold))
     }
 }
 
@@ -74,31 +68,22 @@ struct SettingsCard<Content: View>: View {
 struct FeatureSwitchCard: View {
     let header: LocalizedStringKey
     let enableTitle: LocalizedStringKey
-    let enableSubtitle: LocalizedStringKey
-    let systemImage: String
-    let launcherSubtitle: LocalizedStringKey
     @Binding var isEnabled: Bool
     @Binding var showsInLauncher: Bool
 
     var body: some View {
         SettingsCard(header: header) {
             SettingsRow(
-                title: enableTitle,
-                subtitle: enableSubtitle,
-                systemImage: systemImage,
-                tint: .green
+                title: enableTitle
             ) {
                 Toggle(enableTitle, isOn: $isEnabled)
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .accessibilityLabel(enableTitle)
             }
-            SettingsDivider()
+            SettingsDivider(hasLeadingIcon: false)
             SettingsRow(
-                title: "Show in launcher",
-                subtitle: launcherSubtitle,
-                systemImage: "magnifyingglass",
-                tint: .green
+                title: "Show in launcher"
             ) {
                 Toggle("Show in launcher", isOn: $showsInLauncher)
                     .labelsHidden()
@@ -114,49 +99,40 @@ struct FeatureSwitchCard: View {
 
 /// Inset divider between rows inside a `SettingsCard`, aligned under the row's title (past the icon).
 struct SettingsDivider: View {
+    var hasLeadingIcon = true
+
     var body: some View {
         Rectangle()
             .fill(Theme.Colors.cardStroke)
             .frame(height: 1)
-            .padding(.leading, Theme.Spacing.xl + Theme.Size.settingsRowIcon + Theme.Spacing.lg)
+            .padding(
+                .leading,
+                hasLeadingIcon
+                    ? Theme.Spacing.xl + Theme.Size.settingsRowIcon + Theme.Spacing.lg
+                    : Theme.Spacing.xl
+            )
     }
 }
 
 // MARK: - Row
 
-/// A single settings line (optional SF Symbol, title with optional subtitle, trailing control); fixed vertical rhythm keeps every card aligned regardless of the control.
+/// A single settings line (title and trailing control); fixed vertical rhythm keeps every card
+/// aligned regardless of the control.
 struct SettingsRow<Trailing: View>: View {
     let title: LocalizedStringKey
-    var subtitle: LocalizedStringKey? = nil
-    var systemImage: String? = nil
-    var tint: Color = .secondary
     /// Optional state indicator rendered after the title (green = active, orange = attention).
     var statusDot: Color? = nil
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
         HStack(spacing: Theme.Spacing.lg) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(tint)
-                    .frame(width: Theme.Size.settingsRowIcon)
-            }
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs / 2) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Text(title)
-                        .font(.body)
-                    if let statusDot {
-                        Circle()
-                            .fill(statusDot)
-                            .frame(width: Theme.Size.statusDot, height: Theme.Size.statusDot)
-                    }
-                }
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: Theme.Spacing.sm) {
+                Text(title)
+                    .font(.body)
+                if let statusDot {
+                    Circle()
+                        .fill(statusDot)
+                        .frame(width: Theme.Size.statusDot, height: Theme.Size.statusDot)
                 }
             }
             Spacer(minLength: Theme.Spacing.xl)

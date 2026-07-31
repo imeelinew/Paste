@@ -6,16 +6,10 @@ struct GeneralSettingsView: View {
     @ObservedObject private var systemClipboardHistory = AppCore.shared.systemClipboardHistory
 
     var body: some View {
-        SettingsPane(
-            title: "General",
-            subtitle: "Customize Paste's language, appearance, and system behavior."
-        ) {
+        SettingsPane(title: "General") {
             SettingsCard(header: "Language") {
                 SettingsRow(
-                    title: "App Language",
-                    subtitle: "Choose the language used by Paste.",
-                    systemImage: "globe",
-                    tint: .blue
+                    title: "App Language"
                 ) {
                     Picker("App Language", selection: $settings.language) {
                         ForEach(AppLanguage.allCases) { language in
@@ -29,10 +23,7 @@ struct GeneralSettingsView: View {
 
             SettingsCard(header: "Appearance") {
                 SettingsRow(
-                    title: "Theme",
-                    subtitle: "Choose Paste's visual appearance.",
-                    systemImage: "circle.lefthalf.filled",
-                    tint: .purple
+                    title: "Theme"
                 ) {
                     Picker("Theme", selection: $settings.appearance) {
                         ForEach(AppAppearance.allCases) { appearance in
@@ -46,10 +37,7 @@ struct GeneralSettingsView: View {
 
             SettingsCard(header: "Startup") {
                 SettingsRow(
-                    title: "Launch at Login",
-                    subtitle: "Open Paste automatically when you log in.",
-                    systemImage: "power",
-                    tint: .green
+                    title: "Launch at Login"
                 ) {
                     Toggle("Launch at Login", isOn: $settings.launchAtLogin)
                         .labelsHidden()
@@ -60,10 +48,7 @@ struct GeneralSettingsView: View {
 
             SettingsCard(header: "System Clipboard") {
                 SettingsRow(
-                    title: "Disable System Clipboard History",
-                    subtitle: "Stop Spotlight from saving and searching clipboard history. Copy and paste keep working.",
-                    systemImage: "magnifyingglass",
-                    tint: .blue
+                    title: "Disable System Clipboard History"
                 ) {
                     Toggle(
                         "Disable System Clipboard History",

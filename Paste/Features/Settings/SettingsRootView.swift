@@ -104,7 +104,6 @@ private struct SidebarRow: View {
     let tint: Color
     let isSelected: Bool
     let action: () -> Void
-    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
@@ -131,12 +130,10 @@ private struct SidebarRow: View {
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
-        .onHover { hovering = $0 }
     }
 
     private var background: Color {
         if isSelected { return Theme.Colors.selection }
-        if hovering { return Theme.Colors.rowHover }
         return .clear
     }
 }
