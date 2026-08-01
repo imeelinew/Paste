@@ -5,9 +5,9 @@ enum PopoverMenuIcon: Equatable {
     case symbol(String)
     case file(path: String)
 
-    /// Glyph for a paste row: the target app's own icon when it's known, else the row's generic symbol.
-    static func paste(_ target: PasteTarget?, fallback: String) -> PopoverMenuIcon {
-        guard let path = target?.iconPath else { return .symbol(fallback) }
+    /// Target app icon for paste rows; `nil` when unknown so the row can keep a blank icon slot for alignment.
+    static func paste(_ target: PasteTarget?) -> PopoverMenuIcon? {
+        guard let path = target?.iconPath else { return nil }
         return .file(path: path)
     }
 }
@@ -72,11 +72,13 @@ struct PopoverMenu: View {
                     .padding(.bottom, Theme.Spacing.xs / 2)
             }
             // Index-as-id is stable because a menu's rows never reorder while it is open, and the index is what selection/activation address.
+            let reservesIconSpace = items.contains { $0.icon != nil }
             ForEach(items.indices, id: \.self) { index in
                 PopoverMenuRow(
                     item: items[index],
                     selected: index == selection,
                     pressed: pressedIndex == index,
+                    reservesIconSpace: reservesIconSpace,
                     onHover: { selection = index },
                     onActivate: { onActivate(index) }
                 )
@@ -96,6 +98,8 @@ private struct PopoverMenuRow: View {
     let item: PopoverMenuItem
     let selected: Bool
     var pressed: Bool = false
+    /// When any row in the menu has an icon, empty rows keep a blank slot so labels stay column-aligned.
+    var reservesIconSpace: Bool = false
     /// Fired when the cursor enters the row so the owner can move selection here — keyboard and mouse then share one highlight.
     let onHover: () -> Void
     let onActivate: () -> Void
@@ -114,6 +118,9 @@ private struct PopoverMenuRow: View {
                     case .file(let path):
                         MenuFileIcon(path: path)
                     }
+                } else if reservesIconSpace {
+                    Color.clear
+                        .frame(width: Theme.Size.menuIcon, height: Theme.Size.menuIcon)
                 }
                 Text(item.title)
                     .font(Theme.Typography.menuRow)

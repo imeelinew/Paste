@@ -129,48 +129,43 @@ enum ClipboardActionsMenu {
     static func content(
         item: ClipboardItem, core: AppCore, store: ClipboardStore, target: PasteTarget?
     ) -> PopoverMenuContent {
+        let appIcon = PopoverMenuIcon.paste(target)
         var items: [PopoverMenuItem] = [
             PopoverMenuItem(
                 title: target?.pasteTitle ?? "Paste",
-                icon: .paste(target, fallback: "doc.on.clipboard"), shortcut: "↵"
+                icon: appIcon, shortcut: "↵"
             ) {
                 core.paste(item)
             },
-            PopoverMenuItem(title: "Copy to Clipboard", systemImage: "doc.on.doc", shortcut: "⌘↵") {
-                core.copyToClipboard(item)
-            },
             PopoverMenuItem(
-                title: "Paste & Keep Window Open", icon: .paste(target, fallback: "macwindow")
+                title: "Paste & Keep Window Open", icon: appIcon
             ) {
                 core.pasteKeepingWindowOpen(item)
+            },
+            PopoverMenuItem(title: "Copy to Clipboard", shortcut: "⌘↵") {
+                core.copyToClipboard(item)
             },
         ]
         if item.isPinned {
             items.append(
-                PopoverMenuItem(title: "Unpin Entry", systemImage: "pin.slash", shortcut: "⌘P") {
+                PopoverMenuItem(title: "Unpin Entry", shortcut: "⌘P") {
                     core.togglePinnedClip(item)
                 })
         } else {
             items.append(
-                PopoverMenuItem(title: "Pin Entry", systemImage: "pin", shortcut: "⌘P") {
+                PopoverMenuItem(title: "Pin Entry", shortcut: "⌘P") {
                     core.togglePinnedClip(item)
                 })
         }
         if item.kind == .image {
             items.append(
-                PopoverMenuItem(title: "Show in Finder", systemImage: "folder") {
+                PopoverMenuItem(title: "Show in Finder") {
                     core.revealClipboardImage(item)
                 })
         }
         items.append(
-            PopoverMenuItem(title: "Delete Entry", systemImage: "trash", isDestructive: true) {
+            PopoverMenuItem(title: "Delete Entry", isDestructive: true) {
                 store.remove(item)
-            })
-        items.append(
-            PopoverMenuItem(
-                title: "Delete All Entries", systemImage: "trash.fill", isDestructive: true
-            ) {
-                store.clearAll()
             })
         return PopoverMenuContent(header: headerText(item), items: items)
     }
@@ -237,17 +232,10 @@ private struct ClipboardRow: View {
     @ViewBuilder
     private var thumbnail: some View {
         switch item.kind {
-        case .text, .code:
-            if let icon = sourceAppIcon {
-                Image(nsImage: icon)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: Theme.Size.rowIcon, height: Theme.Size.rowIcon)
-            } else {
-                glyphTile(
-                    item.kind == .code
-                        ? "chevron.left.forwardslash.chevron.right" : "doc.text")
-            }
+        case .text:
+            glyphTile("text.menu")
+        case .code:
+            glyphTile("chevron.left.forwardslash.chevron.right")
         case .image:
             AsyncThumbnail(url: imageURL, maxPixel: 64) { image in
                 image
@@ -260,14 +248,6 @@ private struct ClipboardRow: View {
                 glyphTile("photo")
             }
         }
-    }
-
-    /// Source app icon from the recorded bundle ID; falls back to a type glyph when unknown.
-    private var sourceAppIcon: NSImage? {
-        guard let bundleID = item.sourceBundleID,
-            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
-        else { return nil }
-        return IconCache.icon(forFile: url.path)
     }
 
     /// An SF Symbol centered on a rounded tile, sized to match the launcher's app icon so text and image rows share one thumbnail shape.
