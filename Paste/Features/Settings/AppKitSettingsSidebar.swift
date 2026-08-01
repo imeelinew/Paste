@@ -255,7 +255,6 @@ private extension SettingsTab {
         case .general: return "settings"
         case .clipboard: return "clipboard-text"
         case .permissions: return "lock"
-        case .about: return "info-circle"
         }
     }
 
@@ -264,7 +263,6 @@ private extension SettingsTab {
         case .general: return String(localized: "General", locale: locale)
         case .clipboard: return String(localized: "Clipboard", locale: locale)
         case .permissions: return String(localized: "Permissions", locale: locale)
-        case .about: return String(localized: "About", locale: locale)
         }
     }
 
@@ -276,8 +274,6 @@ private extension SettingsTab {
             return [Self.rgb(1.0, 0.48, 0.30), Self.rgb(1.0, 0.16, 0.32)]
         case .permissions:
             return [Self.rgb(0.82, 0.42, 1.0), Self.rgb(0.46, 0.20, 1.0)]
-        case .about:
-            return [Self.rgb(0.25, 0.82, 1.0), Self.rgb(0.08, 0.42, 1.0)]
         }
     }
 

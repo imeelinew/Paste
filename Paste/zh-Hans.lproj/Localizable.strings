@@ -1,8 +1,6 @@
-"About" = "关于";
 "About Paste" = "关于 Paste";
 "Accessibility" = "辅助功能";
 "Actions" = "操作";
-"A tiny, native macOS clipboard history." = "轻巧原生的 macOS 剪贴板历史工具。";
 "App Language" = "应用语言";
 "Appearance" = "外观";
 "Cancel" = "取消";
@@ -38,8 +36,6 @@
 "Language" = "语言";
 "Light" = "浅色";
 "Launch at Login" = "登录时启动";
-"License" = "许可证";
-"Links" = "链接";
 "Manage in System Settings" = "在系统设置中管理";
 "No matching entries" = "没有匹配的项目";
 "Not granted" = "未授权";
@@ -71,14 +67,12 @@
 "This can't be undone." = "此操作无法撤销。";
 "This Month" = "本月";
 "This Week" = "本周";
-"TinyCast Source" = "TinyCast 源代码";
 "Today" = "今天";
 "Type" = "类型";
 "Type shortcut…" = "请按下快捷键…";
 "Type to filter entries…" = "输入内容以筛选…";
 "Unpin Entry" = "取消固定";
 "Used by %@" = "已被 %@ 使用";
-"Version %@ (%@)" = "版本 %@ (%@)";
 "Words" = "词数";
 "Yesterday" = "昨天";
 "1 Day" = "1 天";

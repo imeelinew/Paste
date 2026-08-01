@@ -6,7 +6,7 @@ struct PermissionsSettingsView: View {
     private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        SettingsPane(title: "Permissions") {
+        SettingsPane(tab: .permissions) {
             SettingsCard(header: "Accessibility") {
                 SettingsRow(
                     title: "Accessibility"

@@ -2,111 +2,6 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-struct AboutView: View {
-    private static var version: Text {
-        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
-        return Text("Version \(short) (\(build))")
-    }
-
-    @MainActor private static let appIcon: NSImage =
-        NSApp.applicationIconImage ?? NSWorkspace.shared.icon(for: .applicationBundle)
-    private static let iconSize: CGFloat = 88
-
-    var body: some View {
-        SettingsPane(title: "About") {
-            SettingsCard {
-                hero
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.xl)
-            }
-            links
-        }
-    }
-
-    private var hero: some View {
-        VStack(spacing: Theme.Spacing.xl) {
-            Image(nsImage: Self.appIcon)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: Self.iconSize, height: Self.iconSize)
-                .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
-
-            VStack(spacing: Theme.Spacing.sm) {
-                Text("Paste").font(.title.weight(.bold))
-                Self.version
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, Theme.Spacing.xs / 2)
-                    .background(Capsule().fill(Theme.Colors.cardFill))
-                    .overlay(Capsule().strokeBorder(Theme.Colors.cardStroke, lineWidth: 1))
-            }
-
-            Text("A tiny, native macOS clipboard history.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var links: some View {
-        SettingsCard(header: "Links") {
-            ForEach(AboutLink.all) { link in
-                AboutLinkRow(link: link)
-            }
-        }
-    }
-
-}
-
-private struct AboutLink: Identifiable {
-    let id: String
-    let systemImage: String
-    let title: LocalizedStringKey
-    let detail: String
-    let url: URL
-
-    @MainActor static let all: [AboutLink] = [
-        AboutLink(
-            id: "source", systemImage: "chevron.left.forwardslash.chevron.right",
-            title: "TinyCast Source", detail: "github.com/abue-ammar/tinycast",
-            url: URL(string: "https://github.com/abue-ammar/tinycast")!),
-        AboutLink(
-            id: "license", systemImage: "doc.text", title: "License",
-            detail: "GNU AGPL-3.0",
-            url: URL(string: "https://github.com/abue-ammar/tinycast/blob/main/LICENSE")!),
-    ]
-}
-
-private struct AboutLinkRow: View {
-    let link: AboutLink
-    @State private var hovered = false
-
-    var body: some View {
-        Button { NSWorkspace.shared.open(link.url) } label: {
-            HStack(spacing: Theme.Spacing.lg) {
-                Image(systemName: link.systemImage)
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: Theme.Size.settingsRowIcon)
-                    .foregroundStyle(.secondary)
-                Text(link.title).font(.body)
-                Spacer(minLength: Theme.Spacing.xl)
-                Text(link.detail)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                Image(systemName: "arrow.up.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(hovered ? .secondary : .tertiary)
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovered = $0 }
-    }
-}
-
 @MainActor
 final class AuxWindowController: NSObject, NSWindowDelegate {
     private var windows: [String: NSWindow] = [:]
@@ -125,8 +20,13 @@ final class AuxWindowController: NSObject, NSWindowDelegate {
             isNew = true
             var style: NSWindow.StyleMask = [.titled, .closable]
             if seamlessTitleBar { style.insert(.fullSizeContentView) }
+            // `size` is the on-screen frame (title bar included), matching measured peer apps.
+            let contentRect = NSWindow.contentRect(
+                forFrameRect: NSRect(origin: .zero, size: size),
+                styleMask: style
+            )
             let auxiliaryWindow = AuxiliaryWindow(
-                contentRect: NSRect(origin: .zero, size: size),
+                contentRect: contentRect,
                 styleMask: style,
                 backing: .buffered,
                 defer: false
@@ -142,6 +42,10 @@ final class AuxWindowController: NSObject, NSWindowDelegate {
                 window.titleVisibility = .visible
                 window.isMovableByWindowBackground = true
             }
+            window.styleMask.remove(.resizable)
+            window.setFrame(NSRect(origin: .zero, size: size), display: false)
+            window.minSize = size
+            window.maxSize = size
             window.isReleasedWhenClosed = false
             let hosting = NSHostingView(rootView: content())
             hosting.sizingOptions = []
@@ -151,6 +55,7 @@ final class AuxWindowController: NSObject, NSWindowDelegate {
             windows[id] = window
         }
 
+        window.title = title
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)

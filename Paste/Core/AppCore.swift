@@ -59,8 +59,8 @@ final class AppCore: ObservableObject {
         let isNew = auxWindows.show(
             id: "settings",
             title: String(localized: "Settings", locale: settings.language.locale),
-            size: CGSize(width: 720, height: 550),
-            seamlessTitleBar: true
+            size: CGSize(width: 440, height: 632),
+            seamlessTitleBar: false
         ) {
             SettingsRootView(initialTab: tab)
                 .environmentObject(self.installedApplications)
@@ -71,7 +71,9 @@ final class AppCore: ObservableObject {
     }
 
     func showAbout() {
-        showSettings(tab: .about)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [:])
     }
 
     func requestQuit() {

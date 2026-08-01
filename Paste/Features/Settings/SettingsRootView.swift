@@ -5,7 +5,7 @@ extension Notification.Name {
 }
 
 enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
-    case general, clipboard, permissions, about
+    case general, clipboard, permissions
 
     var id: Int { rawValue }
 
@@ -14,7 +14,6 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         case .general: return "General"
         case .clipboard: return "Clipboard"
         case .permissions: return "Permissions"
-        case .about: return "About"
         }
     }
 
@@ -23,7 +22,6 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         case .general: return "gearshape.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .permissions: return "lock.shield.fill"
-        case .about: return "info.circle.fill"
         }
     }
 
@@ -38,44 +36,37 @@ struct SettingsRootView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-        } detail: {
-            Group {
-                switch tab {
-                case .general: GeneralSettingsView()
-                case .clipboard: ClipboardSettingsView()
-                case .permissions: PermissionsSettingsView()
-                case .about: AboutView()
+        ScrollViewReader { proxy in
+            Form {
+                GeneralSettingsView()
+                ClipboardSettingsView()
+                PermissionsSettingsView()
+            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .contentMargins(.horizontal, 20, for: .scrollContent)
+            .contentMargins(.top, 8, for: .scrollContent)
+            .overlayScroller()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
+            .onAppear {
+                DispatchQueue.main.async {
+                    proxy.scrollTo(tab, anchor: .top)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onReceive(NotificationCenter.default.publisher(for: .pasteSelectSettingsTab)) { note in
+                if let target = note.object as? SettingsTab {
+                    tab = target
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        proxy.scrollTo(target, anchor: .top)
+                    }
+                }
+            }
         }
-        .navigationSplitViewStyle(.balanced)
-        .toolbar(removing: .sidebarToggle)
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .background {
-            VisualEffectView(material: .hudWindow, blending: .behindWindow)
-                .ignoresSafeArea()
             SettingsWindowConfigurator()
                 .frame(width: 0, height: 0)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .pasteSelectSettingsTab)) { note in
-            if let target = note.object as? SettingsTab { tab = target }
-        }
         .environment(\.locale, settings.language.locale)
-    }
-
-    private var sidebar: some View {
-        AppKitSettingsSidebar(
-            tabs: SettingsTab.allCases,
-            selectedTab: $tab,
-            locale: settings.language.locale
-        )
-        .navigationSplitViewColumnWidth(
-            min: 150,
-            ideal: Theme.Size.settingsSidebar,
-            max: Theme.Size.settingsSidebar
-        )
     }
 }

@@ -1,8 +1,6 @@
-"About" = "About";
 "About Paste" = "About Paste";
 "Accessibility" = "Accessibility";
 "Actions" = "Actions";
-"A tiny, native macOS clipboard history." = "A tiny, native macOS clipboard history.";
 "App Language" = "App Language";
 "Appearance" = "Appearance";
 "Cancel" = "Cancel";
@@ -38,8 +36,6 @@
 "Language" = "Language";
 "Light" = "Light";
 "Launch at Login" = "Launch at Login";
-"License" = "License";
-"Links" = "Links";
 "Manage in System Settings" = "Manage in System Settings";
 "No matching entries" = "No matching entries";
 "Not granted" = "Not granted";
@@ -71,14 +67,12 @@
 "This can't be undone." = "This can't be undone.";
 "This Month" = "This Month";
 "This Week" = "This Week";
-"TinyCast Source" = "TinyCast Source";
 "Today" = "Today";
 "Type" = "Type";
 "Type shortcut…" = "Type shortcut…";
 "Type to filter entries…" = "Type to filter entries…";
 "Unpin Entry" = "Unpin Entry";
 "Used by %@" = "Used by %@";
-"Version %@ (%@)" = "Version %@ (%@)";
 "Words" = "Words";
 "Yesterday" = "Yesterday";
 "1 Day" = "1 Day";

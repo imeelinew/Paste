@@ -7,7 +7,7 @@ struct ClipboardSettingsView: View {
     @State private var showingAppPicker = false
 
     var body: some View {
-        SettingsPane(title: "Clipboard") {
+        SettingsPane(tab: .clipboard) {
             SettingsCard(header: "Shortcut") {
                 SettingsRow(
                     title: "Clipboard History"

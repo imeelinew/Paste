@@ -6,7 +6,7 @@ struct GeneralSettingsView: View {
     @ObservedObject private var systemClipboardHistory = AppCore.shared.systemClipboardHistory
 
     var body: some View {
-        SettingsPane(title: "General") {
+        SettingsPane(tab: .general) {
             SettingsCard(header: "Language") {
                 SettingsRow(
                     title: "App Language"
@@ -22,17 +22,7 @@ struct GeneralSettingsView: View {
             }
 
             SettingsCard(header: "Appearance") {
-                SettingsRow(
-                    title: "Theme"
-                ) {
-                    Picker("Theme", selection: $settings.appearance) {
-                        ForEach(AppAppearance.allCases) { appearance in
-                            Text(LocalizedStringKey(appearance.title)).tag(appearance)
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                }
+                AppearanceIconPicker(selection: $settings.appearance)
             }
 
             SettingsCard(header: "Startup") {

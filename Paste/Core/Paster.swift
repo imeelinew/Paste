@@ -2,8 +2,8 @@ import AppKit
 import Carbon.HIToolbox
 
 enum Paster {
-    /// Stamped on Tinycast's own synthetic keystrokes so the snippet keyword tap can skip them.
-    static let tinycastEventTag: Int64 = 0x54494E59
+    /// Stamped on Paste's own synthetic keystrokes so listeners can ignore them.
+    static let pasteEventTag: Int64 = 0x50415354  // "PAST"
 
     /// Write the item onto the pasteboard and paste it into `previousApp` via a synthetic ⌘V, activating that app so the keystroke lands there. Returns whether content was written (and thus promoted).
     @MainActor @discardableResult
@@ -118,8 +118,8 @@ enum Paster {
 
         down.flags = .maskCommand
         up.flags = .maskCommand
-        down.setIntegerValueField(.eventSourceUserData, value: tinycastEventTag)
-        up.setIntegerValueField(.eventSourceUserData, value: tinycastEventTag)
+        down.setIntegerValueField(.eventSourceUserData, value: pasteEventTag)
+        up.setIntegerValueField(.eventSourceUserData, value: pasteEventTag)
 
         if let pid {
             down.postToPid(pid)
