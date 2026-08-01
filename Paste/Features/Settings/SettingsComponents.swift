@@ -136,6 +136,9 @@ struct AppearanceIconPicker: View {
                         lineWidth: selected ? 2 : 1
                     )
             }
+            .contentShape(
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+            )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(LocalizedStringKey(option.title))

@@ -1,13 +1,64 @@
 {
-  "fill" : "automatic",
+  "fill" : {
+    "automatic-gradient" : "display-p3:0.96783,0.62511,0.38633,1.00000"
+  },
   "groups" : [
     {
       "layers" : [
         {
+          "hidden" : true,
           "image-name" : "clipboard.svg",
           "name" : "clipboard",
           "position" : {
-            "scale" : 30,
+            "scale" : 33,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    },
+    {
+      "layers" : [
+        {
+          "hidden" : false,
+          "image-name" : "square.text.square.fill.svg",
+          "name" : "square.text.square.fill",
+          "position" : {
+            "scale" : 33,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    },
+    {
+      "layers" : [
+        {
+          "hidden" : true,
+          "image-name" : "menucard.svg",
+          "name" : "menucard",
+          "position" : {
+            "scale" : 33,
             "translation-in-points" : [
               0,
               0

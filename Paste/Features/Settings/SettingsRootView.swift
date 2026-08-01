@@ -41,6 +41,7 @@ struct SettingsRootView: View {
                 GeneralSettingsView()
                 ClipboardSettingsView()
                 PermissionsSettingsView()
+                DangerZoneSettingsView()
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)

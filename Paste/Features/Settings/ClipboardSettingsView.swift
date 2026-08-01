@@ -1,18 +1,36 @@
+import AppKit
 import SwiftUI
 
 struct ClipboardSettingsView: View {
     @ObservedObject private var settings = AppCore.shared.settings
+    @ObservedObject private var systemClipboardHistory = AppCore.shared.systemClipboardHistory
     @EnvironmentObject private var installedApplications: InstalledApplications
-    @State private var confirmingClear = false
     @State private var showingAppPicker = false
 
     var body: some View {
         SettingsPane(tab: .clipboard) {
             SettingsCard(header: "Shortcut") {
                 SettingsRow(
-                    title: "Clipboard History"
+                    title: "Show Paste"
                 ) {
                     ShortcutRecorder()
+                }
+            }
+
+            SettingsCard(header: "System Clipboard") {
+                SettingsRow(
+                    title: "Disable System Clipboard History"
+                ) {
+                    Toggle(
+                        "Disable System Clipboard History",
+                        isOn: Binding(
+                            get: { systemClipboardHistory.isDisabled },
+                            set: { systemClipboardHistory.setDisabled($0) }
+                        )
+                    )
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .accessibilityLabel("Disable System Clipboard History")
                 }
             }
 
@@ -62,17 +80,29 @@ struct ClipboardSettingsView: View {
                 .padding(.horizontal, Theme.Spacing.xl)
                 .padding(.vertical, Theme.Spacing.md)
             }
-
-            SettingsCard(header: "Danger Zone") {
-                SettingsRow(
-                    title: "Clear history"
-                ) {
-                    Button("Clear…", role: .destructive) { confirmingClear = true }
-                        .controlSize(.regular)
-                }
-            }
         }
         .task { installedApplications.load() }
+        .onAppear { systemClipboardHistory.refresh() }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            systemClipboardHistory.refresh()
+        }
+    }
+}
+
+struct DangerZoneSettingsView: View {
+    @State private var confirmingClear = false
+
+    var body: some View {
+        SettingsCard(header: "Danger Zone") {
+            SettingsRow(
+                title: "Clear history"
+            ) {
+                Button("Clear…", role: .destructive) { confirmingClear = true }
+                    .controlSize(.regular)
+            }
+        }
         .confirmationDialog(
             "Clear clipboard history?",
             isPresented: $confirmingClear,
