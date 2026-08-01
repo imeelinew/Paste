@@ -1,0 +1,54 @@
+import SwiftUI
+
+/// Search emphasis for clipboard list titles and preview bodies: literal substrings, plus Mandarin
+/// pinyin hits mapped back onto the matching Chinese characters.
+enum SearchHighlight {
+    static let background = Color.accentColor.opacity(0.32)
+
+    static func attributed(_ string: String, query: String) -> AttributedString {
+        var output = AttributedString(string)
+        apply(to: &output, source: string, query: query)
+        return output
+    }
+
+    /// Layers a blue background onto existing attributes (e.g. syntax-colored code) without clearing them.
+    static func apply(to output: inout AttributedString, source: String, query: String) {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty, !source.isEmpty else { return }
+
+        for range in literalRanges(source: source, query: needle) {
+            paint(range, in: source, onto: &output)
+        }
+
+        if Pinyin.queryLooksLatin(needle) {
+            for range in Pinyin.matchingSourceRanges(query: needle, text: source) {
+                paint(range, in: source, onto: &output)
+            }
+        }
+    }
+
+    private static func literalRanges(source: String, query: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var searchStart = source.startIndex
+        while searchStart < source.endIndex,
+            let range = source.range(
+                of: query,
+                options: [.caseInsensitive, .diacriticInsensitive],
+                range: searchStart..<source.endIndex
+            )
+        {
+            ranges.append(range)
+            searchStart = range.upperBound
+        }
+        return ranges
+    }
+
+    private static func paint(
+        _ range: Range<String.Index>, in source: String, onto output: inout AttributedString
+    ) {
+        guard let lower = AttributedString.Index(range.lowerBound, within: output),
+            let upper = AttributedString.Index(range.upperBound, within: output)
+        else { return }
+        output[lower..<upper].backgroundColor = background
+    }
+}

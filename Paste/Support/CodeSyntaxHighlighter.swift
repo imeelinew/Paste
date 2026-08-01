@@ -73,6 +73,7 @@ enum CodeSyntaxHighlighter {
 
 struct CodePreview: View {
     let code: String
+    var query: String = ""
     @State private var highlighted: AttributedString?
 
     var body: some View {
@@ -83,8 +84,10 @@ struct CodePreview: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .overlayScroller()
         }
-        .task(id: code) {
-            highlighted = CodeSyntaxHighlighter.highlight(code)
+        .task(id: code + "\u{0}" + query) {
+            var attributed = CodeSyntaxHighlighter.highlight(code)
+            SearchHighlight.apply(to: &attributed, source: code, query: query)
+            highlighted = attributed
         }
     }
 }

@@ -54,8 +54,122 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
     }
 
     /// Case-insensitive substring match — how the store filters without FTS: short queries, the no-database path, and the pinned block.
+    /// Latin-letter queries also match Mandarin pinyin (full spelling or initials) so `nihao` / `nh` can find `你好`.
     func matches(_ query: String) -> Bool {
-        text?.localizedCaseInsensitiveContains(query) ?? false
+        guard let text else { return false }
+        if text.localizedCaseInsensitiveContains(query) { return true }
+        guard Pinyin.queryLooksLatin(query) else { return false }
+        return Pinyin.matches(query: query, text: text)
+    }
+}
+
+/// Mandarin romanization helpers for clipboard search (Foundation/`CFStringTransform` only).
+enum Pinyin {
+    /// True when `query` is ASCII letters/spaces/apostrophes — the shape of typed pinyin.
+    static func queryLooksLatin(_ query: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        var sawLetter = false
+        for scalar in trimmed.unicodeScalars {
+            if CharacterSet.letters.contains(scalar) {
+                guard scalar.value <= 127 else { return false }
+                sawLetter = true
+            } else if !(CharacterSet.whitespaces.contains(scalar) || scalar == "'") {
+                return false
+            }
+        }
+        return sawLetter
+    }
+
+    static func matches(query: String, text: String) -> Bool {
+        !matchingSourceRanges(query: query, text: text).isEmpty
+    }
+
+    /// Source-character ranges whose Mandarin pinyin (full spelling or initials) contains `query`.
+    static func matchingSourceRanges(query: String, text: String) -> [Range<String.Index>] {
+        let q = compact(query)
+        guard !q.isEmpty else { return [] }
+
+        let syllables = syllables(of: text)
+        guard !syllables.isEmpty else { return [] }
+
+        var ranges = rangesMatching(
+            query: q, syllables: syllables,
+            token: \.compact)
+        if ranges.isEmpty {
+            ranges = rangesMatching(
+                query: q, syllables: syllables,
+                token: \.initial)
+        }
+        return ranges
+    }
+
+    static func romanize(_ text: String) -> String {
+        let mutable = NSMutableString(string: text)
+        CFStringTransform(mutable, nil, kCFStringTransformMandarinLatin, false)
+        CFStringTransform(mutable, nil, kCFStringTransformStripDiacritics, false)
+        return (mutable as String).lowercased()
+    }
+
+    private struct Syllable {
+        let range: Range<String.Index>
+        let compact: String
+        let initial: String
+    }
+
+    private static func syllables(of text: String) -> [Syllable] {
+        var result: [Syllable] = []
+        var index = text.startIndex
+        while index < text.endIndex {
+            let next = text.index(after: index)
+            let unit = String(text[index..<next])
+            let romanized = compact(romanize(unit))
+            if !romanized.isEmpty {
+                result.append(
+                    Syllable(
+                        range: index..<next,
+                        compact: romanized,
+                        initial: String(romanized.prefix(1))))
+            }
+            index = next
+        }
+        return result
+    }
+
+    private static func rangesMatching(
+        query: String, syllables: [Syllable],
+        token: KeyPath<Syllable, String>
+    ) -> [Range<String.Index>] {
+        var concat = ""
+        var map: [Int] = []
+        for (syllableIndex, syllable) in syllables.enumerated() {
+            let piece = syllable[keyPath: token]
+            guard !piece.isEmpty else { continue }
+            for _ in piece {
+                map.append(syllableIndex)
+            }
+            concat += piece
+        }
+        guard !concat.isEmpty, !map.isEmpty else { return [] }
+
+        var ranges: [Range<String.Index>] = []
+        var searchStart = concat.startIndex
+        while searchStart < concat.endIndex,
+            let match = concat.range(of: query, range: searchStart..<concat.endIndex)
+        {
+            let lowerOffset = concat.distance(from: concat.startIndex, to: match.lowerBound)
+            let upperOffset = concat.distance(from: concat.startIndex, to: match.upperBound) - 1
+            guard map.indices.contains(lowerOffset), map.indices.contains(upperOffset) else { break }
+            let start = syllables[map[lowerOffset]].range.lowerBound
+            let end = syllables[map[upperOffset]].range.upperBound
+            ranges.append(start..<end)
+            searchStart = match.upperBound
+        }
+        return ranges
+    }
+
+    private static func compact(_ string: String) -> String {
+        string.lowercased().filter(\.isLetter)
     }
 }
 
@@ -284,7 +398,15 @@ final class ClipboardStore: ObservableObject {
         guard !q.isEmpty else { return orderedItems }
         if let searchCache, searchCache.query == q { return searchCache.result }
         // Pins are matched in memory rather than taken from the FTS result: they are all resident (see `items`), and the statement's LIMIT would otherwise drop one out of a busy query's matches.
-        let result = pinnedItems.filter { $0.matches(q) } + runSearch(q).filter { !$0.isPinned }
+        let pinnedMatches = pinnedItems.filter { $0.matches(q) }
+        var unpinned = runSearch(q).filter { !$0.isPinned }
+        // Trigram FTS only sees the raw text; latin pinyin queries also scan the in-memory window.
+        if Pinyin.queryLooksLatin(q) {
+            let seen = Set(unpinned.map(\.id)).union(pinnedMatches.map(\.id))
+            let extra = items.filter { !$0.isPinned && !seen.contains($0.id) && $0.matches(q) }
+            unpinned.append(contentsOf: extra)
+        }
+        let result = pinnedMatches + unpinned
         searchCache = (q, result)
         return result
     }

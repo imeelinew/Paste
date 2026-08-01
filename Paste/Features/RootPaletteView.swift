@@ -74,6 +74,7 @@ struct RootPaletteView: View {
                     ClipboardList(
                         results: clips,
                         selectedID: selected?.id,
+                        query: vm.query,
                         scroll: scroll,
                         onSelect: { item in vm.selection = clips.firstIndex(of: item) ?? 0 },
                         onActivate: activateSelection,
@@ -86,7 +87,7 @@ struct RootPaletteView: View {
                     Rectangle()
                         .fill(Theme.Colors.separator)
                         .frame(width: 1)
-                    ClipboardPreview(item: selected)
+                    ClipboardPreview(item: selected, query: vm.query)
                 }
             }
         }

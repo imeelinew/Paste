@@ -59,6 +59,7 @@ final class AppSettings: ObservableObject {
         static let clipboardDisabledApps = "clipboardDisabledApps"
         static let openOnCursorScreen = "openOnCursorScreen"
         static let launchAtLogin = "launchAtLogin"
+        static let switchToEnglishInputOnOpen = "switchToEnglishInputOnOpen"
         static let language = "appLanguage"
         static let appearance = "appAppearance"
     }
@@ -80,6 +81,11 @@ final class AppSettings: ObservableObject {
             defaults.set(launchAtLogin, forKey: Key.launchAtLogin)
             LaunchAtLogin.set(launchAtLogin)
         }
+    }
+
+    /// When enabled, opening the palette selects the English keyboard so pinyin search can be typed directly.
+    @Published var switchToEnglishInputOnOpen: Bool {
+        didSet { defaults.set(switchToEnglishInputOnOpen, forKey: Key.switchToEnglishInputOnOpen) }
     }
 
     @Published var language: AppLanguage {
@@ -104,6 +110,7 @@ final class AppSettings: ObservableObject {
             defaults.object(forKey: Key.openOnCursorScreen) == nil
             || defaults.bool(forKey: Key.openOnCursorScreen)
         launchAtLogin = LaunchAtLogin.isEnabled
+        switchToEnglishInputOnOpen = defaults.bool(forKey: Key.switchToEnglishInputOnOpen)
         language =
             defaults.string(forKey: Key.language).flatMap(AppLanguage.init(rawValue:)) ?? .system
         appearance =

@@ -24,6 +24,9 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         let panel = ensurePanel()
         position(panel)
         panel.contentView?.layoutSubtreeIfNeeded()
+        if core.settings.switchToEnglishInputOnOpen {
+            InputSourceSwitcher.selectEnglish()
+        }
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
         DispatchQueue.main.async { [weak panel] in
@@ -35,6 +38,9 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     func hide(restoreFocus: Bool) {
         panel?.orderOut(nil)
         ImageThumbnail.purgePreviews()
+        if core.settings.switchToEnglishInputOnOpen {
+            InputSourceSwitcher.restore()
+        }
         if restoreFocus { previousApp?.activate() }
     }
 

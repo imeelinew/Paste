@@ -31,6 +31,20 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            SettingsCard(header: "Input Method") {
+                SettingsRow(
+                    title: "Switch to English When Opening"
+                ) {
+                    Toggle(
+                        "Switch to English When Opening",
+                        isOn: $settings.switchToEnglishInputOnOpen
+                    )
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .accessibilityLabel("Switch to English When Opening")
+                }
+            }
+
             SettingsCard(header: "Appearance") {
                 AppearanceIconPicker(selection: $settings.appearance)
             }

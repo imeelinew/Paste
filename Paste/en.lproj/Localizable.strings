@@ -31,11 +31,13 @@
 "History" = "History";
 "Image" = "Image";
 "Information" = "Information";
+"Input Method" = "Input Method";
 "Keep history for" = "Keep history for";
 "Language" = "Language";
 "Light" = "Light";
 "Launch at Login" = "Launch at Login";
 "Manage in System Settings" = "Manage in System Settings";
+"Switch to English When Opening" = "Switch to English When Opening";
 "No matching entries" = "No matching entries";
 "Not granted" = "Not granted";
 "Open Settings…" = "Open Settings…";

@@ -4,6 +4,7 @@ import SwiftUI
 struct ClipboardList: View {
     let results: [ClipboardItem]
     let selectedID: ClipboardItem.ID?
+    let query: String
     /// Changes only when the list should scroll (keyboard nav / reset), so mouse selection never yanks the scroll position.
     let scroll: ScrollIntent
     let onSelect: (ClipboardItem) -> Void
@@ -54,6 +55,7 @@ struct ClipboardList: View {
                         case .item(let item):
                             ClipboardRow(
                                 item: item, selected: item.id == selectedID,
+                                query: query,
                                 imageURL: store.imageURL(for: item)
                             )
                             .contentShape(Rectangle())
@@ -185,6 +187,7 @@ enum ClipboardActionsMenu {
 private struct ClipboardRow: View {
     let item: ClipboardItem
     let selected: Bool
+    let query: String
     let imageURL: URL?
     @State private var hovered = false
 
@@ -202,7 +205,7 @@ private struct ClipboardRow: View {
                 if item.kind == .image {
                     Text("Image")
                 } else {
-                    Text(previewText)
+                    Text(SearchHighlight.attributed(previewText, query: query))
                 }
             }
             .font(Theme.Typography.menuRow)
@@ -301,6 +304,7 @@ struct ClipboardPreview: View {
     private static let previewMaxPixel: CGFloat = 900
 
     let item: ClipboardItem?
+    var query: String = ""
     @EnvironmentObject private var store: ClipboardStore
 
     var body: some View {
@@ -321,14 +325,14 @@ struct ClipboardPreview: View {
         switch item.kind {
         case .text:
             ScrollView {
-                Text(item.text ?? "")
+                Text(SearchHighlight.attributed(item.text ?? "", query: query))
                     .font(.system(.subheadline, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .overlayScroller()
             }
         case .code:
-            CodePreview(code: item.text ?? "")
+            CodePreview(code: item.text ?? "", query: query)
         case .image:
             AsyncThumbnail(url: store.imageURL(for: item), maxPixel: Self.previewMaxPixel) {
                 image in

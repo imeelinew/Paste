@@ -31,11 +31,13 @@
 "History" = "历史记录";
 "Image" = "图像";
 "Information" = "信息";
+"Input Method" = "输入法";
 "Keep history for" = "历史保留时长";
 "Language" = "语言";
 "Light" = "浅色";
 "Launch at Login" = "登录时启动";
 "Manage in System Settings" = "在系统设置中管理";
+"Switch to English When Opening" = "打开时切换到英文输入法";
 "No matching entries" = "没有匹配的项目";
 "Not granted" = "未授权";
 "Open Settings…" = "打开系统设置…";
