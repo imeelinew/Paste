@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
 
 struct AboutView: View {
@@ -20,10 +21,6 @@ struct AboutView: View {
                     .padding(.vertical, Theme.Spacing.xl)
             }
             links
-            SettingsCard { attribution }
-            SettingsCard {
-                footer.frame(maxWidth: .infinity)
-            }
         }
     }
 
@@ -60,20 +57,6 @@ struct AboutView: View {
         }
     }
 
-    private var attribution: some View {
-        SettingsCallout(
-            title: "Built from TinyCast",
-            message: "Paste extracts TinyCast's clipboard experience and preserves its AGPL-3.0 license.",
-            systemImage: "bolt.fill",
-            tint: Theme.Colors.brand
-        )
-    }
-
-    private var footer: some View {
-        Text("Derived from TinyCast · Released under AGPL-3.0")
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
-    }
 }
 
 private struct AboutLink: Identifiable {
@@ -142,12 +125,17 @@ final class AuxWindowController: NSObject, NSWindowDelegate {
             isNew = true
             var style: NSWindow.StyleMask = [.titled, .closable]
             if seamlessTitleBar { style.insert(.fullSizeContentView) }
-            window = NSWindow(
+            let auxiliaryWindow = AuxiliaryWindow(
                 contentRect: NSRect(origin: .zero, size: size),
                 styleMask: style,
                 backing: .buffered,
                 defer: false
             )
+            auxiliaryWindow.onHideShortcut = { [weak self, weak auxiliaryWindow] in
+                guard let auxiliaryWindow else { return }
+                self?.hide(auxiliaryWindow)
+            }
+            window = auxiliaryWindow
             window.title = title
             if seamlessTitleBar {
                 window.titlebarAppearsTransparent = true
@@ -186,5 +174,28 @@ final class AuxWindowController: NSObject, NSWindowDelegate {
         else { return }
         windows.removeValue(forKey: id)
         if windows.isEmpty { NSApp.setActivationPolicy(.accessory) }
+    }
+
+    private func hide(_ window: NSWindow) {
+        window.orderOut(nil)
+        if windows.values.allSatisfy({ !$0.isVisible }) {
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
+}
+
+private final class AuxiliaryWindow: NSWindow {
+    var onHideShortcut: (() -> Void)?
+
+    override func sendEvent(_ event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        if event.type == .keyDown,
+            modifiers == .command,
+            event.keyCode == kVK_ANSI_W
+        {
+            onHideShortcut?()
+            return
+        }
+        super.sendEvent(event)
     }
 }

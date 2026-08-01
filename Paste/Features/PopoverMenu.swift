@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A menu row's leading glyph: an SF Symbol, or a real app icon (the paste target) drawn from `IconCache`.
+/// A menu row's optional leading glyph: an SF Symbol, or a real app icon drawn from `IconCache`.
 enum PopoverMenuIcon: Equatable {
     case symbol(String)
     case file(path: String)
@@ -15,14 +15,14 @@ enum PopoverMenuIcon: Equatable {
 /// One popover-menu row's data: the render path and the keyboard handlers both address rows through these, so a selection index can drive highlight and activation. Actions are pure — closing the menu is the caller's job (one central `onActivate`).
 struct PopoverMenuItem {
     let title: LocalizedStringKey
-    let icon: PopoverMenuIcon
+    let icon: PopoverMenuIcon?
     var shortcut: String? = nil
     /// Destructive rows (delete) tint their icon + label red, matching the native menu convention.
     var isDestructive: Bool = false
     let action: () -> Void
 
     init(
-        title: LocalizedStringKey, icon: PopoverMenuIcon, shortcut: String? = nil,
+        title: LocalizedStringKey, icon: PopoverMenuIcon? = nil, shortcut: String? = nil,
         isDestructive: Bool = false,
         action: @escaping () -> Void
     ) {
@@ -88,7 +88,7 @@ struct PopoverMenu: View {
     }
 }
 
-/// A single menu row: leading SF Symbol, label, optional trailing shortcut glyph. Highlight is selection-driven (hover reports up so keyboard and mouse converge on one highlight), so there is never more than one active row.
+/// A single menu row: optional leading icon, label, and optional trailing shortcut glyph. Highlight is selection-driven (hover reports up so keyboard and mouse converge on one highlight), so there is never more than one active row.
 private struct PopoverMenuRow: View {
     let item: PopoverMenuItem
     let selected: Bool
@@ -98,17 +98,18 @@ private struct PopoverMenuRow: View {
 
     var body: some View {
         Button(action: onActivate) {
-            // `sm`, not the row-standard `lg`: the 20pt icon slot carries 2–3pt of its own slack around the glyph, so a 10pt gap reads as ~12.
             HStack(spacing: Theme.Spacing.sm) {
-                switch item.icon {
-                case .symbol(let name):
-                    Image(systemName: name)
-                        .font(Theme.Typography.menuIcon)
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(item.isDestructive ? Color.red : Color.secondary)
-                        .frame(width: Theme.Size.menuIcon, height: Theme.Size.menuIcon)
-                case .file(let path):
-                    MenuFileIcon(path: path)
+                if let icon = item.icon {
+                    switch icon {
+                    case .symbol(let name):
+                        Image(systemName: name)
+                            .font(Theme.Typography.menuIcon)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(item.isDestructive ? Color.red : Color.secondary)
+                            .frame(width: Theme.Size.menuIcon, height: Theme.Size.menuIcon)
+                    case .file(let path):
+                        MenuFileIcon(path: path)
+                    }
                 }
                 Text(item.title)
                     .font(Theme.Typography.menuRow)
@@ -122,7 +123,6 @@ private struct PopoverMenuRow: View {
                     }
                 }
             }
-            // The icon slot is the tallest element on every row, so it pins one height for rows with and without a shortcut — no explicit minHeight needed.
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)

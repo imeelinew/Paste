@@ -16,6 +16,10 @@ final class PalettePanel: NSPanel {
         kVK_Return, kVK_ANSI_KeypadEnter, kVK_Escape, kVK_Tab,
     ]
 
+    private static let shortcutModifiers: NSEvent.ModifierFlags = [
+        .command, .option, .control, .shift,
+    ]
+
     private func setSearchCaretHidden(_ hidden: Bool) {
         guard let editor = firstResponder as? NSTextView else { return }
         editor.insertionPointColor = hidden ? .clear : .textColor
@@ -27,6 +31,20 @@ final class PalettePanel: NSPanel {
         case .mouseMoved: paletteViewModel?.hoverHighlightArmed = true
         case .keyDown: paletteViewModel?.hoverHighlightArmed = false
         default: break
+        }
+        if event.type == .keyDown,
+            event.modifierFlags.intersection(Self.shortcutModifiers) == .command
+        {
+            switch Int(event.keyCode) {
+            case kVK_ANSI_Comma:
+                AppCore.shared.showSettings()
+                return
+            case kVK_ANSI_Q:
+                AppCore.shared.requestQuit()
+                return
+            default:
+                break
+            }
         }
         if event.type == .keyDown,
             paletteViewModel?.menuOpen == true,

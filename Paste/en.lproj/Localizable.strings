@@ -5,7 +5,6 @@
 "A tiny, native macOS clipboard history." = "A tiny, native macOS clipboard history.";
 "App Language" = "App Language";
 "Appearance" = "Appearance";
-"Built from TinyCast" = "Built from TinyCast";
 "Cancel" = "Cancel";
 "Characters" = "Characters";
 "Clear clipboard history?" = "Clear clipboard history?";
@@ -22,7 +21,6 @@
 "Dark" = "Dark";
 "Delete All Entries" = "Delete All Entries";
 "Delete Entry" = "Delete Entry";
-"Derived from TinyCast · Released under AGPL-3.0" = "Derived from TinyCast · Released under AGPL-3.0";
 "Dimensions" = "Dimensions";
 "Disabled Applications" = "Disabled Applications";
 "Disable System Clipboard History" = "Disable System Clipboard History";
@@ -49,11 +47,14 @@
 "Open…" = "Open…";
 "Paste" = "Paste";
 "Paste & Keep Window Open" = "Paste & Keep Window Open";
-"Paste extracts TinyCast's clipboard experience and preserves its AGPL-3.0 license." = "Paste extracts TinyCast's clipboard experience and preserves its AGPL-3.0 license.";
 "Paste to %@" = "Paste to %@";
+"Paste will stop monitoring the clipboard until you open it again." = "Paste will stop monitoring the clipboard";
 "Permissions" = "Permissions";
 "Pin Entry" = "Pin Entry";
 "Pinned" = "Pinned";
+"Quit" = "Quit";
+"Quit Paste" = "Quit Paste";
+"Quit Paste?" = "Quit Paste?";
 "Record Shortcut" = "Record Shortcut";
 "Search apps…" = "Search apps…";
 "Settings" = "Settings";

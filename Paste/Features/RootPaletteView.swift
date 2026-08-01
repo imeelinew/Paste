@@ -36,11 +36,16 @@ struct RootPaletteView: View {
 
     private var appMenuContent: PopoverMenuContent {
         PopoverMenuContent(items: [
-            PopoverMenuItem(title: "About Paste", systemImage: "info.circle") {
+            PopoverMenuItem(title: "About Paste") {
                 core.showAbout()
             },
-            PopoverMenuItem(title: "Settings", systemImage: "gearshape", shortcut: "⌘,") {
+            PopoverMenuItem(title: "Settings", shortcut: "⌘,") {
                 core.showSettings()
+            },
+            PopoverMenuItem(
+                title: "Quit Paste", shortcut: "⌘Q", isDestructive: true
+            ) {
+                core.requestQuit()
             },
         ])
     }
@@ -177,11 +182,6 @@ struct RootPaletteView: View {
             } else {
                 core.hidePalette()
             }
-            return .handled
-        }
-        .onKeyPress(keys: [","], phases: .down) { press in
-            guard press.modifiers.contains(.command) else { return .ignored }
-            core.showSettings()
             return .handled
         }
         .onKeyPress(keys: ["k"], phases: .down) { press in

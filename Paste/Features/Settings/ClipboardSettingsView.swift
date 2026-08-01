@@ -12,7 +12,7 @@ struct ClipboardSettingsView: View {
                 SettingsRow(
                     title: "Clipboard History"
                 ) {
-                    ShortcutRecorder(action: .toggleClipboard)
+                    ShortcutRecorder()
                 }
             }
 

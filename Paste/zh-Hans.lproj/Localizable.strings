@@ -5,7 +5,6 @@
 "A tiny, native macOS clipboard history." = "轻巧原生的 macOS 剪贴板历史工具。";
 "App Language" = "应用语言";
 "Appearance" = "外观";
-"Built from TinyCast" = "基于 TinyCast 构建";
 "Cancel" = "取消";
 "Characters" = "字符数";
 "Clear clipboard history?" = "要清空剪贴板历史吗？";
@@ -22,7 +21,6 @@
 "Dark" = "深色";
 "Delete All Entries" = "删除全部项目";
 "Delete Entry" = "删除项目";
-"Derived from TinyCast · Released under AGPL-3.0" = "衍生自 TinyCast · 以 AGPL-3.0 发布";
 "Dimensions" = "尺寸";
 "Disabled Applications" = "排除的应用";
 "Disable System Clipboard History" = "禁用系统剪贴板历史";
@@ -49,11 +47,14 @@
 "Open…" = "打开…";
 "Paste" = "粘贴";
 "Paste & Keep Window Open" = "粘贴并保持窗口打开";
-"Paste extracts TinyCast's clipboard experience and preserves its AGPL-3.0 license." = "Paste 提取了 TinyCast 的剪贴板体验，并保留其 AGPL-3.0 许可证。";
 "Paste to %@" = "粘贴到 %@";
+"Paste will stop monitoring the clipboard until you open it again." = "退出后，Paste 将停止监控剪贴板";
 "Permissions" = "权限";
 "Pin Entry" = "固定项目";
 "Pinned" = "已固定";
+"Quit" = "退出";
+"Quit Paste" = "退出 Paste";
+"Quit Paste?" = "要退出 Paste 吗？";
 "Record Shortcut" = "录制快捷键";
 "Search apps…" = "搜索应用…";
 "Settings" = "设置";

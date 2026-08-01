@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 import SwiftUI
 
 @MainActor
@@ -8,7 +9,6 @@ final class AppCore: ObservableObject {
     let settings = AppSettings()
     let clipboardStore = ClipboardStore()
     let clipboardManager: ClipboardManager
-    let hotKeys = HotKeyManager()
     let palette = PaletteViewModel()
     let installedApplications = InstalledApplications()
     let systemClipboardHistory = SystemClipboardHistory()
@@ -28,8 +28,9 @@ final class AppCore: ObservableObject {
         Task { clipboardStore.load() }
         clipboardManager.start()
 
-        hotKeys.onToggleClipboard = { [weak self] in self?.togglePalette() }
-        hotKeys.start()
+        KeyboardShortcuts.onKeyUp(for: .toggleClipboard) { [weak self] in
+            self?.togglePalette()
+        }
     }
 
     func togglePalette() {
@@ -71,6 +72,24 @@ final class AppCore: ObservableObject {
 
     func showAbout() {
         showSettings(tab: .about)
+    }
+
+    func requestQuit() {
+        let locale = settings.language.locale
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "Quit Paste?", locale: locale)
+        alert.informativeText = String(
+            localized: "Paste will stop monitoring the clipboard until you open it again.",
+            locale: locale
+        )
+        alert.addButton(withTitle: String(localized: "Quit", locale: locale))
+        alert.addButton(withTitle: String(localized: "Cancel", locale: locale))
+        alert.buttons.first?.hasDestructiveAction = true
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSApp.terminate(nil)
+        }
     }
 
     func paste(_ item: ClipboardItem) {
