@@ -55,6 +55,8 @@ struct PopoverMenu: View {
     var header: String? = nil
     let items: [PopoverMenuItem]
     @Binding var selection: Int
+    /// When set, that row briefly shows a pressed-in state (used by ⌘, / ⌘Q choreography).
+    var pressedIndex: Int? = nil
     let onActivate: (Int) -> Void
 
     var body: some View {
@@ -74,6 +76,7 @@ struct PopoverMenu: View {
                 PopoverMenuRow(
                     item: items[index],
                     selected: index == selection,
+                    pressed: pressedIndex == index,
                     onHover: { selection = index },
                     onActivate: { onActivate(index) }
                 )
@@ -92,6 +95,7 @@ struct PopoverMenu: View {
 private struct PopoverMenuRow: View {
     let item: PopoverMenuItem
     let selected: Bool
+    var pressed: Bool = false
     /// Fired when the cursor enters the row so the owner can move selection here — keyboard and mouse then share one highlight.
     let onHover: () -> Void
     let onActivate: () -> Void
@@ -129,8 +133,14 @@ private struct PopoverMenuRow: View {
             .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.menuRow, style: .continuous)
-                    .fill(selected ? Theme.Colors.menuHover : Color.clear)
+                    .fill(
+                        pressed
+                            ? Theme.Colors.selection
+                            : (selected ? Theme.Colors.menuHover : Color.clear)
+                    )
             )
+            .scaleEffect(pressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.08), value: pressed)
         }
         .buttonStyle(.plain)
         .onHover { if $0 { onHover() } }

@@ -237,10 +237,17 @@ private struct ClipboardRow: View {
     @ViewBuilder
     private var thumbnail: some View {
         switch item.kind {
-        case .text:
-            glyphTile("doc.text")
-        case .code:
-            glyphTile("chevron.left.forwardslash.chevron.right")
+        case .text, .code:
+            if let icon = sourceAppIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: Theme.Size.rowIcon, height: Theme.Size.rowIcon)
+            } else {
+                glyphTile(
+                    item.kind == .code
+                        ? "chevron.left.forwardslash.chevron.right" : "doc.text")
+            }
         case .image:
             AsyncThumbnail(url: imageURL, maxPixel: 64) { image in
                 image
@@ -253,6 +260,14 @@ private struct ClipboardRow: View {
                 glyphTile("photo")
             }
         }
+    }
+
+    /// Source app icon from the recorded bundle ID; falls back to a type glyph when unknown.
+    private var sourceAppIcon: NSImage? {
+        guard let bundleID = item.sourceBundleID,
+            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+        else { return nil }
+        return IconCache.icon(forFile: url.path)
     }
 
     /// An SF Symbol centered on a rounded tile, sized to match the launcher's app icon so text and image rows share one thumbnail shape.

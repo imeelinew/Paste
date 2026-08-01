@@ -10,6 +10,9 @@ struct RootPaletteView: View {
     @State private var showActions = false
     @State private var showAppMenu = false
     @State private var menuSelection = 0
+    @State private var menuButtonPressed = false
+    @State private var menuRowPressedIndex: Int? = nil
+    @State private var appMenuShortcutTask: Task<Void, Never>?
     @State private var scroll = ScrollIntent(kind: .top)
 
     private var isQueryEmpty: Bool {
@@ -103,6 +106,7 @@ struct RootPaletteView: View {
                 let content = appMenuContent
                 PopoverMenu(
                     header: content.header, items: content.items, selection: $menuSelection,
+                    pressedIndex: menuRowPressedIndex,
                     onActivate: activateMenuItem
                 )
                 .padding(Self.menuInset)
@@ -124,8 +128,13 @@ struct RootPaletteView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
         .onChange(of: vm.focusToken) {
             searchFocused = true
+            cancelAppMenuShortcut()
             showActions = false
             showAppMenu = false
+        }
+        .onChange(of: vm.appMenuShortcutRequest) { _, request in
+            guard let request else { return }
+            runAppMenuShortcut(request.shortcut)
         }
         .onChange(of: vm.query) {
             vm.selection = 0
@@ -144,7 +153,9 @@ struct RootPaletteView: View {
         .onChange(of: showAppMenu) {
             if showAppMenu {
                 showActions = false
-                menuSelection = 0
+                if vm.appMenuShortcutRequest == nil {
+                    menuSelection = 0
+                }
             }
             vm.menuOpen = menuOpen
         }
@@ -177,7 +188,8 @@ struct RootPaletteView: View {
             return .handled
         }
         .onKeyPress(.escape) {
-            if menuOpen {
+            if appMenuShortcutTask != nil || menuOpen {
+                cancelAppMenuShortcut()
                 closeMenus()
             } else {
                 core.hidePalette()
@@ -227,7 +239,8 @@ struct RootPaletteView: View {
 
     private func bottomBar(showActionGroup: Bool) -> some View {
         HStack(spacing: 0) {
-            MenuCircleButton {
+            MenuCircleButton(pressed: menuButtonPressed || showAppMenu) {
+                cancelAppMenuShortcut()
                 withAnimation(Self.menuAnimation) { showAppMenu.toggle() }
             }
             Spacer()
@@ -297,12 +310,55 @@ struct RootPaletteView: View {
             showActions = false
             showAppMenu = false
         }
+        menuRowPressedIndex = nil
+        menuButtonPressed = false
     }
 
     private func activateMenuItem(_ index: Int) {
         guard let items = menuContent?.items, items.indices.contains(index) else { return }
         items[index].action()
         closeMenus()
+    }
+
+    private func cancelAppMenuShortcut() {
+        appMenuShortcutTask?.cancel()
+        appMenuShortcutTask = nil
+        menuButtonPressed = false
+        menuRowPressedIndex = nil
+        if vm.appMenuShortcutRequest != nil {
+            vm.appMenuShortcutRequest = nil
+        }
+    }
+
+    /// ⌘, / ⌘Q: press the menu button, open the menu, highlight the item, press it, then run the action.
+    private func runAppMenuShortcut(_ shortcut: AppMenuShortcut) {
+        appMenuShortcutTask?.cancel()
+        appMenuShortcutTask = Task { @MainActor in
+            showActions = false
+            menuRowPressedIndex = nil
+            menuButtonPressed = true
+            try? await Task.sleep(nanoseconds: 90_000_000)
+            guard !Task.isCancelled else { return }
+
+            menuSelection = shortcut.itemIndex
+            withAnimation(Self.menuAnimation) { showAppMenu = true }
+            menuSelection = shortcut.itemIndex
+            menuButtonPressed = false
+
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard !Task.isCancelled else { return }
+
+            menuRowPressedIndex = shortcut.itemIndex
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            guard !Task.isCancelled else { return }
+
+            menuRowPressedIndex = nil
+            let index = shortcut.itemIndex
+            // Keep request non-nil until activate so showAppMenu's onChange won't reset selection.
+            appMenuShortcutTask = nil
+            activateMenuItem(index)
+            vm.appMenuShortcutRequest = nil
+        }
     }
 
     private static let menuInset: CGFloat = 8
@@ -319,6 +375,7 @@ private struct ClipFollowKey: Equatable {
 }
 
 private struct MenuCircleButton: View {
+    var pressed: Bool = false
     let action: () -> Void
     @State private var hovered = false
 
@@ -330,8 +387,14 @@ private struct MenuCircleButton: View {
             }
             .foregroundStyle(Theme.Colors.textSecondary)
             .frame(width: Theme.Size.menuButton, height: Theme.Size.menuButton)
-            .background(Circle().fill(hovered ? Theme.Colors.rowHover : Color.clear))
+            .background(
+                Circle().fill(
+                    pressed || hovered ? Theme.Colors.selection : Color.clear
+                )
+            )
             .contentShape(.circle)
+            .scaleEffect(pressed ? 0.9 : 1)
+            .animation(.easeOut(duration: 0.08), value: pressed)
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }

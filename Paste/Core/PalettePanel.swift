@@ -37,10 +37,10 @@ final class PalettePanel: NSPanel {
         {
             switch Int(event.keyCode) {
             case kVK_ANSI_Comma:
-                AppCore.shared.showSettings()
+                paletteViewModel?.requestAppMenuShortcut(.settings)
                 return
             case kVK_ANSI_Q:
-                AppCore.shared.requestQuit()
+                paletteViewModel?.requestAppMenuShortcut(.quit)
                 return
             default:
                 break
