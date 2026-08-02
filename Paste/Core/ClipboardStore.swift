@@ -65,6 +65,11 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
 
 /// Mandarin romanization helpers for clipboard search (Foundation/`CFStringTransform` only).
 enum Pinyin {
+    struct SearchForms: Sendable {
+        let full: String
+        let initials: String
+    }
+
     /// True when `query` is ASCII letters/spaces/apostrophes — the shape of typed pinyin.
     static func queryLooksLatin(_ query: String) -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -111,6 +116,21 @@ enum Pinyin {
         return (mutable as String).lowercased()
     }
 
+    /// Persistent search terms contain only Han characters. Latin text already has a literal FTS
+    /// path, so excluding it avoids thousands of unnecessary Core Foundation transforms for the
+    /// overwhelmingly common English query.
+    static func searchForms(for text: String) -> SearchForms {
+        var full = ""
+        var initials = ""
+        for character in text where containsHan(character) {
+            let syllable = compact(romanize(String(character)))
+            guard !syllable.isEmpty else { continue }
+            full += syllable
+            initials.append(syllable.first!)
+        }
+        return SearchForms(full: full, initials: initials)
+    }
+
     private struct Syllable {
         let range: Range<String.Index>
         let compact: String
@@ -123,6 +143,10 @@ enum Pinyin {
         while index < text.endIndex {
             let next = text.index(after: index)
             let unit = String(text[index..<next])
+            guard containsHan(text[index]) else {
+                index = next
+                continue
+            }
             let romanized = compact(romanize(unit))
             if !romanized.isEmpty {
                 result.append(
@@ -171,6 +195,18 @@ enum Pinyin {
     private static func compact(_ string: String) -> String {
         string.lowercased().filter(\.isLetter)
     }
+
+    private static func containsHan(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF,
+                0x20000...0x2FA1F:
+                return true
+            default:
+                return false
+            }
+        }
+    }
 }
 
 /// How long clipboard history is kept before pruning; raw value is the age in days persisted to UserDefaults, and `forever` is -1 so an unset key (0) falls through to the default.
@@ -210,8 +246,10 @@ final class ClipboardStore: ObservableObject {
         didSet {
             searchCache = nil
             orderedCache = nil
+            revision &+= 1
         }
     }
+    @Published private(set) var revision: UInt64 = 0
     var maxAge: TimeInterval = ClipboardRetention.threeMonths.maxAge
 
     /// One-entry memo so repeated renders (e.g. arrow-key nav) for the same query reuse the FTS result instead of re-querying SQLite every frame; invalidated whenever `items` changes.
@@ -229,20 +267,32 @@ final class ClipboardStore: ObservableObject {
           image_path TEXT,
           created_at REAL NOT NULL,
           source_app TEXT,
-          pinned_at REAL
+          pinned_at REAL,
+          pinyin TEXT,
+          pinyin_initials TEXT
         );
         CREATE INDEX IF NOT EXISTS items_created_at ON items(created_at);
         """
 
     private static let searchSchema = """
         CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(
-          text, content='items', content_rowid='rowid', tokenize='trigram'
+          text, pinyin, pinyin_initials,
+          content='items', content_rowid='rowid', tokenize='trigram'
         );
         CREATE TRIGGER IF NOT EXISTS items_ai AFTER INSERT ON items BEGIN
-          INSERT INTO items_fts(rowid, text) VALUES(new.rowid, new.text);
+          INSERT INTO items_fts(rowid, text, pinyin, pinyin_initials)
+          VALUES(new.rowid, new.text, new.pinyin, new.pinyin_initials);
         END;
         CREATE TRIGGER IF NOT EXISTS items_ad AFTER DELETE ON items BEGIN
-          INSERT INTO items_fts(items_fts, rowid, text) VALUES('delete', old.rowid, old.text);
+          INSERT INTO items_fts(items_fts, rowid, text, pinyin, pinyin_initials)
+          VALUES('delete', old.rowid, old.text, old.pinyin, old.pinyin_initials);
+        END;
+        CREATE TRIGGER IF NOT EXISTS items_au
+        AFTER UPDATE OF text, pinyin, pinyin_initials ON items BEGIN
+          INSERT INTO items_fts(items_fts, rowid, text, pinyin, pinyin_initials)
+          VALUES('delete', old.rowid, old.text, old.pinyin, old.pinyin_initials);
+          INSERT INTO items_fts(rowid, text, pinyin, pinyin_initials)
+          VALUES(new.rowid, new.text, new.pinyin, new.pinyin_initials);
         END;
         """
 
@@ -258,6 +308,7 @@ final class ClipboardStore: ObservableObject {
     private var pinStmt: OpaquePointer?
     private var staleImagesStmt: OpaquePointer?
     private var deleteStaleStmt: OpaquePointer?
+    private var searchMetadataTask: Task<Void, Never>?
 
     /// `directory` defaults to the per-channel cache; `Tools/clipboard-test.swift` passes a throwaway one so a harness run can never reach a real history.
     init(directory: URL? = nil) {
@@ -265,7 +316,9 @@ final class ClipboardStore: ObservableObject {
         imagesDir = base.appendingPathComponent("images", isDirectory: true)
         dbURL = base.appendingPathComponent("clipboard.sqlite3")
         try? FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
-        if !openDatabase() {
+        if openDatabase() {
+            scheduleSearchMetadataBackfill()
+        } else {
             closeDatabase()
             recordPersistenceError(
                 "Could not open clipboard history at \(dbURL.path); preserving it and using session memory"
@@ -471,6 +524,7 @@ final class ClipboardStore: ObservableObject {
             recordPersistenceError("Could not commit clipboard import: \(databaseMessage)")
             return 0
         }
+        scheduleSearchMetadataBackfill()
         load()
         return inserted
     }
@@ -529,6 +583,53 @@ final class ClipboardStore: ObservableObject {
         return result
     }
 
+    /// Full-history search for the UI. SQLite work and fallback pinyin matching both run outside the
+    /// main actor; cancellation discards an obsolete keystroke's result before it reaches SwiftUI.
+    func searchAsync(_ query: String) async -> [ClipboardItem] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return orderedItems }
+
+        let resident = items
+        let pinned = pinnedItems
+        let path = db == nil ? nil : dbURL.path
+        let databaseTask = Task.detached(priority: .userInitiated) {
+            () -> [ClipboardItem]? in
+            guard !Task.isCancelled, let path else { return nil }
+            return Self.queryDatabase(path: path, query: q)
+        }
+        let databaseMatches = await withTaskCancellationHandler {
+            await databaseTask.value
+        } onCancel: {
+            databaseTask.cancel()
+        }
+        guard !Task.isCancelled else { return [] }
+
+        let residentTask = Task.detached(priority: .userInitiated) {
+            () -> [ClipboardItem] in
+            guard !Task.isCancelled else { return [] }
+            return resident.filter { $0.matches(q) }
+        }
+        let residentMatches = await withTaskCancellationHandler {
+            await residentTask.value
+        } onCancel: {
+            residentTask.cancel()
+        }
+        guard !Task.isCancelled else { return [] }
+
+        let pinnedMatches = pinned.filter { item in residentMatches.contains { $0.id == item.id } }
+        var seen = Set(pinnedMatches.map(\.id))
+        var unpinned: [ClipboardItem] = []
+        for item in (databaseMatches ?? residentMatches) where !item.isPinned && seen.insert(item.id).inserted {
+            unpinned.append(item)
+        }
+        // Newly captured rows may still be waiting for their persistent pinyin metadata; merge the
+        // resident window so they remain searchable immediately.
+        for item in residentMatches where !item.isPinned && seen.insert(item.id).inserted {
+            unpinned.append(item)
+        }
+        return pinnedMatches + unpinned
+    }
+
     /// Row index of `item` among the results for `query` — lets the palette keep its selection on a row that moved (pin toggle, promote) whether or not the search is filtered. Reads the same memoized result the list renders.
     func rowIndex(of item: ClipboardItem, in query: String) -> Int? {
         search(query).firstIndex { $0.id == item.id }
@@ -548,6 +649,165 @@ final class ClipboardStore: ObservableObject {
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
         return status == SQLITE_DONE ? results : fallbackSearch(q)
+    }
+
+    private nonisolated static func queryDatabase(path: String, query: String) -> [ClipboardItem]? {
+        var connection: OpaquePointer?
+        guard sqlite3_open_v2(path, &connection, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            sqlite3_close_v2(connection)
+            return nil
+        }
+        defer { sqlite3_close_v2(connection) }
+        sqlite3_busy_timeout(connection, 500)
+
+        let usesFTS = query.count >= 3
+        let sql =
+            usesFTS
+            ? """
+              SELECT i.id, i.kind, i.text, i.image_path, i.created_at, i.source_app, i.pinned_at
+              FROM items_fts f JOIN items i ON i.rowid = f.rowid
+              WHERE items_fts MATCH ? ORDER BY f.rowid DESC LIMIT 2000
+              """
+            : """
+              SELECT id, kind, text, image_path, created_at, source_app, pinned_at
+              FROM items
+              WHERE text LIKE ? ESCAPE '\\' OR pinyin LIKE ? ESCAPE '\\'
+                 OR pinyin_initials LIKE ? ESCAPE '\\'
+              ORDER BY rowid DESC LIMIT 2000
+              """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(connection, sql, -1, &statement, nil) == SQLITE_OK,
+            let statement
+        else {
+            sqlite3_finalize(statement)
+            return nil
+        }
+        defer { sqlite3_finalize(statement) }
+
+        if usesFTS {
+            let match = "\"" + query.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+            sqlite3_bind_text(statement, 1, match, -1, SQLITE_TRANSIENT)
+        } else {
+            let escaped = query
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "%", with: "\\%")
+                .replacingOccurrences(of: "_", with: "\\_")
+            let pattern = "%\(escaped)%"
+            for index in 1...3 {
+                sqlite3_bind_text(statement, Int32(index), pattern, -1, SQLITE_TRANSIENT)
+            }
+        }
+
+        var results: [ClipboardItem] = []
+        var status = sqlite3_step(statement)
+        while status == SQLITE_ROW {
+            if Task.isCancelled { return nil }
+            if let item = row(statement) { results.append(item) }
+            status = sqlite3_step(statement)
+        }
+        return status == SQLITE_DONE ? results : nil
+    }
+
+    /// Awaitable for migration tests and performance probes; production schedules it after open and
+    /// insert so capture never waits for transliteration.
+    func refreshSearchMetadata(for item: ClipboardItem? = nil) async {
+        guard db != nil else { return }
+        let path = dbURL.path
+        let candidate = item.flatMap { item -> (id: String, text: String)? in
+            guard let text = item.text else { return nil }
+            return (id: item.id.uuidString, text: text)
+        }
+        await Task.detached(priority: .utility) {
+            Self.backfillSearchMetadata(path: path, candidate: candidate)
+        }.value
+        revision &+= 1
+    }
+
+    func waitForSearchMetadata() async {
+        await searchMetadataTask?.value
+    }
+
+    private func scheduleSearchMetadataBackfill(for item: ClipboardItem? = nil) {
+        let previous = searchMetadataTask
+        searchMetadataTask = Task { [weak self] in
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await self?.refreshSearchMetadata(for: item)
+        }
+    }
+
+    private nonisolated static func backfillSearchMetadata(
+        path: String, candidate: (id: String, text: String)?
+    ) {
+        var connection: OpaquePointer?
+        guard
+            sqlite3_open_v2(path, &connection, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
+            let connection
+        else {
+            sqlite3_close_v2(connection)
+            return
+        }
+        defer { sqlite3_close_v2(connection) }
+        sqlite3_busy_timeout(connection, 1000)
+
+        var candidates: [(String, String)] = []
+        if let candidate {
+            candidates = [(candidate.id, candidate.text)]
+        } else {
+            var select: OpaquePointer?
+            let sql =
+                "SELECT id, text FROM items WHERE text IS NOT NULL "
+                + "AND (pinyin IS NULL OR pinyin_initials IS NULL)"
+            guard sqlite3_prepare_v2(connection, sql, -1, &select, nil) == SQLITE_OK,
+                let select
+            else {
+                sqlite3_finalize(select)
+                return
+            }
+            while sqlite3_step(select) == SQLITE_ROW {
+                if Task.isCancelled {
+                    sqlite3_finalize(select)
+                    return
+                }
+                if let id = columnString(select, 0), let text = columnString(select, 1) {
+                    candidates.append((id, text))
+                }
+            }
+            sqlite3_finalize(select)
+        }
+        guard !candidates.isEmpty else { return }
+
+        guard sqlite3_exec(connection, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK else { return }
+        var update: OpaquePointer?
+        guard
+            sqlite3_prepare_v2(
+                connection,
+                "UPDATE items SET pinyin = ?, pinyin_initials = ? WHERE id = ?", -1, &update,
+                nil) == SQLITE_OK,
+            let update
+        else {
+            sqlite3_exec(connection, "ROLLBACK", nil, nil, nil)
+            sqlite3_finalize(update)
+            return
+        }
+
+        var succeeded = true
+        for (id, text) in candidates {
+            if Task.isCancelled {
+                succeeded = false
+                break
+            }
+            let forms = Pinyin.searchForms(for: text)
+            sqlite3_bind_text(update, 1, forms.full, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(update, 2, forms.initials, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(update, 3, id, -1, SQLITE_TRANSIENT)
+            if sqlite3_step(update) != SQLITE_DONE { succeeded = false }
+            sqlite3_reset(update)
+            sqlite3_clear_bindings(update)
+            if !succeeded { break }
+        }
+        sqlite3_finalize(update)
+        sqlite3_exec(connection, succeeded ? "COMMIT" : "ROLLBACK", nil, nil, nil)
     }
 
     // MARK: - Private
@@ -615,6 +875,7 @@ final class ClipboardStore: ObservableObject {
         items.removeAll { $0.id == updated.id }
         items.insert(updated, at: 0)
         trimWindow()
+        scheduleSearchMetadataBackfill(for: updated)
     }
 
     /// Cap the in-memory window, but never drop a pinned row: those render however old they are.
@@ -629,6 +890,7 @@ final class ClipboardStore: ObservableObject {
         items.insert(item, at: 0)
         trimWindow()
         prune()
+        scheduleSearchMetadataBackfill(for: item)
     }
 
     @discardableResult
@@ -730,6 +992,12 @@ final class ClipboardStore: ObservableObject {
         if !columnExists("pinned_at", in: "items") {
             sqlite3_exec(db, "ALTER TABLE items ADD COLUMN pinned_at REAL", nil, nil, nil)
         }
+        if !columnExists("pinyin", in: "items") {
+            sqlite3_exec(db, "ALTER TABLE items ADD COLUMN pinyin TEXT", nil, nil, nil)
+        }
+        if !columnExists("pinyin_initials", in: "items") {
+            sqlite3_exec(db, "ALTER TABLE items ADD COLUMN pinyin_initials TEXT", nil, nil, nil)
+        }
         // Created after the migration rather than in `schema`, since the column may not exist yet on an older database.
         sqlite3_exec(
             db,
@@ -794,6 +1062,7 @@ final class ClipboardStore: ObservableObject {
         for sql in [
             "DROP TRIGGER IF EXISTS items_ai",
             "DROP TRIGGER IF EXISTS items_ad",
+            "DROP TRIGGER IF EXISTS items_au",
             "DROP TABLE IF EXISTS items_fts",
         ] where sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
             return false
@@ -812,6 +1081,7 @@ final class ClipboardStore: ObservableObject {
         guard sqlite3_step(stmt) == SQLITE_ROW else { return false }
         guard let sql = Self.columnString(stmt, 0) else { return true }
         return !sql.localizedCaseInsensitiveContains("CREATE VIRTUAL TABLE")
+            || !sql.localizedCaseInsensitiveContains("pinyin_initials")
     }
 
     private func recordPersistenceError(_ message: String) {
@@ -867,7 +1137,7 @@ final class ClipboardStore: ObservableObject {
         db = nil
     }
 
-    private static func row(_ stmt: OpaquePointer?) -> ClipboardItem? {
+    private nonisolated static func row(_ stmt: OpaquePointer?) -> ClipboardItem? {
         guard let idString = columnString(stmt, 0), let id = UUID(uuidString: idString),
             let kindString = columnString(stmt, 1),
             let storedKind = ClipboardItem.Kind(rawValue: kindString)
@@ -884,12 +1154,12 @@ final class ClipboardStore: ObservableObject {
             sourceBundleID: columnString(stmt, 5), pinnedAt: columnDate(stmt, 6))
     }
 
-    private static func columnDate(_ stmt: OpaquePointer?, _ index: Int32) -> Date? {
+    private nonisolated static func columnDate(_ stmt: OpaquePointer?, _ index: Int32) -> Date? {
         guard sqlite3_column_type(stmt, index) != SQLITE_NULL else { return nil }
         return Date(timeIntervalSince1970: sqlite3_column_double(stmt, index))
     }
 
-    private static func columnString(_ stmt: OpaquePointer?, _ index: Int32) -> String? {
+    private nonisolated static func columnString(_ stmt: OpaquePointer?, _ index: Int32) -> String? {
         guard let ptr = sqlite3_column_text(stmt, index) else { return nil }
         let count = Int(sqlite3_column_bytes(stmt, index))
         return String(decoding: UnsafeBufferPointer(start: ptr, count: count), as: UTF8.self)

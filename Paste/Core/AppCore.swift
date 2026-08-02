@@ -17,6 +17,7 @@ final class AppCore: ObservableObject {
     private let auxWindows = AuxWindowController()
     private var transferTask: Task<Void, Never>?
     private var transferGeneration = UUID()
+    private var selectionTask: Task<Void, Never>?
 
     private init() {
         clipboardManager = ClipboardManager(store: clipboardStore, settings: settings)
@@ -159,8 +160,7 @@ final class AppCore: ObservableObject {
 
     func togglePinnedClip(_ item: ClipboardItem) {
         clipboardStore.togglePinned(item)
-        select(item)
-        palette.followToken = UUID()
+        select(item, follow: true)
     }
 
     func revealClipboardImage(_ item: ClipboardItem) {
@@ -169,8 +169,16 @@ final class AppCore: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    private func select(_ item: ClipboardItem) {
-        palette.selection = clipboardStore.rowIndex(of: item, in: palette.query) ?? 0
+    private func select(_ item: ClipboardItem, follow: Bool = false) {
+        selectionTask?.cancel()
+        let query = palette.query
+        selectionTask = Task { [weak self] in
+            guard let self else { return }
+            let results = await self.clipboardStore.searchAsync(query)
+            guard !Task.isCancelled, self.palette.query == query else { return }
+            self.palette.selection = results.firstIndex { $0.id == item.id } ?? 0
+            if follow { self.palette.followToken = UUID() }
+        }
     }
 
     private func startTransfer(

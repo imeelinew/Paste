@@ -14,12 +14,25 @@ struct RootPaletteView: View {
     @State private var menuRowPressedIndex: Int? = nil
     @State private var appMenuShortcutTask: Task<Void, Never>?
     @State private var scroll = ScrollIntent(kind: .top)
+    @State private var searchedClips: [ClipboardItem] = []
+    @State private var searchedQuery = ""
 
     private var isQueryEmpty: Bool {
         vm.query.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    private var clipResults: [ClipboardItem] { store.search(vm.query) }
+    private var normalizedQuery: String {
+        vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var clipResults: [ClipboardItem] {
+        guard !normalizedQuery.isEmpty else { return store.search("") }
+        return searchedClips
+    }
+
+    private var searchReady: Bool {
+        normalizedQuery.isEmpty || searchedQuery == normalizedQuery
+    }
 
     private var selection: Int {
         clipResults.isEmpty ? 0 : min(max(vm.selection, 0), clipResults.count - 1)
@@ -170,6 +183,13 @@ struct RootPaletteView: View {
             scroll = ScrollIntent(kind: .follow)
         }
         .onAppear { searchFocused = true }
+        .task(id: ClipboardSearchRequest(query: normalizedQuery, revision: store.revision)) {
+            let query = normalizedQuery
+            let results = await store.searchAsync(query)
+            guard !Task.isCancelled, query == normalizedQuery else { return }
+            searchedQuery = query
+            searchedClips = results
+        }
         .onKeyPress(.downArrow) {
             if menuOpen { moveMenu(1) } else { move(1) }
             return .handled
@@ -184,7 +204,9 @@ struct RootPaletteView: View {
                 activateMenuItem(menuSelection)
                 return .handled
             }
-            guard command, clipResults.indices.contains(selection) else { return .ignored }
+            guard command, searchReady, clipResults.indices.contains(selection) else {
+                return .ignored
+            }
             core.copyToClipboard(clipResults[selection])
             return .handled
         }
@@ -199,19 +221,21 @@ struct RootPaletteView: View {
         }
         .onKeyPress(keys: ["k"], phases: .down) { press in
             guard press.modifiers.contains(.command) else { return .ignored }
-            guard !clipResults.isEmpty else { return .handled }
+            guard searchReady, !clipResults.isEmpty else { return .handled }
             toggleActions()
             return .handled
         }
         .onKeyPress(keys: [.delete, .deleteForward], phases: .down) { press in
             if menuOpen { return .handled }
-            guard press.modifiers.contains(.command), clipResults.indices.contains(selection)
+            guard searchReady, press.modifiers.contains(.command),
+                clipResults.indices.contains(selection)
             else { return .ignored }
             store.remove(clipResults[selection])
             return .handled
         }
         .onKeyPress(keys: ["p"], phases: .down) { press in
-            guard press.modifiers.contains(.command), clipResults.indices.contains(selection)
+            guard searchReady, press.modifiers.contains(.command),
+                clipResults.indices.contains(selection)
             else { return .ignored }
             core.togglePinnedClip(clipResults[selection])
             return .handled
@@ -290,11 +314,12 @@ struct RootPaletteView: View {
     }
 
     private func activateSelection() {
-        guard clipResults.indices.contains(selection) else { return }
+        guard searchReady, clipResults.indices.contains(selection) else { return }
         core.paste(clipResults[selection])
     }
 
     private func openActions() {
+        guard searchReady else { return }
         withAnimation(Self.menuAnimation) { showActions = true }
     }
 
@@ -373,6 +398,11 @@ struct RootPaletteView: View {
 private struct ClipFollowKey: Equatable {
     let id: ClipboardItem.ID?
     let token: UUID
+}
+
+private struct ClipboardSearchRequest: Hashable {
+    let query: String
+    let revision: UInt64
 }
 
 private struct MenuCircleButton: View {

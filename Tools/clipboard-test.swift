@@ -12,7 +12,7 @@ struct ClipboardTests {
     static var failures = 0
     static var passes = 0
 
-    static func main() {
+    static func main() async {
         pinOrder()
         unpinRejoinsAsNewest()
         pasteLeavesPinsAlone()
@@ -24,6 +24,7 @@ struct ClipboardTests {
         derivedSearchIndexRepairsInPlace()
         migrationFromShippedDatabase()
         codeClassification()
+        await fullHistoryShortAndPinyinSearch()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -286,6 +287,43 @@ struct ClipboardTests {
             store.addText("https://example.com/path?q=value", sourceBundleID: nil)
             expect(store.items.first?.kind == .text, "a URL remains text")
         }
+    }
+
+    /// Short literal queries and persisted pinyin forms search the database, not just the newest
+    /// in-memory window, while remaining off the main actor.
+    static func fullHistoryShortAndPinyinSearch() async {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ClipboardStore(directory: dir)
+        let base = Date().addingTimeInterval(-10_000)
+        var seed = [
+            entry("xy archived literal", at: base),
+            entry("你好归档", at: base.addingTimeInterval(1)),
+        ]
+        for index in 0..<1_100 {
+            seed.append(entry("ordinary filler \(index)", at: base.addingTimeInterval(Double(index + 2))))
+        }
+        _ = store.importEntries(seed)
+        await store.waitForSearchMetadata()
+
+        expect(
+            !store.items.contains { $0.text == "xy archived literal" },
+            "the short-query fixture sits beyond the resident window")
+        let short = await store.searchAsync("xy")
+        expect(
+            short.first?.text == "xy archived literal",
+            "a two-character query searches durable history")
+        let fullPinyin = await store.searchAsync("nihaoguidang")
+        expect(
+            fullPinyin.first?.text == "你好归档", "full pinyin searches durable history")
+        let initials = await store.searchAsync("nhgd")
+        expect(initials.first?.text == "你好归档", "pinyin initials search durable history")
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        _ = await store.searchAsync("not-present-anywhere")
+        let elapsed = start.duration(to: clock.now)
+        expect(elapsed < .seconds(1), "a 1,100-row background search completes within one second")
     }
 
     // MARK: - Harness
