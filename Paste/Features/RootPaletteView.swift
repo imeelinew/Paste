@@ -26,7 +26,7 @@ struct RootPaletteView: View {
     }
 
     private var clipResults: [ClipboardItem] {
-        guard !normalizedQuery.isEmpty else { return store.search("") }
+        guard !normalizedQuery.isEmpty else { return store.displayItems }
         return searchedClips
     }
 

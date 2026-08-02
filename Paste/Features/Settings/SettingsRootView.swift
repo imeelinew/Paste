@@ -17,14 +17,6 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         }
     }
 
-    var systemImage: String {
-        switch self {
-        case .general: return "gearshape.fill"
-        case .clipboard: return "doc.on.clipboard.fill"
-        case .permissions: return "lock.shield.fill"
-        }
-    }
-
 }
 
 struct SettingsRootView: View {

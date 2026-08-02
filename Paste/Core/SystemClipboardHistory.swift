@@ -7,23 +7,19 @@ final class SystemClipboardHistory: ObservableObject {
     private static let preferenceDomain = "com.apple.Spotlight"
     private static let enabledKey = "PasteboardHistoryEnabled"
 
-    private let defaults: UserDefaults?
+    private let defaults: UserDefaults
 
     @Published private(set) var isDisabled: Bool
 
     init() {
-        let defaults = UserDefaults(suiteName: Self.preferenceDomain)
-        self.defaults = defaults
-        if let defaults {
-            isDisabled = !defaults.bool(forKey: Self.enabledKey)
-        } else {
-            isDisabled = false
-            NSLog("Paste: could not open the Spotlight preferences domain")
+        guard let defaults = UserDefaults(suiteName: Self.preferenceDomain) else {
+            preconditionFailure("Could not open the Spotlight preferences domain")
         }
+        self.defaults = defaults
+        isDisabled = !defaults.bool(forKey: Self.enabledKey)
     }
 
     func setDisabled(_ disabled: Bool) {
-        guard let defaults else { return }
         defaults.set(!disabled, forKey: Self.enabledKey)
         guard defaults.synchronize() else {
             refresh()
@@ -33,7 +29,6 @@ final class SystemClipboardHistory: ObservableObject {
     }
 
     func refresh() {
-        guard let defaults else { return }
         defaults.synchronize()
         isDisabled = !defaults.bool(forKey: Self.enabledKey)
     }

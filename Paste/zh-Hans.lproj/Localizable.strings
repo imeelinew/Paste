@@ -52,12 +52,10 @@
 "Quit" = "退出";
 "Quit Paste" = "退出 Paste";
 "Quit Paste?" = "要退出 Paste 吗？";
-"Record Shortcut" = "录制快捷键";
 "Search apps…" = "搜索应用…";
 "Settings" = "设置";
 "Shortcut" = "快捷键";
 "Show in Finder" = "在 Finder 中显示";
-"Show in launcher" = "在启动器中显示";
 "Simplified Chinese" = "简体中文";
 "Size" = "大小";
 "Source" = "来源";
@@ -70,10 +68,8 @@
 "This Week" = "本周";
 "Today" = "今天";
 "Type" = "类型";
-"Type shortcut…" = "请按下快捷键…";
 "Type to filter entries…" = "输入内容以筛选…";
 "Unpin Entry" = "取消固定";
-"Used by %@" = "已被 %@ 使用";
 "Words" = "词数";
 "Yesterday" = "昨天";
 "1 Day" = "1 天";

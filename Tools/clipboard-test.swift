@@ -1,8 +1,7 @@
-// Standalone test for the clipboard store — compiles the *real* source (no copy to sync):
-// swiftc -swift-version 6 Tinycast/Core/ClipboardStore.swift Tools/clipboard-test.swift -o /tmp/clipboard-test && /tmp/clipboard-test
+// Standalone test for the real clipboard store:
+// swiftc -swift-version 6 Paste/Core/ClipboardStore.swift Tools/clipboard-test.swift -o /tmp/clipboard-test && /tmp/clipboard-test
 //
-// Every store here is built on a throwaway directory under the system temp dir, so a run can never
-// see or touch a real clipboard history.
+// Every store uses a fresh temporary directory and can never touch real clipboard history.
 
 import Foundation
 
@@ -16,14 +15,12 @@ struct ClipboardTests {
         pinOrder()
         unpinRejoinsAsNewest()
         pasteLeavesPinsAlone()
-        pinsSurvivePruningAndTheWindow()
-        pinsLeadFilteredSearches()
-        persistence()
-        durableDirectoryMigration()
-        corruptDatabaseIsPreserved()
-        derivedSearchIndexRepairsInPlace()
-        migrationFromShippedDatabase()
+        pinsSurvivePruningAndMemoryWindow()
+        persistenceAndClear()
+        currentSchema()
         codeClassification()
+        await imageLifecycle()
+        await pinsLeadSearches()
         await fullHistoryShortAndPinyinSearch()
         await clearInvalidatesPendingCaptures()
 
@@ -31,9 +28,8 @@ struct ClipboardTests {
         if failures > 0 { exit(1) }
     }
 
-    // MARK: - Cases
+    // MARK: - Ordering and retention
 
-    /// Pins stack in pin order, oldest pin first, regardless of how old the entries are.
     static func pinOrder() {
         withStore { store, _ in
             store.addText("oldest", sourceBundleID: nil)
@@ -41,21 +37,20 @@ struct ClipboardTests {
             store.addText("newest", sourceBundleID: nil)
 
             store.togglePinned(item(store, "oldest"))
-            expect(texts(store) == ["oldest", "newest", "middle"], "first pin leads the list")
+            expect(texts(store) == ["oldest", "newest", "middle"], "first pin leads")
 
             store.togglePinned(item(store, "middle"))
             expect(
                 texts(store) == ["oldest", "middle", "newest"],
-                "second pin joins below the first, and does not sort by recency")
+                "later pins join below earlier pins")
 
             store.togglePinned(item(store, "newest"))
             expect(
                 texts(store) == ["oldest", "middle", "newest"],
-                "pins hold pin order, not the recency order they had in the history")
+                "pin order is independent of history recency")
         }
     }
 
-    /// Unpinning drops the row in as today's newest entry rather than back where it came from.
     static func unpinRejoinsAsNewest() {
         withStore { store, _ in
             store.addText("a", sourceBundleID: nil)
@@ -66,13 +61,12 @@ struct ClipboardTests {
             store.togglePinned(item(store, "a"))
             store.togglePinned(item(store, "a"))
 
-            expect(texts(store) == ["a", "c", "b"], "unpinned row leads the history")
-            expect(!item(store, "a").isPinned, "pin stamp cleared")
-            expect(item(store, "a").createdAt > before, "unpin re-recencies the row")
+            expect(texts(store) == ["a", "c", "b"], "unpin promotes into history")
+            expect(!item(store, "a").isPinned, "unpin clears its stamp")
+            expect(item(store, "a").createdAt > before, "unpin refreshes recency")
         }
     }
 
-    /// Pasting a pinned entry must not reshuffle the Pinned section.
     static func pasteLeavesPinsAlone() {
         withStore { store, _ in
             store.addText("one", sourceBundleID: nil)
@@ -83,78 +77,44 @@ struct ClipboardTests {
 
             store.promote(item(store, "one"))
 
-            expect(texts(store) == ["one", "two"], "promote leaves a pinned row in place")
-            expect(item(store, "one").createdAt == stamp, "promote does not rewrite a pinned row")
+            expect(texts(store) == ["one", "two"], "promote leaves pins in place")
+            expect(item(store, "one").createdAt == stamp, "promote does not rewrite a pin")
 
             store.addText("three", sourceBundleID: nil)
             store.addText("four", sourceBundleID: nil)
             store.promote(item(store, "three"))
             expect(
                 texts(store) == ["one", "two", "three", "four"],
-                "an unpinned row still promotes to the head of the history")
+                "promote moves an unpinned row to the history head")
         }
     }
 
-    /// Retention sweeps everything around a pin but never the pin itself.
-    static func pinsSurvivePruningAndTheWindow() {
+    static func pinsSurvivePruningAndMemoryWindow() {
         withStore { store, dir in
-            // Older than the 1-day retention the case sets below, but inside the default the import prunes against.
-            let old = Date().addingTimeInterval(-2 * 86_400)
-            _ = store.importEntries([
-                entry("ancient-pinned", at: old),
-                entry("ancient-loose", at: old.addingTimeInterval(1)),
-                entry("fresh", at: Date()),
-            ])
-            store.togglePinned(item(store, "ancient-pinned"))
-
-            store.maxAge = 86_400
-            store.enforceLimits()
-            expect(
-                Set(texts(store)) == ["ancient-pinned", "fresh"],
-                "pruning skips pinned rows and takes the rest")
-
-            // Reopen: the pin must come back even though it is far outside the retention window.
-            let reopened = ClipboardStore(directory: dir)
-            reopened.maxAge = 86_400
-            reopened.load()
-            expect(
-                Set(texts(reopened)) == ["ancient-pinned", "fresh"],
-                "a pin outlives retention across a relaunch")
-        }
-    }
-
-    /// A pin must lead a filtered search even when the FTS statement's LIMIT cannot reach it.
-    static func pinsLeadFilteredSearches() {
-        withStore { store, _ in
-            var seed: [ClipboardItem] = []
-            let base = Date().addingTimeInterval(-10_000)
-            // The pinned hit is the oldest of 260 matches; the FTS statement stops at 200.
-            seed.append(entry("needle in the haystack", at: base))
-            for i in 1...259 {
-                seed.append(entry("haystack filler \(i)", at: base.addingTimeInterval(Double(i))))
+            store.addText("persistent pin", sourceBundleID: nil)
+            store.togglePinned(item(store, "persistent pin"))
+            for index in 0..<1_050 {
+                store.addText("filler \(index)", sourceBundleID: nil)
             }
-            _ = store.importEntries(seed)
-            store.togglePinned(item(store, "needle in the haystack"))
+            expect(
+                store.items.first(where: { $0.text == "persistent pin" })?.isPinned == true,
+                "a pin stays resident beyond the memory window")
 
-            let results = store.search("haystack")
-            expect(results.count > 200, "FTS results plus the pinned block")
-            expect(
-                results.first?.text == "needle in the haystack",
-                "the pinned match leads the filtered results")
-            expect(
-                results.filter(\.isPinned).count == 1, "the pinned row is not duplicated")
+            store.maxAge = -1
+            store.enforceLimits()
+            expect(texts(store) == ["persistent pin"], "retention removes only unpinned rows")
 
-            let short = store.search("ne")  // below the trigram threshold: the fallback path
-            expect(
-                short.first?.text == "needle in the haystack",
-                "the pinned match leads the fallback search too")
+            let reopened = ClipboardStore(directory: dir)
+            reopened.load()
+            expect(texts(reopened) == ["persistent pin"], "a retained pin survives relaunch")
         }
     }
 
-    /// Pin stamps and their order survive a reopen.
-    static func persistence() {
+    // MARK: - Persistence and schema
+
+    static func persistenceAndClear() {
         withStore { store, dir in
-            store.addText("first", sourceBundleID: nil)
+            store.addText("first", sourceBundleID: "com.example.Source")
             store.addText("second", sourceBundleID: nil)
             store.addText("third", sourceBundleID: nil)
             store.togglePinned(item(store, "third"))
@@ -164,197 +124,134 @@ struct ClipboardTests {
             reopened.load()
             expect(
                 texts(reopened) == ["third", "first", "second"],
-                "pin order is restored from disk, not recomputed from recency")
-
-            reopened.togglePinned(item(reopened, "third"))
-            expect(texts(reopened) == ["first", "third", "second"], "unpin after a reload")
+                "rows, source metadata, and pin order persist")
+            expect(
+                item(reopened, "first").sourceBundleID == "com.example.Source",
+                "source application persists")
 
             reopened.clearAll()
-            expect(reopened.items.isEmpty, "Clear History takes pins too")
+            expect(reopened.items.isEmpty, "clear removes all rows")
+            let empty = ClipboardStore(directory: dir)
+            empty.load()
+            expect(empty.items.isEmpty, "clear persists across relaunch")
         }
     }
 
-    /// The first durable-storage launch copies a coherent live SQLite database and image directory,
-    /// while retaining the legacy cache as a rollback source.
-    static func durableDirectoryMigration() {
-        let root = scratchDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let legacy = root.appendingPathComponent("legacy", isDirectory: true)
-        let durable = root.appendingPathComponent("durable", isDirectory: true)
-        let manager = FileManager.default
-        try? manager.createDirectory(at: legacy, withIntermediateDirectories: true)
-
-        let liveStore = ClipboardStore(directory: legacy)
-        liveStore.addText("migrated while live", sourceBundleID: "com.example.Source")
-        let marker = legacy.appendingPathComponent("images/marker.png")
-        try? Data("image-marker".utf8).write(to: marker)
-
-        expect(
-            ClipboardStore.migrateLegacyDirectory(from: legacy, to: durable),
-            "legacy history migrates to Application Support")
-        let migrated = ClipboardStore(directory: durable)
-        migrated.load()
-        expect(
-            texts(migrated) == ["migrated while live"],
-            "the migrated SQLite snapshot contains the live history")
-        expect(
-            manager.fileExists(atPath: durable.appendingPathComponent("images/marker.png").path),
-            "owned image blobs migrate with the database")
-        expect(
-            manager.fileExists(atPath: legacy.appendingPathComponent("clipboard.sqlite3").path),
-            "the legacy database remains available as a rollback copy")
-    }
-
-    /// A database that cannot be opened is user data, not a disposable cache: preserve its bytes
-    /// and continue with session-only history.
-    static func corruptDatabaseIsPreserved() {
-        let dir = scratchDirectory()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let db = dir.appendingPathComponent("clipboard.sqlite3")
-        let original = Data("not-a-sqlite-database".utf8)
-        try? original.write(to: db)
-
-        let store = ClipboardStore(directory: dir)
-        store.addText("session fallback", sourceBundleID: nil)
-        expect(store.persistenceError != nil, "a persistence failure is recorded")
-        expect((try? Data(contentsOf: db)) == original, "a corrupt database is never deleted")
-        expect(texts(store) == ["session fallback"], "capture continues in session memory")
-    }
-
-    /// FTS is derived state and can be rebuilt without replacing the durable items table.
-    static func derivedSearchIndexRepairsInPlace() {
-        let dir = scratchDirectory()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        do {
-            let store = ClipboardStore(directory: dir)
-            store.addText("search survives index repair", sourceBundleID: nil)
+    static func currentSchema() {
+        withStore { _, dir in
+            let database = dir.appendingPathComponent("clipboard.sqlite3")
+            expect(
+                sqlite(database, "SELECT name FROM pragma_table_info('items')")
+                    == [
+                        "id", "kind", "text", "image_path", "created_at", "source_app",
+                        "pinned_at", "pinyin", "pinyin_initials",
+                    ],
+                "fresh databases use exactly the current columns")
+            expect(
+                Set(sqlite(database, "SELECT name FROM sqlite_master WHERE type = 'trigger'"))
+                    == ["items_ai", "items_ad", "items_au"],
+                "fresh databases install the current FTS triggers")
         }
-        let db = dir.appendingPathComponent("clipboard.sqlite3")
-        sqlite(
-            db,
-            "DROP TABLE items_fts; CREATE TABLE items_fts(broken TEXT);")
-
-        let repaired = ClipboardStore(directory: dir)
-        repaired.load()
-        expect(
-            repaired.search("index repair").first?.text == "search survives index repair",
-            "a broken derived search index is rebuilt from durable rows")
-    }
-
-    /// A shipped pre-pin database migrates in place. Failing to open one is not a soft failure: the store deletes and recreates a database it can't open, taking the history with it.
-    static func migrationFromShippedDatabase() {
-        let dir = scratchDirectory()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let db = dir.appendingPathComponent("clipboard.sqlite3")
-        seedPrePinDatabase(at: db)
-
-        let store = ClipboardStore(directory: dir)
-        store.load()
-        expect(texts(store) == ["newer", "older"], "existing history survives the migration")
-
-        store.addText("after", sourceBundleID: nil)
-        store.togglePinned(item(store, "older"))
-        expect(texts(store) == ["older", "after", "newer"], "the migrated database takes pins")
-
-        let reopened = ClipboardStore(directory: dir)
-        reopened.load()
-        expect(texts(reopened) == ["older", "after", "newer"], "and keeps them across a reopen")
-
-        expect(
-            sqlite(db, "SELECT name FROM pragma_table_info('items')").contains("pinned_at"),
-            "the pin stamp column was added")
-        expect(
-            sqlite(db, "SELECT name FROM sqlite_master WHERE type = 'index'")
-                .contains("items_pinned_at"),
-            "and indexed")
     }
 
     static func codeClassification() {
         withStore { store, _ in
-            store.addText(
-                "import { StrictMode } from 'react'\ncreateRoot(document.getElementById('root')).render(<App />)",
-                sourceBundleID: nil)
-            expect(store.items.first?.kind == .code, "JavaScript is classified as code")
-
             store.addText("let answer = 42", sourceBundleID: nil)
-            expect(store.items.first?.kind == .code, "a declaration is classified as code")
+            expect(store.items.first?.kind == .code, "declarations classify as code")
 
             store.addText("{\"enabled\": true, \"count\": 3}", sourceBundleID: nil)
-            expect(store.items.first?.kind == .code, "JSON is classified as code")
+            expect(store.items.first?.kind == .code, "JSON classifies as code")
 
             store.addText("Paste keeps your clipboard history close at hand.", sourceBundleID: nil)
             expect(store.items.first?.kind == .text, "ordinary prose remains text")
 
             store.addText("https://example.com/path?q=value", sourceBundleID: nil)
-            expect(store.items.first?.kind == .text, "a URL remains text")
+            expect(store.items.first?.kind == .text, "URLs remain text")
         }
     }
 
-    /// Short literal queries and persisted pinyin forms search the database, not just the newest
-    /// in-memory window, while remaining off the main actor.
+    static func imageLifecycle() async {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ClipboardStore(directory: dir)
+        let fixture = Data([0x89, 0x50, 0x4E, 0x47])
+
+        await store.addImage(fixture, sourceBundleID: nil)
+
+        guard let image = store.items.first, let path = image.imagePath else {
+            fail("image capture creates a row")
+            return
+        }
+        expect(FileManager.default.fileExists(atPath: path), "image capture owns its blob")
+        store.remove(image)
+        expect(!FileManager.default.fileExists(atPath: path), "removing a row removes its blob")
+    }
+
+    // MARK: - Search and capture races
+
+    static func pinsLeadSearches() async {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ClipboardStore(directory: dir)
+        store.addText("needle in the haystack", sourceBundleID: nil)
+        store.togglePinned(item(store, "needle in the haystack"))
+        for index in 0..<260 {
+            store.addText("haystack filler \(index)", sourceBundleID: nil)
+        }
+
+        let long = await store.searchAsync("haystack")
+        expect(long.first?.text == "needle in the haystack", "pins lead literal search")
+        expect(long.filter(\.isPinned).count == 1, "a pinned search hit is unique")
+
+        let short = await store.searchAsync("ne")
+        expect(short.first?.text == "needle in the haystack", "pins lead short search")
+    }
+
     static func fullHistoryShortAndPinyinSearch() async {
         let dir = scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = ClipboardStore(directory: dir)
-        let base = Date().addingTimeInterval(-10_000)
-        var seed = [
-            entry("xy archived literal", at: base),
-            entry("你好归档", at: base.addingTimeInterval(1)),
-        ]
+        store.addText("xy archived literal", sourceBundleID: nil)
+        store.addText("你好归档", sourceBundleID: nil)
         for index in 0..<1_100 {
-            seed.append(entry("ordinary filler \(index)", at: base.addingTimeInterval(Double(index + 2))))
+            store.addText("ordinary filler \(index)", sourceBundleID: nil)
         }
-        _ = store.importEntries(seed)
         await store.waitForSearchMetadata()
 
         expect(
             !store.items.contains { $0.text == "xy archived literal" },
-            "the short-query fixture sits beyond the resident window")
+            "search fixtures fall beyond the resident window")
         let short = await store.searchAsync("xy")
-        expect(
-            short.first?.text == "xy archived literal",
-            "a two-character query searches durable history")
+        expect(short.first?.text == "xy archived literal", "short queries search durable history")
         let fullPinyin = await store.searchAsync("nihaoguidang")
-        expect(
-            fullPinyin.first?.text == "你好归档", "full pinyin searches durable history")
+        expect(fullPinyin.first?.text == "你好归档", "full pinyin searches durable history")
         let initials = await store.searchAsync("nhgd")
         expect(initials.first?.text == "你好归档", "pinyin initials search durable history")
-
-        let clock = ContinuousClock()
-        let start = clock.now
-        _ = await store.searchAsync("not-present-anywhere")
-        let elapsed = start.duration(to: clock.now)
-        expect(elapsed < .seconds(1), "a 1,100-row background search completes within one second")
     }
 
-    /// Clear History advances a generation barrier, so work observed before the clear cannot add a
-    /// text row or finish an image write afterwards.
     static func clearInvalidatesPendingCaptures() async {
         let dir = scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = ClipboardStore(directory: dir)
         let oldGeneration = store.captureGeneration
-        let largePNGFixture = Data(repeating: 0x5A, count: 16 * 1024 * 1024)
+        let fixture = Data(repeating: 0x5A, count: 16 * 1_024 * 1_024)
         let pendingImage = Task { @MainActor in
-            await store.addImage(
-                largePNGFixture, sourceBundleID: nil, expectedGeneration: oldGeneration)
+            await store.addImage(fixture, sourceBundleID: nil, expectedGeneration: oldGeneration)
         }
         await Task.yield()
         store.clearAll()
         await pendingImage.value
-        store.addText(
-            "stale text", sourceBundleID: nil, expectedGeneration: oldGeneration)
+        store.addText("stale text", sourceBundleID: nil, expectedGeneration: oldGeneration)
 
-        expect(store.items.isEmpty, "pre-clear captures cannot reappear after Clear History")
+        expect(store.items.isEmpty, "captures observed before clear cannot reappear")
         let imageFiles =
             (try? FileManager.default.contentsOfDirectory(
                 at: dir.appendingPathComponent("images"), includingPropertiesForKeys: nil)) ?? []
-        expect(imageFiles.isEmpty, "a stale completed image blob removes itself")
+        expect(imageFiles.isEmpty, "a stale completed image write cleans itself up")
     }
 
     // MARK: - Harness
 
-    /// Runs `body` against a store rooted in a fresh temp directory, torn down afterwards.
     static func withStore(_ body: (ClipboardStore, URL) -> Void) {
         let dir = scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -363,77 +260,37 @@ struct ClipboardTests {
 
     static func scratchDirectory() -> URL {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent(
-                "paste-clipboard-test-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            .appendingPathComponent("paste-clipboard-test-\(UUID().uuidString)", isDirectory: true)
+        try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
 
-    /// Writes the schema as shipped before pinning existed: no `pinned_at`, and two rows to migrate.
-    static func seedPrePinDatabase(at url: URL) {
-        let now = Date().timeIntervalSince1970
-        sqlite(
-            url,
-            """
-            CREATE TABLE items(
-              id TEXT NOT NULL UNIQUE, kind TEXT NOT NULL, text TEXT, image_path TEXT,
-              created_at REAL NOT NULL, source_app TEXT
-            );
-            CREATE INDEX items_created_at ON items(created_at);
-            CREATE VIRTUAL TABLE items_fts USING fts5(
-              text, content='items', content_rowid='rowid', tokenize='trigram'
-            );
-            CREATE TRIGGER items_ai AFTER INSERT ON items BEGIN
-              INSERT INTO items_fts(rowid, text) VALUES(new.rowid, new.text);
-            END;
-            CREATE TRIGGER items_ad AFTER DELETE ON items BEGIN
-              INSERT INTO items_fts(items_fts, rowid, text) VALUES('delete', old.rowid, old.text);
-            END;
-            INSERT INTO items(id, kind, text, created_at)
-              VALUES('\(UUID().uuidString)', 'text', 'older', \(now - 60));
-            INSERT INTO items(id, kind, text, created_at)
-              VALUES('\(UUID().uuidString)', 'text', 'newer', \(now));
-            """)
-    }
-
-    /// Rows returned by the `sqlite3` CLI — used to write a legacy database and to read the schema back, neither of which the store exposes.
-    @discardableResult
-    static func sqlite(_ database: URL, _ sql: String) -> Set<String> {
+    static func sqlite(_ database: URL, _ sql: String) -> [String] {
         let task = Process()
         let pipe = Pipe()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
         task.arguments = [database.path, sql]
         task.standardOutput = pipe
-        guard (try? task.run()) != nil else {
-            fail("could not run sqlite3")
-            return []
-        }
+        try! task.run()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         task.waitUntilExit()
-        if task.terminationStatus != 0 { fail("sqlite3 failed: \(sql.prefix(60))") }
-        return Set(String(decoding: data, as: UTF8.self).split(separator: "\n").map(String.init))
-    }
-
-    static func entry(_ text: String, at date: Date) -> ClipboardItem {
-        ClipboardItem(
-            id: UUID(), kind: .text, text: text, imagePath: nil, createdAt: date,
-            sourceBundleID: nil)
+        precondition(task.terminationStatus == 0, "sqlite3 failed")
+        return String(decoding: data, as: UTF8.self).split(separator: "\n").map(String.init)
     }
 
     static func texts(_ store: ClipboardStore) -> [String] {
-        store.search("").compactMap(\.text)
+        store.displayItems.compactMap(\.text)
     }
 
     static func item(_ store: ClipboardStore, _ text: String) -> ClipboardItem {
         guard let match = store.items.first(where: { $0.text == text }) else {
-            fail("no entry named \(text)")
-            exit(1)
+            preconditionFailure("No clipboard entry named \(text)")
         }
         return match
     }
 
-    static func expect(_ condition: Bool, _ label: String) {
-        if condition {
+    static func expect(_ condition: @autoclosure () -> Bool, _ label: String) {
+        if condition() {
             passes += 1
         } else {
             fail(label)

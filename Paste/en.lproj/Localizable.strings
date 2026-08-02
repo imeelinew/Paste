@@ -52,12 +52,10 @@
 "Quit" = "Quit";
 "Quit Paste" = "Quit Paste";
 "Quit Paste?" = "Quit Paste?";
-"Record Shortcut" = "Record Shortcut";
 "Search apps…" = "Search apps…";
 "Settings" = "Settings";
 "Shortcut" = "Shortcut";
 "Show in Finder" = "Show in Finder";
-"Show in launcher" = "Show in launcher";
 "Simplified Chinese" = "Simplified Chinese";
 "Size" = "Size";
 "Source" = "Source";
@@ -70,10 +68,8 @@
 "This Week" = "This Week";
 "Today" = "Today";
 "Type" = "Type";
-"Type shortcut…" = "Type shortcut…";
 "Type to filter entries…" = "Type to filter entries…";
 "Unpin Entry" = "Unpin Entry";
-"Used by %@" = "Used by %@";
 "Words" = "Words";
 "Yesterday" = "Yesterday";
 "1 Day" = "1 Day";

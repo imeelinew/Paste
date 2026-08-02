@@ -26,7 +26,7 @@ enum Paster {
             willDeliver: willDeliver,
             targetReady: { await activateAndWait(app) },
             write: write,
-            deliver: { postCommandV(toPid: pid, promptForPermission: false) },
+            deliver: { postCommandV(toPid: pid) },
             commit: { store.promote(item) })
     }
 
@@ -41,33 +41,6 @@ enum Paster {
         guard write(payload) else { return false }
         store.promote(item)
         return true
-    }
-
-    /// Put a plain string on the pasteboard *without* the internal marker, so it flows into
-    /// clipboard history like any other external copy.
-    @MainActor
-    static func copyPlainText(_ text: String) {
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.declareTypes([.string], owner: nil)
-        pb.setString(text, forType: .string)
-    }
-
-    /// String counterpart of the normal paste transaction.
-    @MainActor @discardableResult
-    static func pasteString(
-        _ text: String, previousApp: NSRunningApplication?, willDeliver: () -> Void
-    ) async -> Bool {
-        guard let app = previousApp, !app.isTerminated else { return false }
-        let pid = app.processIdentifier
-        return await PasteTransaction.run(
-            permission: Permissions.ensureAccessibility,
-            prepare: { Payload.text(text) },
-            willDeliver: willDeliver,
-            targetReady: { await activateAndWait(app) },
-            write: write,
-            deliver: { postCommandV(toPid: pid, promptForPermission: false) },
-            commit: {})
     }
 
     /// String counterpart of `copy(_:store:willWrite:)`.
@@ -89,7 +62,7 @@ enum Paster {
             willDeliver: {},
             targetReady: { !app.isTerminated },
             write: write,
-            deliver: { postCommandV(toPid: pid, promptForPermission: false) },
+            deliver: { postCommandV(toPid: pid) },
             commit: { store.promote(item) })
     }
 
@@ -141,14 +114,10 @@ enum Paster {
         return pb.setData(Data(), forType: ClipboardManager.internalType)
     }
 
-    /// Synthesize ⌘V for one target process. Permission can be prompted for standalone callers;
-    /// transactions pass `false` because they already checked before mutating any visible state.
-    @MainActor @discardableResult
-    static func postCommandV(toPid pid: pid_t? = nil, promptForPermission: Bool = true) -> Bool {
-        let trusted =
-            promptForPermission
-            ? Permissions.ensureAccessibility() : Permissions.isAccessibilityTrusted()
-        guard trusted else { return false }
+    /// Synthesize ⌘V for the target process after the transaction has checked permission.
+    @MainActor
+    private static func postCommandV(toPid pid: pid_t) -> Bool {
+        guard Permissions.isAccessibilityTrusted() else { return false }
         let source = CGEventSource(stateID: .combinedSessionState)
         let v = CGKeyCode(kVK_ANSI_V)
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: v, keyDown: true),
@@ -160,13 +129,8 @@ enum Paster {
         down.setIntegerValueField(.eventSourceUserData, value: pasteEventTag)
         up.setIntegerValueField(.eventSourceUserData, value: pasteEventTag)
 
-        if let pid {
-            down.postToPid(pid)
-            up.postToPid(pid)
-        } else {
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
-        }
+        down.postToPid(pid)
+        up.postToPid(pid)
         return true
     }
 }

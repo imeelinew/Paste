@@ -58,7 +58,6 @@ final class AppSettings: ObservableObject {
     private enum Key {
         static let clipboardRetention = "clipboardRetentionDays"
         static let clipboardDisabledApps = "clipboardDisabledApps"
-        static let openOnCursorScreen = "openOnCursorScreen"
         static let launchAtLogin = "launchAtLogin"
         static let switchToEnglishInputOnOpen = "switchToEnglishInputOnOpen"
         static let language = "appLanguage"
@@ -71,10 +70,6 @@ final class AppSettings: ObservableObject {
 
     @Published var clipboardDisabledApps: [String] {
         didSet { defaults.set(clipboardDisabledApps, forKey: Key.clipboardDisabledApps) }
-    }
-
-    @Published var openOnCursorScreen: Bool {
-        didSet { defaults.set(openOnCursorScreen, forKey: Key.openOnCursorScreen) }
     }
 
     @Published var launchAtLogin: Bool {
@@ -112,9 +107,6 @@ final class AppSettings: ObservableObject {
         clipboardDisabledApps =
             defaults.stringArray(forKey: Key.clipboardDisabledApps)
             ?? ["com.apple.keychainaccess", "com.apple.Passwords"]
-        openOnCursorScreen =
-            defaults.object(forKey: Key.openOnCursorScreen) == nil
-            || defaults.bool(forKey: Key.openOnCursorScreen)
         launchAtLogin = LaunchAtLogin.isEnabled
         switchToEnglishInputOnOpen = defaults.bool(forKey: Key.switchToEnglishInputOnOpen)
         language =

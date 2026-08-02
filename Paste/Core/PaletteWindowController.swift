@@ -82,7 +82,6 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     }
 
     private func targetScreen() -> NSScreen? {
-        guard core.settings.openOnCursorScreen else { return NSScreen.main }
         let mouse = NSEvent.mouseLocation
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
     }
