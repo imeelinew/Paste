@@ -19,6 +19,9 @@ struct ClipboardTests {
         pinsSurvivePruningAndTheWindow()
         pinsLeadFilteredSearches()
         persistence()
+        durableDirectoryMigration()
+        corruptDatabaseIsPreserved()
+        derivedSearchIndexRepairsInPlace()
         migrationFromShippedDatabase()
         codeClassification()
 
@@ -167,6 +170,73 @@ struct ClipboardTests {
             reopened.clearAll()
             expect(reopened.items.isEmpty, "Clear History takes pins too")
         }
+    }
+
+    /// The first durable-storage launch copies a coherent live SQLite database and image directory,
+    /// while retaining the legacy cache as a rollback source.
+    static func durableDirectoryMigration() {
+        let root = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("legacy", isDirectory: true)
+        let durable = root.appendingPathComponent("durable", isDirectory: true)
+        let manager = FileManager.default
+        try? manager.createDirectory(at: legacy, withIntermediateDirectories: true)
+
+        let liveStore = ClipboardStore(directory: legacy)
+        liveStore.addText("migrated while live", sourceBundleID: "com.example.Source")
+        let marker = legacy.appendingPathComponent("images/marker.png")
+        try? Data("image-marker".utf8).write(to: marker)
+
+        expect(
+            ClipboardStore.migrateLegacyDirectory(from: legacy, to: durable),
+            "legacy history migrates to Application Support")
+        let migrated = ClipboardStore(directory: durable)
+        migrated.load()
+        expect(
+            texts(migrated) == ["migrated while live"],
+            "the migrated SQLite snapshot contains the live history")
+        expect(
+            manager.fileExists(atPath: durable.appendingPathComponent("images/marker.png").path),
+            "owned image blobs migrate with the database")
+        expect(
+            manager.fileExists(atPath: legacy.appendingPathComponent("clipboard.sqlite3").path),
+            "the legacy database remains available as a rollback copy")
+    }
+
+    /// A database that cannot be opened is user data, not a disposable cache: preserve its bytes
+    /// and continue with session-only history.
+    static func corruptDatabaseIsPreserved() {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = dir.appendingPathComponent("clipboard.sqlite3")
+        let original = Data("not-a-sqlite-database".utf8)
+        try? original.write(to: db)
+
+        let store = ClipboardStore(directory: dir)
+        store.addText("session fallback", sourceBundleID: nil)
+        expect(store.persistenceError != nil, "a persistence failure is recorded")
+        expect((try? Data(contentsOf: db)) == original, "a corrupt database is never deleted")
+        expect(texts(store) == ["session fallback"], "capture continues in session memory")
+    }
+
+    /// FTS is derived state and can be rebuilt without replacing the durable items table.
+    static func derivedSearchIndexRepairsInPlace() {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        do {
+            let store = ClipboardStore(directory: dir)
+            store.addText("search survives index repair", sourceBundleID: nil)
+        }
+        let db = dir.appendingPathComponent("clipboard.sqlite3")
+        sqlite(
+            db,
+            "DROP TABLE items_fts; CREATE TABLE items_fts(broken TEXT);")
+
+        let repaired = ClipboardStore(directory: dir)
+        repaired.load()
+        expect(
+            repaired.search("index repair").first?.text == "search survives index repair",
+            "a broken derived search index is rebuilt from durable rows")
     }
 
     /// A shipped pre-pin database migrates in place. Failing to open one is not a soft failure: the store deletes and recreates a database it can't open, taking the history with it.
