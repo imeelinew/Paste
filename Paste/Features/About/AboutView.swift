@@ -2,9 +2,44 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
+/// Reference-counted ownership of the app's regular activation policy. Settings and About may
+/// overlap; closing either one can no longer hide the Dock icon while the other still needs it or
+/// leave the icon behind after the final auxiliary window closes.
+@MainActor
+final class ActivationPolicyCoordinator {
+    private var leases = Set<String>()
+    private let apply: (Bool) -> Void
+
+    init(apply: @escaping (Bool) -> Void = { regular in
+        NSApp.setActivationPolicy(regular ? .regular : .accessory)
+    }) {
+        self.apply = apply
+    }
+
+    func acquire(_ lease: String) {
+        leases.insert(lease)
+        apply(true)
+    }
+
+    func release(_ lease: String) {
+        leases.remove(lease)
+        apply(!leases.isEmpty)
+    }
+
+    func reset() {
+        leases.removeAll()
+        apply(false)
+    }
+}
+
 @MainActor
 final class AuxWindowController: NSObject, NSWindowDelegate {
     private var windows: [String: NSWindow] = [:]
+    private let activationPolicy: ActivationPolicyCoordinator
+
+    init(activationPolicy: ActivationPolicyCoordinator) {
+        self.activationPolicy = activationPolicy
+    }
 
     @discardableResult
     func show<Content: View>(
@@ -56,7 +91,7 @@ final class AuxWindowController: NSObject, NSWindowDelegate {
         }
 
         window.title = title
-        NSApp.setActivationPolicy(.regular)
+        activationPolicy.acquire("aux-\(id)")
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async { window.makeKeyAndOrderFront(nil) }
@@ -65,9 +100,11 @@ final class AuxWindowController: NSObject, NSWindowDelegate {
 
     @discardableResult
     func focusExisting() -> Bool {
-        guard let window = windows.values.first(where: { $0.isVisible }) ?? windows.values.first
+        guard
+            let entry = windows.first(where: { $0.value.isVisible }) ?? windows.first
         else { return false }
-        NSApp.setActivationPolicy(.regular)
+        let (id, window) = entry
+        activationPolicy.acquire("aux-\(id)")
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         return true
@@ -78,13 +115,13 @@ final class AuxWindowController: NSObject, NSWindowDelegate {
             let id = windows.first(where: { $0.value === window })?.key
         else { return }
         windows.removeValue(forKey: id)
-        if windows.isEmpty { NSApp.setActivationPolicy(.accessory) }
+        activationPolicy.release("aux-\(id)")
     }
 
     private func hide(_ window: NSWindow) {
         window.orderOut(nil)
-        if windows.values.allSatisfy({ !$0.isVisible }) {
-            NSApp.setActivationPolicy(.accessory)
+        if let id = windows.first(where: { $0.value === window })?.key {
+            activationPolicy.release("aux-\(id)")
         }
     }
 }

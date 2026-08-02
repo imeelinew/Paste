@@ -53,6 +53,7 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 @MainActor
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
+    private var reconcilingLaunchAtLogin = false
 
     private enum Key {
         static let clipboardRetention = "clipboardRetentionDays"
@@ -78,8 +79,13 @@ final class AppSettings: ObservableObject {
 
     @Published var launchAtLogin: Bool {
         didSet {
-            defaults.set(launchAtLogin, forKey: Key.launchAtLogin)
-            LaunchAtLogin.set(launchAtLogin)
+            guard !reconcilingLaunchAtLogin else { return }
+            let actual = LaunchAtLogin.set(launchAtLogin)
+            defaults.set(actual, forKey: Key.launchAtLogin)
+            guard actual != launchAtLogin else { return }
+            reconcilingLaunchAtLogin = true
+            launchAtLogin = actual
+            reconcilingLaunchAtLogin = false
         }
     }
 

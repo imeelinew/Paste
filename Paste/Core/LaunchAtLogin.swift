@@ -5,7 +5,8 @@ enum LaunchAtLogin {
         SMAppService.mainApp.status == .enabled
     }
 
-    static func set(_ enabled: Bool) {
+    @discardableResult
+    static func set(_ enabled: Bool) -> Bool {
         do {
             if enabled {
                 if SMAppService.mainApp.status != .enabled { try SMAppService.mainApp.register() }
@@ -15,5 +16,6 @@ enum LaunchAtLogin {
         } catch {
             NSLog("Paste: launch-at-login change failed: \(error.localizedDescription)")
         }
+        return isEnabled
     }
 }

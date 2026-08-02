@@ -14,7 +14,9 @@ final class AppCore: ObservableObject {
     let systemClipboardHistory = SystemClipboardHistory()
 
     private lazy var windowController = PaletteWindowController(core: self)
-    private let auxWindows = AuxWindowController()
+    private let activationPolicy = ActivationPolicyCoordinator()
+    private lazy var auxWindows = AuxWindowController(activationPolicy: activationPolicy)
+    private var aboutCloseToken: NotificationToken?
     private var transferTask: Task<Void, Never>?
     private var transferGeneration = UUID()
     private var selectionTask: Task<Void, Never>?
@@ -24,7 +26,7 @@ final class AppCore: ObservableObject {
     }
 
     func start() {
-        NSApp.setActivationPolicy(.accessory)
+        activationPolicy.reset()
         settings.appearance.apply()
 
         clipboardStore.maxAge = settings.clipboardRetention.maxAge
@@ -79,9 +81,25 @@ final class AppCore: ObservableObject {
     }
 
     func showAbout() {
-        NSApp.setActivationPolicy(.regular)
+        activationPolicy.acquire("about")
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: [:])
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard let window = NSApp.keyWindow else {
+                self.activationPolicy.release("about")
+                return
+            }
+            let token = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.aboutCloseToken = nil
+                    self?.activationPolicy.release("about")
+                }
+            }
+            self.aboutCloseToken = NotificationToken(token, center: .default)
+        }
     }
 
     func requestQuit() {
