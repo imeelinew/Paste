@@ -5,26 +5,46 @@ enum Paster {
     /// Stamped on Paste's own synthetic keystrokes so listeners can ignore them.
     static let pasteEventTag: Int64 = 0x50415354  // "PAST"
 
-    /// Write the item onto the pasteboard and paste it into `previousApp` via a synthetic ⌘V, activating that app so the keystroke lands there. Returns whether content was written (and thus promoted).
+    private enum Payload: Sendable {
+        case text(String)
+        case image(Data)
+    }
+
+    /// Prepare, target, write, and deliver as one ordered transaction. The caller hides the palette
+    /// only after permission and payload preparation succeed; the item becomes recent only after a
+    /// key event has been posted directly to the confirmed target process.
     @MainActor @discardableResult
     static func paste(
-        _ item: ClipboardItem, store: ClipboardStore, previousApp: NSRunningApplication?
-    ) -> Bool {
-        guard write(item, store: store) else { return false }
-        previousApp?.activate()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            postCommandV()
-        }
+        _ item: ClipboardItem, store: ClipboardStore, previousApp: NSRunningApplication?,
+        willDeliver: () -> Void
+    ) async -> Bool {
+        guard let app = previousApp, !app.isTerminated else { return false }
+        let pid = app.processIdentifier
+        return await PasteTransaction.run(
+            permission: Permissions.ensureAccessibility,
+            prepare: { await prepare(item, store: store) },
+            willDeliver: willDeliver,
+            targetReady: { await activateAndWait(app) },
+            write: write,
+            deliver: { postCommandV(toPid: pid, promptForPermission: false) },
+            commit: { store.promote(item) })
+    }
+
+    /// Put the item on the pasteboard without pasting. Image bytes are loaded before the caller
+    /// hides the palette, so a missing or large file never creates a blank-looking action.
+    @MainActor @discardableResult
+    static func copy(
+        _ item: ClipboardItem, store: ClipboardStore, willWrite: () -> Void
+    ) async -> Bool {
+        guard let payload = await prepare(item, store: store), !Task.isCancelled else { return false }
+        willWrite()
+        guard write(payload) else { return false }
+        store.promote(item)
         return true
     }
 
-    /// Put the item on the pasteboard without pasting; the internal marker keeps our poller from re-capturing it.
-    @MainActor @discardableResult
-    static func copy(_ item: ClipboardItem, store: ClipboardStore) -> Bool {
-        write(item, store: store)
-    }
-
-    /// Put a plain string on the pasteboard *without* the internal marker, so a copied calculator answer flows into clipboard history like any other copy.
+    /// Put a plain string on the pasteboard *without* the internal marker, so it flows into
+    /// clipboard history like any other external copy.
     @MainActor
     static func copyPlainText(_ text: String) {
         let pb = NSPasteboard.general
@@ -33,88 +53,107 @@ enum Paster {
         pb.setString(text, forType: .string)
     }
 
-    /// String counterpart of `paste(_:store:previousApp:)` — marker-stamped so pasted text doesn't re-enter clipboard history.
-    @MainActor
-    static func pasteString(_ text: String, previousApp: NSRunningApplication?) {
-        writeString(text)
-        previousApp?.activate()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            postCommandV()
-        }
+    /// String counterpart of the normal paste transaction.
+    @MainActor @discardableResult
+    static func pasteString(
+        _ text: String, previousApp: NSRunningApplication?, willDeliver: () -> Void
+    ) async -> Bool {
+        guard let app = previousApp, !app.isTerminated else { return false }
+        let pid = app.processIdentifier
+        return await PasteTransaction.run(
+            permission: Permissions.ensureAccessibility,
+            prepare: { Payload.text(text) },
+            willDeliver: willDeliver,
+            targetReady: { await activateAndWait(app) },
+            write: write,
+            deliver: { postCommandV(toPid: pid, promptForPermission: false) },
+            commit: {})
     }
 
-    /// String counterpart of `copy(_:store:)`.
+    /// String counterpart of `copy(_:store:willWrite:)`.
     @MainActor
     static func copyString(_ text: String) {
-        writeString(text)
+        _ = write(.text(text))
     }
 
-    /// String counterpart of `pasteInPlace(_:store:into:)` — ⌘V delivered to the target's process, palette stays frontmost.
-    @MainActor
-    static func pasteStringInPlace(_ text: String, into app: NSRunningApplication?) {
-        writeString(text)
-        guard let pid = app?.processIdentifier else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            postCommandV(toPid: pid)
-        }
-    }
-
-    @MainActor
-    private static func writeString(_ text: String) {
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.declareTypes([.string, ClipboardManager.internalType], owner: nil)
-        pb.setString(text, forType: .string)
-        pb.setData(Data(), forType: ClipboardManager.internalType)
-    }
-
-    /// Paste into `app` *without* activating it (⌘V delivered straight to its process), leaving Tinycast frontmost so the palette stays open. Returns whether content was written (and thus promoted).
+    /// Paste into `app` without activating it, keeping the palette frontmost.
     @MainActor @discardableResult
     static func pasteInPlace(
         _ item: ClipboardItem, store: ClipboardStore, into app: NSRunningApplication?
-    ) -> Bool {
-        guard write(item, store: store) else { return false }
-        if let pid = app?.processIdentifier {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                postCommandV(toPid: pid)
-            }
-        }
-        return true
+    ) async -> Bool {
+        guard let app, !app.isTerminated else { return false }
+        let pid = app.processIdentifier
+        return await PasteTransaction.run(
+            permission: Permissions.ensureAccessibility,
+            prepare: { await prepare(item, store: store) },
+            willDeliver: {},
+            targetReady: { !app.isTerminated },
+            write: write,
+            deliver: { postCommandV(toPid: pid, promptForPermission: false) },
+            commit: { store.promote(item) })
     }
 
-    /// Returns whether content was actually written; if the item's text/image is gone, the pasteboard is left untouched (never cleared to empty) and the caller skips the paste.
-    @MainActor @discardableResult
-    private static func write(_ item: ClipboardItem, store: ClipboardStore) -> Bool {
-        let pb = NSPasteboard.general
+    @MainActor
+    private static func prepare(_ item: ClipboardItem, store: ClipboardStore) async -> Payload? {
         switch item.kind {
         case .text, .code:
-            guard let text = item.text else { return false }
-            pb.clearContents()
-            pb.declareTypes([.string, ClipboardManager.internalType], owner: nil)
-            pb.setString(text, forType: .string)
+            return item.text.map(Payload.text)
         case .image:
-            guard let url = store.imageURL(for: item), let data = try? Data(contentsOf: url) else {
-                return false
-            }
-            pb.clearContents()
-            pb.declareTypes([.png, ClipboardManager.internalType], owner: nil)
-            pb.setData(data, forType: .png)
+            guard let url = store.imageURL(for: item) else { return nil }
+            return await Task.detached(priority: .userInitiated) {
+                guard !Task.isCancelled,
+                    let data = try? Data(contentsOf: url, options: [.mappedIfSafe])
+                else { return nil }
+                return Payload.image(data)
+            }.value
         }
-        pb.setData(Data(), forType: ClipboardManager.internalType)
-        // Whatever lands back on the pasteboard becomes the most recent history entry (Raycast-style); the poller skips marked writes, so this is the only promotion point.
-        store.promote(item)
+    }
+
+    /// Wait for the target's actual activation state instead of guessing with a fixed delay.
+    @MainActor
+    private static func activateAndWait(_ app: NSRunningApplication) async -> Bool {
+        guard !app.isTerminated else { return false }
+        if app.isActive { return true }
+        guard app.activate() else { return false }
+
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .milliseconds(800))
+        while !app.isActive {
+            guard !app.isTerminated, clock.now < deadline, !Task.isCancelled else { return false }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         return true
     }
 
-    /// Synthesize ⌘V — delivered to `pid` alone when given, otherwise through the system tap to whatever is frontmost. Shared with `SnippetTextInjector`, which pastes long snippet text the same way.
-    @MainActor
-    static func postCommandV(toPid pid: pid_t? = nil) {
-        guard Permissions.ensureAccessibility() else { return }
-        let source = CGEventSource(stateID: .combinedSessionState)
+    /// The pasteboard is mutated only after payload and target preflight have succeeded.
+    @MainActor @discardableResult
+    private static func write(_ payload: Payload) -> Bool {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        switch payload {
+        case .text(let text):
+            pb.declareTypes([.string, ClipboardManager.internalType], owner: nil)
+            guard pb.setString(text, forType: .string) else { return false }
+        case .image(let data):
+            pb.declareTypes([.png, ClipboardManager.internalType], owner: nil)
+            guard pb.setData(data, forType: .png) else { return false }
+        }
+        return pb.setData(Data(), forType: ClipboardManager.internalType)
+    }
 
+    /// Synthesize ⌘V for one target process. Permission can be prompted for standalone callers;
+    /// transactions pass `false` because they already checked before mutating any visible state.
+    @MainActor @discardableResult
+    static func postCommandV(toPid pid: pid_t? = nil, promptForPermission: Bool = true) -> Bool {
+        let trusted =
+            promptForPermission
+            ? Permissions.ensureAccessibility() : Permissions.isAccessibilityTrusted()
+        guard trusted else { return false }
+        let source = CGEventSource(stateID: .combinedSessionState)
         let v = CGKeyCode(kVK_ANSI_V)
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: v, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: v, keyDown: false) else { return }
+            let up = CGEvent(keyboardEventSource: source, virtualKey: v, keyDown: false)
+        else { return false }
 
         down.flags = .maskCommand
         up.flags = .maskCommand
@@ -128,5 +167,6 @@ enum Paster {
             down.post(tap: .cghidEventTap)
             up.post(tap: .cghidEventTap)
         }
+        return true
     }
 }

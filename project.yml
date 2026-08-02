@@ -17,12 +17,19 @@ settings:
     ENABLE_HARDENED_RUNTIME: NO
     SWIFT_STRICT_CONCURRENCY: complete
 
+packages:
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: 2.0.0
+
 targets:
   Paste:
     type: application
     platform: macOS
     sources:
       - path: Paste
+    dependencies:
+      - package: KeyboardShortcuts
     settings:
       base:
         PRODUCT_NAME: Paste

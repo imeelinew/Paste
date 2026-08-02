@@ -44,14 +44,9 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         if restoreFocus { previousApp?.activate() }
     }
 
-    @discardableResult
-    func pasteKeepingWindowOpen(_ item: ClipboardItem, store: ClipboardStore) -> Bool {
-        Paster.pasteInPlace(item, store: store, into: previousApp)
-    }
-
     func windowDidResignKey(_ notification: Notification) {
         guard isVisible else { return }
-        hide(restoreFocus: false)
+        core.hidePalette(restoreFocus: false)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {

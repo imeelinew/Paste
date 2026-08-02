@@ -15,6 +15,8 @@ final class AppCore: ObservableObject {
 
     private lazy var windowController = PaletteWindowController(core: self)
     private let auxWindows = AuxWindowController()
+    private var transferTask: Task<Void, Never>?
+    private var transferGeneration = UUID()
 
     private init() {
         clipboardManager = ClipboardManager(store: clipboardStore, settings: settings)
@@ -46,7 +48,12 @@ final class AppCore: ObservableObject {
         windowController.show()
     }
 
-    func hidePalette(restoreFocus: Bool = true) {
+    func hidePalette(restoreFocus: Bool = true, cancelTransfer: Bool = true) {
+        if cancelTransfer {
+            transferTask?.cancel()
+            transferTask = nil
+            transferGeneration = UUID()
+        }
         windowController.hide(restoreFocus: restoreFocus)
     }
 
@@ -96,22 +103,57 @@ final class AppCore: ObservableObject {
 
     func paste(_ item: ClipboardItem) {
         let previous = windowController.previousApp
-        hidePalette(restoreFocus: false)
-        if Paster.paste(item, store: clipboardStore, previousApp: previous) {
-            select(item)
+        startTransfer { [weak self] generation in
+            guard let self else { return }
+            var hidden = false
+            let succeeded = await Paster.paste(
+                item, store: self.clipboardStore, previousApp: previous
+            ) {
+                hidden = true
+                self.hidePalette(restoreFocus: false, cancelTransfer: false)
+            }
+            guard !Task.isCancelled else {
+                if hidden { self.windowController.show() }
+                return
+            }
+            if succeeded {
+                self.select(item)
+            } else if hidden {
+                self.windowController.show()
+            }
+            self.finishTransfer(generation)
         }
     }
 
     func pasteKeepingWindowOpen(_ item: ClipboardItem) {
-        if windowController.pasteKeepingWindowOpen(item, store: clipboardStore) {
-            select(item)
+        let previous = windowController.previousApp
+        startTransfer { [weak self] generation in
+            guard let self else { return }
+            if await Paster.pasteInPlace(item, store: self.clipboardStore, into: previous) {
+                self.select(item)
+            }
+            self.finishTransfer(generation)
         }
     }
 
     func copyToClipboard(_ item: ClipboardItem) {
-        hidePalette(restoreFocus: false)
-        if Paster.copy(item, store: clipboardStore) {
-            select(item)
+        startTransfer { [weak self] generation in
+            guard let self else { return }
+            var hidden = false
+            let succeeded = await Paster.copy(item, store: self.clipboardStore) {
+                hidden = true
+                self.hidePalette(restoreFocus: false, cancelTransfer: false)
+            }
+            guard !Task.isCancelled else {
+                if hidden { self.windowController.show() }
+                return
+            }
+            if succeeded {
+                self.select(item)
+            } else if hidden {
+                self.windowController.show()
+            }
+            self.finishTransfer(generation)
         }
     }
 
@@ -129,5 +171,19 @@ final class AppCore: ObservableObject {
 
     private func select(_ item: ClipboardItem) {
         palette.selection = clipboardStore.rowIndex(of: item, in: palette.query) ?? 0
+    }
+
+    private func startTransfer(
+        _ operation: @escaping @MainActor (_ generation: UUID) async -> Void
+    ) {
+        transferTask?.cancel()
+        let generation = UUID()
+        transferGeneration = generation
+        transferTask = Task { await operation(generation) }
+    }
+
+    private func finishTransfer(_ generation: UUID) {
+        guard transferGeneration == generation else { return }
+        transferTask = nil
     }
 }
