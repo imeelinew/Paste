@@ -169,18 +169,7 @@ enum ClipboardActionsMenu {
             PopoverMenuItem(title: "Delete Entry", isDestructive: true) {
                 store.remove(item)
             })
-        return PopoverMenuContent(header: headerText(item), items: items)
-    }
-
-    private static func headerText(_ item: ClipboardItem) -> String {
-        switch item.kind {
-        case .text, .code:
-            // Collapse whitespace/newlines to single spaces so a multi-line copy stays a clean one-line title.
-            let oneLine = (item.text ?? "").split(whereSeparator: \.isWhitespace).joined(
-                separator: " ")
-            return String(oneLine.prefix(40))
-        case .image: return "Image"
-        }
+        return PopoverMenuContent(items: items)
     }
 }
 
