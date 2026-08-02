@@ -25,6 +25,7 @@ struct ClipboardTests {
         migrationFromShippedDatabase()
         codeClassification()
         await fullHistoryShortAndPinyinSearch()
+        await clearInvalidatesPendingCaptures()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -324,6 +325,31 @@ struct ClipboardTests {
         _ = await store.searchAsync("not-present-anywhere")
         let elapsed = start.duration(to: clock.now)
         expect(elapsed < .seconds(1), "a 1,100-row background search completes within one second")
+    }
+
+    /// Clear History advances a generation barrier, so work observed before the clear cannot add a
+    /// text row or finish an image write afterwards.
+    static func clearInvalidatesPendingCaptures() async {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ClipboardStore(directory: dir)
+        let oldGeneration = store.captureGeneration
+        let largePNGFixture = Data(repeating: 0x5A, count: 16 * 1024 * 1024)
+        let pendingImage = Task { @MainActor in
+            await store.addImage(
+                largePNGFixture, sourceBundleID: nil, expectedGeneration: oldGeneration)
+        }
+        await Task.yield()
+        store.clearAll()
+        await pendingImage.value
+        store.addText(
+            "stale text", sourceBundleID: nil, expectedGeneration: oldGeneration)
+
+        expect(store.items.isEmpty, "pre-clear captures cannot reappear after Clear History")
+        let imageFiles =
+            (try? FileManager.default.contentsOfDirectory(
+                at: dir.appendingPathComponent("images"), includingPropertiesForKeys: nil)) ?? []
+        expect(imageFiles.isEmpty, "a stale completed image blob removes itself")
     }
 
     // MARK: - Harness

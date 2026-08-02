@@ -51,6 +51,7 @@
 		CA25BB59A2A23511A7C30411 /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B36D4D64CA6A5B061F7727 /* SectionHeader.swift */; };
 		CE1562B33E657CF448D04DDC /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 40E3D8D2C77ADCC20CD390CC /* KeyboardShortcuts */; };
 		DE8C16A33B168FD7F3AC2C5B /* SystemClipboardHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B34CA7CF3889D8A18413F77 /* SystemClipboardHistory.swift */; };
+		DF868B19AE7D7BF3751879EF /* ClipboardCapturePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FB3EB883C67D7DA6D8FEAF /* ClipboardCapturePipeline.swift */; };
 		E2C25F35DF0B1F8C9960CD38 /* ClipboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCFFE5C6B9CC83C972FD0B0D /* ClipboardStore.swift */; };
 		E8EB228A4D377029F8905182 /* paste.icon in Resources */ = {isa = PBXBuildFile; fileRef = 17E41EBE2A05B16FBF699B0A /* paste.icon */; };
 		EE9F57DEDBD7C12EA72E7D9E /* InputSourceSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22A18A2E99B807E7716432E /* InputSourceSwitcher.swift */; };
@@ -91,6 +92,7 @@
 		9E2953B3533B91377E5CD791 /* SearchHighlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchHighlight.swift; sourceTree = "<group>"; };
 		A08EBA3DF42E6A3D8518C909 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		A490C2CECA4C191B712DB9F2 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
+		A5FB3EB883C67D7DA6D8FEAF /* ClipboardCapturePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardCapturePipeline.swift; sourceTree = "<group>"; };
 		AF2FD6AB5017BBFF5EE420A4 /* ImageThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageThumbnail.swift; sourceTree = "<group>"; };
 		AF842E31977F73362C1D428B /* PermissionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsSettingsView.swift; sourceTree = "<group>"; };
 		B42062A9B167BB7DCD3E7129 /* ClipboardSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardSettingsView.swift; sourceTree = "<group>"; };
@@ -139,6 +141,7 @@
 				0C1D141FBB730290AF3CA00C /* AppCore.swift */,
 				67393F83039423D6A2A4C9B5 /* AppSettings.swift */,
 				3C65576A76FE8B5AF3CCAA61 /* Bundle+AppName.swift */,
+				A5FB3EB883C67D7DA6D8FEAF /* ClipboardCapturePipeline.swift */,
 				A08EBA3DF42E6A3D8518C909 /* ClipboardManager.swift */,
 				FCFFE5C6B9CC83C972FD0B0D /* ClipboardStore.swift */,
 				C6853210949502E0C47D69B9 /* EdgeDissolve.swift */,
@@ -358,6 +361,7 @@
 				825C5EC91C46C384B7EC3312 /* AppKitSettingsSidebar.swift in Sources */,
 				39845C7BA7BF8871C80EE1BE /* AppSettings.swift in Sources */,
 				B445B6603CD75CE7F2DAB50E /* Bundle+AppName.swift in Sources */,
+				DF868B19AE7D7BF3751879EF /* ClipboardCapturePipeline.swift in Sources */,
 				A9BFCCAECCC68D9444932887 /* ClipboardManager.swift in Sources */,
 				739ADE5F09C7B1A660B5BE9F /* ClipboardSettingsView.swift in Sources */,
 				E2C25F35DF0B1F8C9960CD38 /* ClipboardStore.swift in Sources */,

@@ -250,6 +250,7 @@ final class ClipboardStore: ObservableObject {
         }
     }
     @Published private(set) var revision: UInt64 = 0
+    private(set) var captureGeneration: UInt64 = 0
     var maxAge: TimeInterval = ClipboardRetention.threeMonths.maxAge
 
     /// One-entry memo so repeated renders (e.g. arrow-key nav) for the same query reuse the FTS result instead of re-querying SQLite every frame; invalidated whenever `items` changes.
@@ -478,19 +479,30 @@ final class ClipboardStore: ObservableObject {
         return sqlite3_step(stmt) == SQLITE_ROW ? sqlite3_column_int64(stmt, 0) : 0
     }
 
-    func addText(_ text: String, sourceBundleID: String?) {
+    func addText(
+        _ text: String, sourceBundleID: String?, expectedGeneration: UInt64? = nil
+    ) {
+        if let expectedGeneration, expectedGeneration != captureGeneration { return }
         if items.first?.kind != .image, items.first?.text == text { return }
         insert(ClipboardItem(text: text, sourceBundleID: sourceBundleID))
     }
 
-    func addImage(_ data: Data, sourceBundleID: String?) {
+    func addImage(
+        _ data: Data, sourceBundleID: String?, expectedGeneration: UInt64? = nil
+    ) async {
+        let generation = expectedGeneration ?? captureGeneration
+        guard generation == captureGeneration else { return }
         let url = imagesDir.appendingPathComponent(UUID().uuidString + ".png")
         let item = ClipboardItem(imagePath: url.path, sourceBundleID: sourceBundleID)
-        // The blob write is multi-MB disk I/O; only the row insert (a failed write inserts nothing) returns to the main actor.
-        Task.detached(priority: .utility) { [weak self] in
-            guard (try? data.write(to: url, options: .atomic)) != nil else { return }
-            await self?.insert(item)
+        let wrote = await Task.detached(priority: .utility) {
+            (try? data.write(to: url, options: .atomic)) != nil
+        }.value
+        guard wrote else { return }
+        guard generation == captureGeneration else {
+            try? FileManager.default.removeItem(at: url)
+            return
         }
+        insert(item)
     }
 
     /// Bulk-insert history from an external source (e.g. a Raycast import). Entries carry their original `createdAt` and image *paths* are stored as external references (zero-copy) — the store never owns or prunes files outside `imagesDir`. Dedups within the batch and against existing rows; imported items older than `maxAge` are pruned on reload.
@@ -550,6 +562,7 @@ final class ClipboardStore: ObservableObject {
     }
 
     func clearAll() {
+        captureGeneration &+= 1
         if db != nil, sqlite3_exec(db, "DELETE FROM items", nil, nil, nil) != SQLITE_OK {
             recordPersistenceError("Could not clear clipboard history: \(databaseMessage)")
             return

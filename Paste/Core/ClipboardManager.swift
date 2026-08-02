@@ -2,88 +2,122 @@ import AppKit
 
 @MainActor
 final class ClipboardManager {
-    /// Marker we attach to the pasteboard when *we* write to it, so polling ignores our own pastes.
+    /// Marker attached to Paste's own writes so monitoring ignores them.
     static let internalType = NSPasteboard.PasteboardType("com.eli.Paste.internal")
 
-    /// Longest text we capture into history; bigger copies are skipped outright (truncating would silently drop the tail on paste).
-    static let maxTextLength = 32_000
-
-    /// Pasteboard markers password managers, browsers, and the OS put on secret copies (passwords, OTPs, autofill) — never recorded, regardless of source app.
+    /// Pasteboard markers password managers, browsers, and the OS put on secret copies.
     static let sensitiveTypes: Set<NSPasteboard.PasteboardType> = [
         .init("org.nspasteboard.ConcealedType"),
         .init("org.nspasteboard.TransientType"),
         .init("com.apple.is-sensitive"),
     ]
 
+    private static let pollInterval: TimeInterval = 0.1
+
     private let store: ClipboardStore
     private let settings: AppSettings
+    private let pipeline = ClipboardCapturePipeline()
     private var timer: Timer?
-    private var lastChangeCount = 0
+    private var lastObservedChangeCount = 0
+    private var captureTail: Task<Void, Never>?
 
     init(store: ClipboardStore, settings: AppSettings) {
         self.store = store
         self.settings = settings
     }
 
-    // Isolated so teardown can touch the main-actor timer; AppCore only releases the manager on the main actor, so no hop. The poll block is `[weak self]`, so this isn't fixing a leak — it stops a stray timer firing if the manager is ever recreated.
     isolated deinit {
         timer?.invalidate()
+        captureTail?.cancel()
     }
 
     func start() {
-        lastChangeCount = NSPasteboard.general.changeCount
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+        lastObservedChangeCount = NSPasteboard.general.changeCount
+        let timer = Timer(timeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
 
-    // Drains the pending change first: the user's real copy has to reach history before our temporary text overwrites the pasteboard.
-    func prepareForTinycastPasteboardMutation() {
-        poll()
-    }
-
-    // The guard is load-bearing: a foreign write that landed after ours leaves the count mismatched, and skipping the assignment keeps that write capturable by the next poll.
-    func synchronizeAfterTinycastPasteboardMutation(changeCount: Int) {
-        guard NSPasteboard.general.changeCount == changeCount else { return }
-        lastChangeCount = changeCount
-    }
-
+    /// Observe quickly, snapshot off-main, then process captures in observed order. Reading the
+    /// source and exclusion list at change detection narrows the old 0.5-second attribution race.
     private func poll() {
-        let pb = NSPasteboard.general
-        guard pb.changeCount != lastChangeCount else { return }
-        lastChangeCount = pb.changeCount
+        let pasteboard = NSPasteboard.general
+        let changeCount = pasteboard.changeCount
+        guard changeCount != lastObservedChangeCount else { return }
+        lastObservedChangeCount = changeCount
 
-        if pb.types?.contains(Self.internalType) == true { return }
+        let types = pasteboard.types ?? []
+        if types.contains(Self.internalType) { return }
+        if !Set(types).isDisjoint(with: Self.sensitiveTypes) { return }
 
-        // Never record secrets: skip copies tagged sensitive by password managers, browsers, or the OS.
-        if let types = pb.types, !Set(types).isDisjoint(with: Self.sensitiveTypes) { return }
-
-        // The pasteboard doesn't carry its source, so attribute the change to the frontmost app (the copy happened within the last 0.5s poll).
         let sourceBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         if let sourceBundleID, settings.clipboardDisabledApps.contains(sourceBundleID) { return }
 
-        if let text = pb.string(forType: .string),
-            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            guard text.count <= Self.maxTextLength else { return }
-            store.addText(text, sourceBundleID: sourceBundleID)
-            return
+        let imageType: NSPasteboard.PasteboardType?
+        if types.contains(.png) {
+            imageType = .png
+        } else if types.contains(.tiff) {
+            imageType = .tiff
+        } else {
+            imageType = nil
+        }
+        let generation = store.captureGeneration
+        let previous = captureTail
+        let readTask = Task.detached(priority: .utility) {
+            Self.readSnapshot(
+                changeCount: changeCount, imageType: imageType,
+                sourceBundleID: sourceBundleID, generation: generation)
         }
 
-        if let type = pb.availableType(from: [.png, .tiff]), let data = pb.data(forType: type) {
-            let isPNG = type == .png
-            let store = store
-            // A big copy's TIFF→PNG re-encode can take 100ms+; keep the poll (and the UI) off that path.
-            Task.detached(priority: .utility) {
-                let png =
-                    isPNG
-                    ? data
-                    : NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:])
-                guard let png else { return }
-                await store.addImage(png, sourceBundleID: sourceBundleID)
+        captureTail = Task { [weak self] in
+            let snapshot = await withTaskCancellationHandler {
+                await readTask.value
+            } onCancel: {
+                readTask.cancel()
+            }
+            await previous?.value
+            guard !Task.isCancelled, let self else { return }
+            guard let snapshot else {
+                // Some owners publish types just before their promised data becomes readable. If
+                // the pasteboard is still on this generation, retry on the next tick.
+                if NSPasteboard.general.changeCount == changeCount,
+                    self.lastObservedChangeCount == changeCount
+                {
+                    self.lastObservedChangeCount = .min
+                }
+                return
+            }
+            guard
+                let capture = await self.pipeline.process(snapshot)
+            else { return }
+
+            switch capture.content {
+            case .text(let text):
+                self.store.addText(
+                    text, sourceBundleID: capture.sourceBundleID,
+                    expectedGeneration: capture.generation)
+            case .image(let png):
+                await self.store.addImage(
+                    png, sourceBundleID: capture.sourceBundleID,
+                    expectedGeneration: capture.generation)
             }
         }
+    }
+
+    private nonisolated static func readSnapshot(
+        changeCount: Int, imageType: NSPasteboard.PasteboardType?,
+        sourceBundleID: String?, generation: UInt64
+    ) -> PasteboardSnapshot? {
+        guard !Task.isCancelled else { return nil }
+        let pasteboard = NSPasteboard.general
+        guard pasteboard.changeCount == changeCount else { return nil }
+        let text = pasteboard.string(forType: .string)
+        let imageData = imageType.flatMap { pasteboard.data(forType: $0) }
+        guard !Task.isCancelled, pasteboard.changeCount == changeCount else { return nil }
+        return PasteboardSnapshot(
+            text: text, imageData: imageData, imageIsPNG: imageType == .png,
+            sourceBundleID: sourceBundleID, generation: generation)
     }
 }
