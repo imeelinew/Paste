@@ -150,12 +150,14 @@ enum ClipboardActionsMenu {
         ]
         if item.isPinned {
             items.append(
-                PopoverMenuItem(title: "Unpin Entry", shortcut: "⌘P") {
+                PopoverMenuItem(
+                    title: "Unpin Entry", systemImage: "pin.slash", shortcut: "⌘P"
+                ) {
                     core.togglePinnedClip(item)
                 })
         } else {
             items.append(
-                PopoverMenuItem(title: "Pin Entry", shortcut: "⌘P") {
+                PopoverMenuItem(title: "Pin Entry", systemImage: "pin", shortcut: "⌘P") {
                     core.togglePinnedClip(item)
                 })
         }
@@ -166,7 +168,9 @@ enum ClipboardActionsMenu {
                 })
         }
         items.append(
-            PopoverMenuItem(title: "Delete Entry", isDestructive: true) {
+            PopoverMenuItem(
+                title: "Delete Entry", systemImage: "trash", isDestructive: true
+            ) {
                 store.remove(item)
             })
         return PopoverMenuContent(items: items)
