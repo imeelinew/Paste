@@ -78,9 +78,7 @@ struct CodePreview: View {
 
     var body: some View {
         ScrollView {
-            Text(highlighted ?? AttributedString(code))
-                .font(.system(.subheadline, design: .monospaced))
-                .textSelection(.enabled)
+            SelectableAttributedText(attributed: highlighted ?? AttributedString(code))
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .overlayScroller()
         }

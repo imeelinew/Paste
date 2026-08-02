@@ -325,11 +325,11 @@ struct ClipboardPreview: View {
         switch item.kind {
         case .text:
             ScrollView {
-                Text(SearchHighlight.attributed(item.text ?? "", query: query))
-                    .font(.system(.subheadline, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .overlayScroller()
+                SelectableAttributedText(
+                    attributed: SearchHighlight.attributed(item.text ?? "", query: query)
+                )
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .overlayScroller()
             }
         case .code:
             CodePreview(code: item.text ?? "", query: query)
