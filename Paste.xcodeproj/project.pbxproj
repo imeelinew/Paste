@@ -46,11 +46,11 @@
 		CE1562B33E657CF448D04DDC /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 40E3D8D2C77ADCC20CD390CC /* KeyboardShortcuts */; };
 		DE8C16A33B168FD7F3AC2C5B /* SystemClipboardHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B34CA7CF3889D8A18413F77 /* SystemClipboardHistory.swift */; };
 		DF868B19AE7D7BF3751879EF /* ClipboardCapturePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FB3EB883C67D7DA6D8FEAF /* ClipboardCapturePipeline.swift */; };
-		E2C25F35DF0B1F8C9960CD38 /* ClipboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCFFE5C6B9CC83C972FD0B0D /* ClipboardStore.swift */; };
-		E8EB228A4D377029F8905182 /* paste.icon in Resources */ = {isa = PBXBuildFile; fileRef = 17E41EBE2A05B16FBF699B0A /* paste.icon */; };
 		E1NF00012FC4A00100000001 /* SymbolsNerdFontMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = E1NF00022FC4A00100000002 /* SymbolsNerdFontMono-Regular.ttf */; };
 		E1NF00032FC4A00100000003 /* NerdFontsSymbolsOnly-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = E1NF00042FC4A00100000004 /* NerdFontsSymbolsOnly-LICENSE.txt */; };
 		E1NF00052FC4A00100000005 /* NerdSymbolsFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1NF00062FC4A00100000006 /* NerdSymbolsFont.swift */; };
+		E2C25F35DF0B1F8C9960CD38 /* ClipboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCFFE5C6B9CC83C972FD0B0D /* ClipboardStore.swift */; };
+		E8EB228A4D377029F8905182 /* paste.icon in Resources */ = {isa = PBXBuildFile; fileRef = 17E41EBE2A05B16FBF699B0A /* paste.icon */; };
 		EE9F57DEDBD7C12EA72E7D9E /* InputSourceSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22A18A2E99B807E7716432E /* InputSourceSwitcher.swift */; };
 		F1E4B87385492A86C5F5CDFE /* ImageThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2FD6AB5017BBFF5EE420A4 /* ImageThumbnail.swift */; };
 		F2793D8EFF543BEDD5DF57C1 /* PaletteViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11927303CFC909AE918568B6 /* PaletteViewModel.swift */; };
@@ -62,10 +62,6 @@
 		123A20E6FCB60D259A0CC145 /* PalettePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PalettePanel.swift; sourceTree = "<group>"; };
 		1240D0A52200DBB4C8496F67 /* InstalledApplications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledApplications.swift; sourceTree = "<group>"; };
 		17E41EBE2A05B16FBF699B0A /* paste.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = paste.icon; sourceTree = "<group>"; };
-		E1NF00022FC4A00100000002 /* SymbolsNerdFontMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SymbolsNerdFontMono-Regular.ttf"; sourceTree = "<group>"; };
-		E1NF00042FC4A00100000004 /* NerdFontsSymbolsOnly-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "NerdFontsSymbolsOnly-LICENSE.txt"; sourceTree = "<group>"; };
-		E1NF00062FC4A00100000006 /* NerdSymbolsFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NerdSymbolsFont.swift; sourceTree = "<group>"; };
-		E1NF00072FC4A00100000007 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		1F3166EA8852EDBCC9A0D3DF /* ScrollIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollIntent.swift; sourceTree = "<group>"; };
 		27D1C525A6F1C83A87346D62 /* ThinScrollbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinScrollbar.swift; sourceTree = "<group>"; };
 		2AAAC613C9193B707F079A76 /* IconCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconCache.swift; sourceTree = "<group>"; };
@@ -100,6 +96,10 @@
 		D22A18A2E99B807E7716432E /* InputSourceSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputSourceSwitcher.swift; sourceTree = "<group>"; };
 		D3E59B58F324A9600EE4325C /* Paste.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Paste.entitlements; sourceTree = "<group>"; };
 		E1C61CC3EAF30E7A03C2A141 /* Paste.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Paste.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1NF00022FC4A00100000002 /* SymbolsNerdFontMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SymbolsNerdFontMono-Regular.ttf"; sourceTree = "<group>"; };
+		E1NF00042FC4A00100000004 /* NerdFontsSymbolsOnly-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "NerdFontsSymbolsOnly-LICENSE.txt"; sourceTree = "<group>"; };
+		E1NF00062FC4A00100000006 /* NerdSymbolsFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NerdSymbolsFont.swift; sourceTree = "<group>"; };
+		E1NF00072FC4A00100000007 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		E4A9AB5D6002E8775B7A1B4A /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		E803D4959D800FE82F1EC0EA /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		EA577CC2AE8EBDA99C731955 /* Permissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Permissions.swift; sourceTree = "<group>"; };
@@ -474,11 +474,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = paste;
 				CODE_SIGN_ENTITLEMENTS = Paste/Paste.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 10;
 				INFOPLIST_FILE = Paste/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 0.1.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lsqlite3",
@@ -564,11 +566,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = paste;
 				CODE_SIGN_ENTITLEMENTS = Paste/Paste.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 10;
 				INFOPLIST_FILE = Paste/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 0.1.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lsqlite3",
