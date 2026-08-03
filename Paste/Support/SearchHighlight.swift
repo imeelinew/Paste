@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Search emphasis for clipboard list titles and preview bodies: literal substrings, plus Mandarin
 /// pinyin hits mapped back onto the matching Chinese characters.
@@ -8,6 +9,8 @@ enum SearchHighlight {
     static func attributed(_ string: String, query: String) -> AttributedString {
         var output = AttributedString(string)
         apply(to: &output, source: string, query: query)
+        let size = NSFont.preferredFont(forTextStyle: .body).pointSize
+        NerdSymbolsFont.applyFallback(to: &output, size: size)
         return output
     }
 

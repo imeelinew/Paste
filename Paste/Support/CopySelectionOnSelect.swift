@@ -56,6 +56,7 @@ struct SelectableAttributedText: NSViewRepresentable {
                 mutable.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range)
             }
         }
+        NerdSymbolsFont.applyFallback(to: mutable, baseFont: font)
         return mutable
     }
 

@@ -26,6 +26,7 @@ final class AppCore: ObservableObject {
     }
 
     func start() {
+        NerdSymbolsFont.register()
         activationPolicy.reset()
         settings.appearance.apply()
 
