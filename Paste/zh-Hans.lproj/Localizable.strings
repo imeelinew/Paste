@@ -14,6 +14,7 @@
 "Code" = "代码";
 "Clipboard history is empty" = "剪贴板历史为空";
 "Copied" = "复制时间";
+"Copy" = "拷贝";
 "Copy to Clipboard" = "复制到剪贴板";
 "Danger Zone" = "危险操作";
 "Dark" = "深色";
@@ -53,6 +54,7 @@
 "Quit Paste" = "退出 Paste";
 "Quit Paste?" = "要退出 Paste 吗？";
 "Search apps…" = "搜索应用…";
+"Select All" = "全选";
 "Settings" = "设置";
 "Shortcut" = "快捷键";
 "Show in Finder" = "在 Finder 中显示";

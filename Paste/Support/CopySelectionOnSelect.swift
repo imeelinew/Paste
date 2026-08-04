@@ -142,6 +142,27 @@ final class PreviewTextView: NSTextView {
         }
     }
 
+    /// Drop the default text-view junk (Look Up, Translate, Services, …); keep Copy + Select All.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let locale = AppCore.shared.settings.language.locale
+        let menu = NSMenu()
+        menu.addItem(
+            withTitle: String(localized: "Copy", locale: locale), action: #selector(copy(_:)),
+            keyEquivalent: "")
+        menu.addItem(
+            withTitle: String(localized: "Select All", locale: locale),
+            action: #selector(selectAll(_:)), keyEquivalent: "")
+        return menu
+    }
+
+    /// Same path as select-to-copy: stamp the internal pasteboard marker so monitoring skips history.
+    override func copy(_ sender: Any?) {
+        let range = selectedRange()
+        guard range.length > 0 else { return }
+        let text = (string as NSString).substring(with: range)
+        Paster.copyString(text)
+    }
+
     override func mouseUp(with event: NSEvent) {
         super.mouseUp(with: event)
         (delegate as? SelectableAttributedText.Coordinator)?.flushPending()

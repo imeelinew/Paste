@@ -14,6 +14,7 @@
 "Code" = "Code";
 "Clipboard history is empty" = "Clipboard history is empty";
 "Copied" = "Copied";
+"Copy" = "Copy";
 "Copy to Clipboard" = "Copy to Clipboard";
 "Danger Zone" = "Danger Zone";
 "Dark" = "Dark";
@@ -53,6 +54,7 @@
 "Quit Paste" = "Quit Paste";
 "Quit Paste?" = "Quit Paste?";
 "Search apps…" = "Search apps…";
+"Select All" = "Select All";
 "Settings" = "Settings";
 "Shortcut" = "Shortcut";
 "Show in Finder" = "Show in Finder";

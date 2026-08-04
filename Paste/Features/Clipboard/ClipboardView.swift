@@ -169,7 +169,7 @@ enum ClipboardActionsMenu {
         }
         items.append(
             PopoverMenuItem(
-                title: "Delete Entry", systemImage: "trash", isDestructive: true
+                title: "Delete Entry", systemImage: "trash", shortcut: "⌘⌫", isDestructive: true
             ) {
                 store.remove(item)
             })

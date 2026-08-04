@@ -32,6 +32,16 @@ struct AppMenuShortcutRequest: Equatable {
     let shortcut: AppMenuShortcut
 }
 
+/// Actions-menu items reached by ⌘⌫; same open → select → press choreography as the app menu.
+enum ActionsMenuShortcut: Equatable {
+    case delete
+}
+
+struct ActionsMenuShortcutRequest: Equatable {
+    let id: UUID
+    let shortcut: ActionsMenuShortcut
+}
+
 @MainActor
 final class PaletteViewModel: ObservableObject {
     @Published var query = ""
@@ -41,13 +51,20 @@ final class PaletteViewModel: ObservableObject {
     @Published var followToken = UUID()
     @Published var pasteTarget: PasteTarget?
     @Published var appMenuShortcutRequest: AppMenuShortcutRequest?
+    @Published var actionsMenuShortcutRequest: ActionsMenuShortcutRequest?
 
     var hoverHighlightArmed = false
     var menuOpen = false { didSet { onMenuOpenChanged?(menuOpen) } }
     var onMenuOpenChanged: ((Bool) -> Void)?
 
     func requestAppMenuShortcut(_ shortcut: AppMenuShortcut) {
+        actionsMenuShortcutRequest = nil
         appMenuShortcutRequest = AppMenuShortcutRequest(id: UUID(), shortcut: shortcut)
+    }
+
+    func requestActionsMenuShortcut(_ shortcut: ActionsMenuShortcut) {
+        appMenuShortcutRequest = nil
+        actionsMenuShortcutRequest = ActionsMenuShortcutRequest(id: UUID(), shortcut: shortcut)
     }
 
     func prepare() {
@@ -56,6 +73,7 @@ final class PaletteViewModel: ObservableObject {
         hoverHighlightArmed = false
         menuOpen = false
         appMenuShortcutRequest = nil
+        actionsMenuShortcutRequest = nil
         focusToken = UUID()
         resetToken = UUID()
     }

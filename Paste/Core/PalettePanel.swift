@@ -42,6 +42,9 @@ final class PalettePanel: NSPanel {
             case kVK_ANSI_Q:
                 paletteViewModel?.requestAppMenuShortcut(.quit)
                 return
+            case kVK_Delete:
+                paletteViewModel?.requestActionsMenuShortcut(.delete)
+                return
             default:
                 break
             }

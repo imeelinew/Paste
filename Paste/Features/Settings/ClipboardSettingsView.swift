@@ -1,11 +1,10 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ClipboardSettingsView: View {
     @ObservedObject private var settings = AppCore.shared.settings
     @ObservedObject private var systemClipboardHistory = AppCore.shared.systemClipboardHistory
-    @EnvironmentObject private var installedApplications: InstalledApplications
-    @State private var showingAppPicker = false
 
     var body: some View {
         SettingsPane(tab: .clipboard) {
@@ -62,32 +61,44 @@ struct ClipboardSettingsView: View {
 
                 HStack(spacing: Theme.Spacing.lg) {
                     Spacer(minLength: Theme.Spacing.xl)
-                    Button {
-                        showingAppPicker = true
-                    } label: {
+                    Button(action: addExcludedApp) {
                         Image(systemName: "plus")
                             .font(.system(size: 12, weight: .medium))
                     }
                     .buttonStyle(.borderless)
-                    .popover(isPresented: $showingAppPicker, arrowEdge: .bottom) {
-                        AppPickerPopover(excluded: Set(settings.clipboardDisabledApps)) {
-                            bundleID in
-                            settings.clipboardDisabledApps.append(bundleID)
-                            showingAppPicker = false
-                        }
-                    }
+                    .accessibilityLabel("Add")
                 }
                 .padding(.horizontal, Theme.Spacing.xl)
                 .padding(.vertical, Theme.Spacing.md)
             }
         }
-        .task { installedApplications.load() }
         .onAppear { systemClipboardHistory.refresh() }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
             systemClipboardHistory.refresh()
         }
+    }
+
+    private func addExcludedApp() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.application]
+        panel.treatsFilePackagesAsDirectories = false
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        panel.prompt = String(localized: "Add")
+        guard panel.runModal() == .OK else { return }
+
+        var apps = settings.clipboardDisabledApps
+        for url in panel.urls {
+            guard let bundleID = Bundle(url: url)?.bundleIdentifier,
+                !apps.contains(bundleID)
+            else { continue }
+            apps.append(bundleID)
+        }
+        settings.clipboardDisabledApps = apps
     }
 }
 
@@ -99,7 +110,8 @@ struct DangerZoneSettingsView: View {
             SettingsRow(
                 title: "Clear history"
             ) {
-                Button("Clear…", role: .destructive) { confirmingClear = true }
+                Button("Clear") { confirmingClear = true }
+                    .foregroundStyle(.red)
                     .controlSize(.regular)
             }
         }
@@ -121,17 +133,34 @@ struct DangerZoneSettingsView: View {
 private struct DisabledAppRow: View {
     let bundleID: String
     let onRemove: () -> Void
-    @EnvironmentObject private var installedApplications: InstalledApplications
+
+    private var appURL: URL? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+    }
+
+    private var displayName: String {
+        guard let url = appURL else { return bundleID }
+        if let bundle = Bundle(url: url) {
+            let localized = bundle.localizedInfoDictionary
+            let info = bundle.infoDictionary
+            if let name = localized?["CFBundleDisplayName"] as? String ?? info?["CFBundleDisplayName"]
+                as? String
+            {
+                return name
+            }
+            if let name = localized?["CFBundleName"] as? String ?? info?["CFBundleName"] as? String {
+                return name
+            }
+        }
+        return FileManager.default.displayName(atPath: url.path)
+    }
 
     var body: some View {
-        let app = installedApplications.apps.first { $0.bundleID == bundleID }
-        let path = app?.path
-            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)?.path
         HStack(spacing: Theme.Spacing.lg) {
-            Image(nsImage: path.map(IconCache.icon(forFile:)) ?? genericIcon)
+            Image(nsImage: appURL.map { IconCache.icon(forFile: $0.path) } ?? genericIcon)
                 .resizable()
                 .frame(width: 22, height: 22)
-            Text(app?.name ?? bundleID)
+            Text(displayName)
                 .font(.body)
                 .lineLimit(1)
             Spacer(minLength: Theme.Spacing.xl)
@@ -145,49 +174,5 @@ private struct DisabledAppRow: View {
 
     private var genericIcon: NSImage {
         NSWorkspace.shared.icon(for: .applicationBundle)
-    }
-}
-
-private struct AppPickerPopover: View {
-    let excluded: Set<String>
-    let onSelect: (String) -> Void
-    @EnvironmentObject private var installedApplications: InstalledApplications
-    @State private var query = ""
-
-    private var candidates: [InstalledApplication] {
-        installedApplications.apps.filter {
-            !excluded.contains($0.bundleID)
-                && (query.isEmpty || $0.name.localizedCaseInsensitiveContains(query))
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            TextField("Search apps…", text: $query)
-                .textFieldStyle(.roundedBorder)
-                .padding(Theme.Spacing.md)
-            Divider()
-            ScrollView {
-                LazyVStack(spacing: 1) {
-                    ForEach(candidates) { app in
-                        Button { onSelect(app.bundleID) } label: {
-                            HStack(spacing: Theme.Spacing.lg) {
-                                Image(nsImage: IconCache.icon(forFile: app.path))
-                                    .resizable()
-                                    .frame(width: 20, height: 20)
-                                Text(app.name).lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.horizontal, Theme.Spacing.md)
-                            .padding(.vertical, Theme.Spacing.sm)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(Theme.Spacing.sm)
-            }
-        }
-        .frame(width: 280, height: 320)
     }
 }
