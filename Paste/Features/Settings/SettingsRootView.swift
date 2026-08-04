@@ -5,7 +5,7 @@ extension Notification.Name {
 }
 
 enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
-    case general, clipboard, permissions
+    case general, clipboard
 
     var id: Int { rawValue }
 
@@ -13,7 +13,6 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         switch self {
         case .general: return "General"
         case .clipboard: return "Clipboard"
-        case .permissions: return "Permissions"
         }
     }
 
@@ -32,7 +31,6 @@ struct SettingsRootView: View {
             Form {
                 GeneralSettingsView()
                 ClipboardSettingsView()
-                PermissionsSettingsView()
                 DangerZoneSettingsView()
             }
             .formStyle(.grouped)

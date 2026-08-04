@@ -10,7 +10,6 @@ final class AppCore: ObservableObject {
     let clipboardStore = ClipboardStore()
     let clipboardManager: ClipboardManager
     let palette = PaletteViewModel()
-    let installedApplications = InstalledApplications()
     let systemClipboardHistory = SystemClipboardHistory()
 
     private lazy var windowController = PaletteWindowController(core: self)
@@ -69,12 +68,11 @@ final class AppCore: ObservableObject {
     func showSettings(tab: SettingsTab = .general) {
         let isNew = auxWindows.show(
             id: "settings",
-            title: String(localized: "Settings", locale: settings.language.locale),
+            title: String(localized: "Paste Settings", locale: settings.language.locale),
             size: CGSize(width: 440, height: 632),
             seamlessTitleBar: false
         ) {
             SettingsRootView(initialTab: tab)
-                .environmentObject(self.installedApplications)
         }
         if !isNew {
             NotificationCenter.default.post(name: .pasteSelectSettingsTab, object: tab)
