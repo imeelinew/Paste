@@ -29,7 +29,7 @@ struct SelectableAttributedText: NSViewRepresentable {
 
     func updateNSView(_ textView: PreviewTextView, context: Context) {
         context.coordinator.onCopy = { Paster.copyString($0) }
-        let ns = Self.nsAttributed(from: attributed)
+        let ns = Self.nsAttributed(from: attributed, environment: context.environment)
         let plain = String(attributed.characters)
         if textView.string != plain {
             textView.textStorage?.setAttributedString(ns)
@@ -39,12 +39,39 @@ struct SelectableAttributedText: NSViewRepresentable {
         }
     }
 
-    private static func nsAttributed(from attributed: AttributedString) -> NSAttributedString {
+    /// `AttributedString` stores the highlighters' colors in SwiftUI's attribute scope. The
+    /// Foundation bridge does not turn those values into the `NSColor` attributes TextKit draws,
+    /// so copy them explicitly while preserving every Foundation/AppKit attribute it can bridge.
+    private static func nsAttributed(
+        from attributed: AttributedString, environment: EnvironmentValues
+    ) -> NSAttributedString {
         let size = NSFont.preferredFont(forTextStyle: .subheadline).pointSize
         let font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
         let mutable = NSMutableAttributedString(attributedString: NSAttributedString(attributed))
         let full = NSRange(location: 0, length: mutable.length)
         guard full.length > 0 else { return mutable }
+
+        var colorCache: [Color: NSColor] = [:]
+        func appKitColor(_ color: Color) -> NSColor {
+            if let cached = colorCache[color] { return cached }
+            let resolved = nsColor(color, environment: environment)
+            colorCache[color] = resolved
+            return resolved
+        }
+
+        for run in attributed.runs {
+            let range = NSRange(run.range, in: attributed)
+            if let color = run.swiftUI.foregroundColor {
+                mutable.addAttribute(
+                    .foregroundColor, value: appKitColor(color),
+                    range: range)
+            }
+            if let color = run.swiftUI.backgroundColor {
+                mutable.addAttribute(
+                    .backgroundColor, value: appKitColor(color),
+                    range: range)
+            }
+        }
 
         mutable.enumerateAttribute(.font, in: full) { value, range, _ in
             if value == nil {
@@ -58,6 +85,13 @@ struct SelectableAttributedText: NSViewRepresentable {
         }
         NerdSymbolsFont.applyFallback(to: mutable, baseFont: font)
         return mutable
+    }
+
+    private static func nsColor(_ color: Color, environment: EnvironmentValues) -> NSColor {
+        let resolved = color.resolve(in: environment)
+        return NSColor(
+            srgbRed: CGFloat(resolved.red), green: CGFloat(resolved.green),
+            blue: CGFloat(resolved.blue), alpha: CGFloat(resolved.opacity))
     }
 
     @MainActor
