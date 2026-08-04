@@ -32,16 +32,6 @@ struct AppMenuShortcutRequest: Equatable {
     let shortcut: AppMenuShortcut
 }
 
-/// Actions-menu items reached by ⌘⌫; same open → select → press choreography as the app menu.
-enum ActionsMenuShortcut: Equatable {
-    case delete
-}
-
-struct ActionsMenuShortcutRequest: Equatable {
-    let id: UUID
-    let shortcut: ActionsMenuShortcut
-}
-
 @MainActor
 final class PaletteViewModel: ObservableObject {
     @Published var query = ""
@@ -51,29 +41,49 @@ final class PaletteViewModel: ObservableObject {
     @Published var followToken = UUID()
     @Published var pasteTarget: PasteTarget?
     @Published var appMenuShortcutRequest: AppMenuShortcutRequest?
-    @Published var actionsMenuShortcutRequest: ActionsMenuShortcutRequest?
+    /// Space toggles an overflow image Quick Look when the current selection is an image.
+    @Published var imageQuickLookOpen = false
+    /// Maintained by the palette view from the selected clip's kind (and menu state).
+    var imageQuickLookAvailable = false
 
-    var hoverHighlightArmed = false
     var menuOpen = false { didSet { onMenuOpenChanged?(menuOpen) } }
     var onMenuOpenChanged: ((Bool) -> Void)?
 
+    private var isQueryEmpty: Bool {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func requestAppMenuShortcut(_ shortcut: AppMenuShortcut) {
-        actionsMenuShortcutRequest = nil
         appMenuShortcutRequest = AppMenuShortcutRequest(id: UUID(), shortcut: shortcut)
     }
 
-    func requestActionsMenuShortcut(_ shortcut: ActionsMenuShortcut) {
-        appMenuShortcutRequest = nil
-        actionsMenuShortcutRequest = ActionsMenuShortcutRequest(id: UUID(), shortcut: shortcut)
+    /// Space for `PalettePanel`: when the search field is empty, never type a leading space;
+    /// if the selection is an image, toggle Quick Look instead.
+    @discardableResult
+    func handleSpaceKey() -> Bool {
+        guard !menuOpen, isQueryEmpty else { return false }
+        if imageQuickLookAvailable {
+            imageQuickLookOpen.toggle()
+        }
+        return true
+    }
+
+    /// ⌘⌫ clears the search field (Finder-style), rather than deleting a clip.
+    @discardableResult
+    func clearQueryWithShortcut() -> Bool {
+        guard !menuOpen else { return false }
+        guard !isQueryEmpty else { return true }
+        query = ""
+        return true
     }
 
     func prepare() {
         query = ""
         selection = 0
-        hoverHighlightArmed = false
         menuOpen = false
         appMenuShortcutRequest = nil
-        actionsMenuShortcutRequest = nil
+        imageQuickLookOpen = false
+        imageQuickLookAvailable = false
         focusToken = UUID()
         resetToken = UUID()
     }

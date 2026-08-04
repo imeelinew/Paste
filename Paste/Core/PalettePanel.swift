@@ -27,11 +27,6 @@ final class PalettePanel: NSPanel {
     }
 
     override func sendEvent(_ event: NSEvent) {
-        switch event.type {
-        case .mouseMoved: paletteViewModel?.hoverHighlightArmed = true
-        case .keyDown: paletteViewModel?.hoverHighlightArmed = false
-        default: break
-        }
         if event.type == .keyDown,
             event.modifierFlags.intersection(Self.shortcutModifiers) == .command
         {
@@ -43,11 +38,17 @@ final class PalettePanel: NSPanel {
                 paletteViewModel?.requestAppMenuShortcut(.quit)
                 return
             case kVK_Delete:
-                paletteViewModel?.requestActionsMenuShortcut(.delete)
-                return
+                if paletteViewModel?.clearQueryWithShortcut() == true { return }
             default:
                 break
             }
+        }
+        if event.type == .keyDown,
+            Int(event.keyCode) == kVK_Space,
+            event.modifierFlags.intersection(Self.shortcutModifiers).isEmpty,
+            paletteViewModel?.handleSpaceKey() == true
+        {
+            return
         }
         if event.type == .keyDown,
             paletteViewModel?.menuOpen == true,

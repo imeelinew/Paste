@@ -57,6 +57,8 @@ final class AppCore: ObservableObject {
             transferTask = nil
             transferGeneration = UUID()
         }
+        palette.imageQuickLookOpen = false
+        ImageQuickLook.close()
         windowController.hide(restoreFocus: restoreFocus)
     }
 

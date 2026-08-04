@@ -169,7 +169,7 @@ enum ClipboardActionsMenu {
         }
         items.append(
             PopoverMenuItem(
-                title: "Delete Entry", systemImage: "trash", shortcut: "⌘⌫", isDestructive: true
+                title: "Delete Entry", systemImage: "trash", isDestructive: true
             ) {
                 store.remove(item)
             })
@@ -182,14 +182,6 @@ private struct ClipboardRow: View {
     let selected: Bool
     let query: String
     let imageURL: URL?
-    @State private var hovered = false
-
-    /// Selection wins over hover when a row is both; otherwise hover shows its fainter layer.
-    private var fill: Color {
-        if selected { return Theme.Colors.selection }
-        if hovered { return Theme.Colors.rowHover }
-        return .clear
-    }
 
     var body: some View {
         HStack(spacing: Theme.Spacing.lg) {
@@ -210,9 +202,8 @@ private struct ClipboardRow: View {
         .padding(.vertical, Theme.Spacing.sm)
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
-                .fill(fill)
+                .fill(selected ? Theme.Colors.selection : Color.clear)
         )
-        .armedHover($hovered)
     }
 
     private var previewText: String {
@@ -299,6 +290,7 @@ struct ClipboardPreview: View {
     let item: ClipboardItem?
     var query: String = ""
     @EnvironmentObject private var store: ClipboardStore
+    @EnvironmentObject private var vm: PaletteViewModel
 
     var body: some View {
         if let item {
@@ -327,7 +319,8 @@ struct ClipboardPreview: View {
         case .code:
             CodePreview(code: item.text ?? "", query: query)
         case .image:
-            AsyncThumbnail(url: store.imageURL(for: item), maxPixel: Self.previewMaxPixel) {
+            let imageURL = store.imageURL(for: item)
+            AsyncThumbnail(url: imageURL, maxPixel: Self.previewMaxPixel) {
                 image in
                 image
                     .resizable()
@@ -342,6 +335,18 @@ struct ClipboardPreview: View {
             } placeholder: {
                 Image(systemName: "photo").font(.system(.largeTitle))
                     .symbolRenderingMode(.hierarchical).foregroundStyle(.tertiary)
+            }
+            // Anchor to the thumbnail's fitted bounds, not the full preview pane, so the
+            // NSPopover arrow points at the image and placement can avoid covering it.
+            .overlay {
+                ImageQuickLookAnchor(
+                    url: imageURL,
+                    isPresented: Binding(
+                        get: { vm.imageQuickLookOpen },
+                        set: { vm.imageQuickLookOpen = $0 }
+                    )
+                )
+                .allowsHitTesting(false)
             }
         }
     }

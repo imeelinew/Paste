@@ -19,7 +19,6 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
             previousApp = frontmost
         }
         core.palette.pasteTarget = PasteTarget(app: previousApp)
-        core.palette.hoverHighlightArmed = false
 
         let panel = ensurePanel()
         position(panel)

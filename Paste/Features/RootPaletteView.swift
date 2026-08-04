@@ -152,11 +152,9 @@ struct RootPaletteView: View {
             guard let request else { return }
             runAppMenuShortcut(request.shortcut)
         }
-        .onChange(of: vm.actionsMenuShortcutRequest) { _, request in
-            guard let request else { return }
-            runActionsMenuShortcut(request.shortcut)
-        }
         .onChange(of: vm.query) {
+            vm.imageQuickLookOpen = false
+            ImageQuickLook.close()
             vm.selection = 0
             scroll = ScrollIntent(kind: .top)
         }
@@ -166,9 +164,7 @@ struct RootPaletteView: View {
         .onChange(of: showActions) {
             if showActions {
                 showAppMenu = false
-                if vm.actionsMenuShortcutRequest == nil {
-                    menuSelection = 0
-                }
+                menuSelection = 0
             }
             vm.menuOpen = menuOpen
         }
@@ -190,7 +186,19 @@ struct RootPaletteView: View {
             }
             scroll = ScrollIntent(kind: .follow)
         }
-        .onAppear { searchFocused = true }
+        .onAppear {
+            searchFocused = true
+            syncImageQuickLook(for: selected)
+        }
+        .onChange(of: selected?.id) {
+            syncImageQuickLook(for: selected)
+        }
+        .onChange(of: menuOpen) {
+            if menuOpen {
+                vm.imageQuickLookOpen = false
+                ImageQuickLook.close()
+            }
+        }
         .task(id: ClipboardSearchRequest(query: normalizedQuery, revision: store.revision)) {
             let query = normalizedQuery
             let results = await store.searchAsync(query)
@@ -199,11 +207,27 @@ struct RootPaletteView: View {
             searchedClips = results
         }
         .onKeyPress(.downArrow) {
-            if menuOpen { moveMenu(1) } else { move(1) }
+            if menuOpen {
+                moveMenu(1)
+            } else {
+                if vm.imageQuickLookOpen {
+                    vm.imageQuickLookOpen = false
+                    ImageQuickLook.close()
+                }
+                move(1)
+            }
             return .handled
         }
         .onKeyPress(.upArrow) {
-            if menuOpen { moveMenu(-1) } else { move(-1) }
+            if menuOpen {
+                moveMenu(-1)
+            } else {
+                if vm.imageQuickLookOpen {
+                    vm.imageQuickLookOpen = false
+                    ImageQuickLook.close()
+                }
+                move(-1)
+            }
             return .handled
         }
         .onKeyPress(keys: [.return], phases: .down) { press in
@@ -219,6 +243,11 @@ struct RootPaletteView: View {
             return .handled
         }
         .onKeyPress(.escape) {
+            if vm.imageQuickLookOpen {
+                vm.imageQuickLookOpen = false
+                ImageQuickLook.close()
+                return .handled
+            }
             if menuShortcutTask != nil || menuOpen {
                 cancelMenuShortcut()
                 closeMenus()
@@ -318,6 +347,12 @@ struct RootPaletteView: View {
         core.paste(clipResults[selection])
     }
 
+    private func syncImageQuickLook(for item: ClipboardItem?) {
+        let available = item?.kind == .image
+        vm.imageQuickLookAvailable = available
+        if !available { vm.imageQuickLookOpen = false }
+    }
+
     private func openActions() {
         guard searchReady else { return }
         withAnimation(Self.menuAnimation) { showActions = true }
@@ -357,17 +392,6 @@ struct RootPaletteView: View {
         if vm.appMenuShortcutRequest != nil {
             vm.appMenuShortcutRequest = nil
         }
-        if vm.actionsMenuShortcutRequest != nil {
-            vm.actionsMenuShortcutRequest = nil
-        }
-    }
-
-    private func actionsShortcutIndex(_ shortcut: ActionsMenuShortcut) -> Int? {
-        guard let items = actionsContent?.items, !items.isEmpty else { return nil }
-        switch shortcut {
-        case .delete:
-            return items.lastIndex(where: \.isDestructive) ?? items.count - 1
-        }
     }
 
     /// ⌘, / ⌘Q: press the menu button, open the menu, highlight the item, press it, then run the action.
@@ -399,44 +423,6 @@ struct RootPaletteView: View {
             menuShortcutTask = nil
             activateMenuItem(index)
             vm.appMenuShortcutRequest = nil
-        }
-    }
-
-    /// ⌘⌫: same choreography as the app-menu shortcuts, against the actions menu.
-    private func runActionsMenuShortcut(_ shortcut: ActionsMenuShortcut) {
-        menuShortcutTask?.cancel()
-        menuShortcutTask = Task { @MainActor in
-            showAppMenu = false
-            menuButtonPressed = false
-            menuRowPressedIndex = nil
-
-            guard searchReady, let index = actionsShortcutIndex(shortcut) else {
-                menuShortcutTask = nil
-                vm.actionsMenuShortcutRequest = nil
-                return
-            }
-
-            actionsButtonPressed = true
-            try? await Task.sleep(nanoseconds: 90_000_000)
-            guard !Task.isCancelled else { return }
-
-            menuSelection = index
-            withAnimation(Self.menuAnimation) { showActions = true }
-            menuSelection = index
-            actionsButtonPressed = false
-
-            try? await Task.sleep(nanoseconds: 180_000_000)
-            guard !Task.isCancelled else { return }
-
-            menuRowPressedIndex = index
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            guard !Task.isCancelled else { return }
-
-            menuRowPressedIndex = nil
-            // Keep request non-nil until activate so showActions' onChange won't reset selection.
-            menuShortcutTask = nil
-            activateMenuItem(index)
-            vm.actionsMenuShortcutRequest = nil
         }
     }
 
@@ -508,17 +494,6 @@ private struct BarButton<Label: View>: View {
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
-    }
-}
-
-extension View {
-    func armedHover(_ hovered: Binding<Bool>) -> some View {
-        onContinuousHover(coordinateSpace: .local) { phase in
-            switch phase {
-            case .active: hovered.wrappedValue = AppCore.shared.palette.hoverHighlightArmed
-            case .ended: hovered.wrappedValue = false
-            }
-        }
     }
 }
 
