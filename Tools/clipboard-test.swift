@@ -166,7 +166,13 @@ struct ClipboardTests {
             expect(store.items.first?.kind == .text, "ordinary prose remains text")
 
             store.addText("https://example.com/path?q=value", sourceBundleID: nil)
-            expect(store.items.first?.kind == .text, "URLs remain text")
+            expect(store.items.first?.kind == .link, "http(s) URLs classify as link")
+
+            store.addText("http://localhost:8080/health", sourceBundleID: nil)
+            expect(store.items.first?.kind == .link, "http URLs classify as link")
+
+            store.addText("See https://example.com for details", sourceBundleID: nil)
+            expect(store.items.first?.kind == .text, "URLs inside prose remain text")
         }
     }
 

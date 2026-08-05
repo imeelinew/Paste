@@ -78,7 +78,7 @@ enum Paster {
     @MainActor
     private static func prepare(_ item: ClipboardItem, store: ClipboardStore) async -> Payload? {
         switch item.kind {
-        case .text, .code:
+        case .text, .code, .link:
             return item.text.map(Payload.text)
         case .image:
             guard let url = store.imageURL(for: item) else { return nil }

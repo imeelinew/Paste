@@ -4,7 +4,19 @@ import SQLite3
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 struct ClipboardItem: Identifiable, Hashable, Sendable {
-    enum Kind: String, Sendable { case text, code, image }
+    enum Kind: String, Sendable {
+        case text, code, link, image
+
+        /// Localization key for the Information "Type" row.
+        var typeLabel: String {
+            switch self {
+            case .text: "Text"
+            case .code: "Code"
+            case .link: "Link"
+            case .image: "Image"
+            }
+        }
+    }
 
     let id: UUID
     let kind: Kind
@@ -850,14 +862,26 @@ final class ClipboardStore: ObservableObject {
     }
 }
 
-/// Conservative text/code classification for clipboard payloads. Strong syntax forms classify on
-/// their own; weaker punctuation signals must combine, keeping prose, URLs, and ordinary messages
-/// as text. Only a bounded prefix is inspected so a large copy cannot stall capture.
+/// Conservative classification for clipboard text. Whole-string http(s) URLs classify as links;
+/// strong syntax forms classify as code on their own; weaker punctuation signals must combine,
+/// keeping prose and ordinary messages as text. Only a bounded prefix is inspected for code so a
+/// large copy cannot stall capture.
 enum ClipboardTextClassifier {
     private static let sampleLimit = 12_000
 
     static func kind(for text: String) -> ClipboardItem.Kind {
-        isCode(text) ? .code : .text
+        if isLink(text) { return .link }
+        return isCode(text) ? .code : .text
+    }
+
+    /// Whole clipboard string is a single http(s) URL (no surrounding prose).
+    private static func isLink(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains(where: \.isWhitespace) else { return false }
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
+            scheme == "http" || scheme == "https", url.host != nil
+        else { return false }
+        return true
     }
 
     private static func isCode(_ text: String) -> Bool {

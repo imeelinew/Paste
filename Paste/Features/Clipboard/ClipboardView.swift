@@ -553,7 +553,7 @@ private final class ClipboardItemCellView: NSTableCellView {
         updateSelectionColor()
 
         switch item.kind {
-        case .text, .code:
+        case .text, .code, .link:
             let text = String((item.text ?? "").prefix(200)).trimmingCharacters(
                 in: .whitespacesAndNewlines)
             let lineEnd = text.firstIndex(where: { $0.isNewline }) ?? text.endIndex
@@ -625,6 +625,8 @@ private final class ClipboardThumbnailView: NSView {
             showSymbol("text.menu")
         case .code:
             showSymbol("chevron.left.forwardslash.chevron.right")
+        case .link:
+            showSymbol("link")
         case .image:
             showSymbol("photo")
             guard let imageURL else { return }
@@ -789,7 +791,7 @@ struct ClipboardPreview: View {
     @ViewBuilder
     private func content(for item: ClipboardItem) -> some View {
         switch item.kind {
-        case .text:
+        case .text, .link:
             SelectableAttributedText(
                 attributed: SearchHighlight.attributed(item.text ?? "", query: query)
             )
@@ -903,11 +905,8 @@ private struct ClipboardInfoSection: View {
             rows.append(InfoRow(label: "Source", value: source.name, icon: source.icon))
         }
         switch item.kind {
-        case .text, .code:
-            rows.append(
-                InfoRow(
-                    label: "Type", value: item.kind == .code ? "Code" : "Text",
-                    localizesValue: true))
+        case .text, .code, .link:
+            rows.append(InfoRow(label: "Type", value: item.kind.typeLabel, localizesValue: true))
             if let characters = details.characters {
                 rows.append(
                     InfoRow(
@@ -922,7 +921,7 @@ private struct ClipboardInfoSection: View {
                         value: words.formatted(.number.locale(settings.language.locale))))
             }
         case .image:
-            rows.append(InfoRow(label: "Type", value: "Image", localizesValue: true))
+            rows.append(InfoRow(label: "Type", value: item.kind.typeLabel, localizesValue: true))
             if let size = details.pixelSize {
                 rows.append(
                     InfoRow(label: "Dimensions", value: "\(Int(size.width))×\(Int(size.height))"))
