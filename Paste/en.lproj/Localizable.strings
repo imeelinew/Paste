@@ -42,6 +42,8 @@
 "Paste Settings" = "Paste Settings";
 "Paste to %@" = "Paste to %@";
 "Paste will stop monitoring the clipboard until you open it again." = "Paste will stop monitoring the clipboard";
+"Past 30 Days" = "Past 30 Days";
+"Past 7 Days" = "Past 7 Days";
 "Pin Entry" = "Pin Entry";
 "Pinned" = "Pinned";
 "Quit" = "Quit";
@@ -59,8 +61,6 @@
 "Text" = "Text";
 "Theme" = "Theme";
 "This can't be undone." = "This can't be undone.";
-"This Month" = "This Month";
-"This Week" = "This Week";
 "Today" = "Today";
 "Type" = "Type";
 "Search" = "Search";

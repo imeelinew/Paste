@@ -37,13 +37,44 @@ private struct ClipboardTableGeometry: Equatable {
     var dissolve = EdgeDissolveScrollState()
 }
 
+private enum ClipboardTableSection: Int, CaseIterable {
+    case pinned, today, yesterday, pastSevenDays, pastThirtyDays, earlier
+
+    var title: String {
+        switch self {
+        case .pinned: return "Pinned"
+        case .today: return "Today"
+        case .yesterday: return "Yesterday"
+        case .pastSevenDays: return "Past 7 Days"
+        case .pastThirtyDays: return "Past 30 Days"
+        case .earlier: return "Earlier"
+        }
+    }
+
+    static func section(
+        for item: ClipboardItem, today: Date, calendar: Calendar
+    ) -> ClipboardTableSection {
+        guard !item.isPinned else { return .pinned }
+        let itemDay = calendar.startOfDay(for: item.createdAt)
+        let elapsedDays = max(
+            0, calendar.dateComponents([.day], from: itemDay, to: today).day ?? .max)
+        switch elapsedDays {
+        case 0: return .today
+        case 1: return .yesterday
+        case 2...7: return .pastSevenDays
+        case 8...30: return .pastThirtyDays
+        default: return .earlier
+        }
+    }
+}
+
 private enum ClipboardTableRow {
-    case header(String)
+    case header(ClipboardTableSection)
     case item(ClipboardItem)
 
     var id: String {
         switch self {
-        case .header(let title): return "header-" + title
+        case .header(let section): return "header-\(section.rawValue)"
         case .item(let item): return item.id.uuidString
         }
     }
@@ -200,15 +231,20 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
         }
 
         private static func makeRows(_ results: [ClipboardItem]) -> [ClipboardTableRow] {
-            var rows: [ClipboardTableRow] = []
-            var currentTitle: String?
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            var grouped: [ClipboardTableSection: [ClipboardItem]] = [:]
             for item in results {
-                let title = item.isPinned ? "Pinned" : DateBucket(for: item.createdAt).title
-                if title != currentTitle {
-                    rows.append(.header(title))
-                    currentTitle = title
-                }
-                rows.append(.item(item))
+                let section = ClipboardTableSection.section(
+                    for: item, today: today, calendar: calendar)
+                grouped[section, default: []].append(item)
+            }
+
+            var rows: [ClipboardTableRow] = []
+            for section in ClipboardTableSection.allCases {
+                guard let items = grouped[section], !items.isEmpty else { continue }
+                rows.append(.header(section))
+                rows.append(contentsOf: items.map(ClipboardTableRow.item))
             }
             return rows
         }
@@ -244,13 +280,13 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
         ) -> NSView? {
             guard rows.indices.contains(row) else { return nil }
             switch rows[row] {
-            case .header(let title):
+            case .header(let section):
                 let view =
                     tableView.makeView(withIdentifier: headerIdentifier, owner: self)
                         as? ClipboardSectionCellView ?? ClipboardSectionCellView()
                 view.identifier = headerIdentifier
                 view.configure(
-                    title: Self.localized(title, locale: locale), isFirst: row == 0)
+                    title: Self.localized(section.title, locale: locale), isFirst: row == 0)
                 return view
             case .item(let item):
                 let view =
@@ -383,8 +419,8 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             case "Pinned": return String(localized: "Pinned", locale: locale)
             case "Today": return String(localized: "Today", locale: locale)
             case "Yesterday": return String(localized: "Yesterday", locale: locale)
-            case "This Week": return String(localized: "This Week", locale: locale)
-            case "This Month": return String(localized: "This Month", locale: locale)
+            case "Past 7 Days": return String(localized: "Past 7 Days", locale: locale)
+            case "Past 30 Days": return String(localized: "Past 30 Days", locale: locale)
             default: return String(localized: "Earlier", locale: locale)
             }
         }
@@ -641,35 +677,6 @@ private final class ClipboardThumbnailView: NSView {
         let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         layer?.contentsScale = scale
         layer?.contents = image.layerContents(forContentsScale: scale)
-    }
-}
-
-/// Coarse date buckets (Today / Yesterday / This Week / …) for sectioning clipboard and calculator-history entries, ordered newest-first by raw value.
-enum DateBucket: Int {
-    case today, yesterday, thisWeek, thisMonth, earlier
-
-    var title: String {
-        switch self {
-        case .today: return "Today"
-        case .yesterday: return "Yesterday"
-        case .thisWeek: return "This Week"
-        case .thisMonth: return "This Month"
-        case .earlier: return "Earlier"
-        }
-    }
-
-    init(for date: Date, now: Date = Date(), calendar: Calendar = .current) {
-        if calendar.isDateInToday(date) {
-            self = .today
-        } else if calendar.isDateInYesterday(date) {
-            self = .yesterday
-        } else if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear) {
-            self = .thisWeek
-        } else if calendar.isDate(date, equalTo: now, toGranularity: .month) {
-            self = .thisMonth
-        } else {
-            self = .earlier
-        }
     }
 }
 

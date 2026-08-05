@@ -42,6 +42,8 @@
 "Paste Settings" = "Paste 设置";
 "Paste to %@" = "粘贴到 %@";
 "Paste will stop monitoring the clipboard until you open it again." = "退出后，Paste 将停止监控剪贴板";
+"Past 30 Days" = "过去 30 天";
+"Past 7 Days" = "过去 7 天";
 "Pin Entry" = "固定项目";
 "Pinned" = "已固定";
 "Quit" = "退出";
@@ -59,8 +61,6 @@
 "Text" = "文本";
 "Theme" = "主题";
 "This can't be undone." = "此操作无法撤销。";
-"This Month" = "本月";
-"This Week" = "本周";
 "Today" = "今天";
 "Type" = "类型";
 "Search" = "搜索";

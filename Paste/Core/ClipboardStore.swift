@@ -14,7 +14,7 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
     let createdAt: Date
     /// Bundle ID of the app frontmost when the copy was captured (see `ClipboardManager.poll`).
     let sourceBundleID: String?
-    /// When the entry was pinned. Pinned entries lead the list in their own section, in pin order, and are exempt from retention pruning.
+    /// When the entry was pinned. Pinned entries lead the list newest-pin-first and are exempt from retention pruning.
     let pinnedAt: Date?
 
     var isPinned: Bool { pinnedAt != nil }
@@ -483,7 +483,7 @@ final class ClipboardStore: ObservableObject {
         for item in residentMatches where !item.isPinned && seen.insert(item.id).inserted {
             unpinned.append(item)
         }
-        return pinnedMatches + unpinned
+        return Self.displayOrder(pinnedMatches + unpinned)
     }
 
     private nonisolated static func queryDatabase(path: String, query: String) -> [ClipboardItem] {
@@ -603,20 +603,33 @@ final class ClipboardStore: ObservableObject {
 
     private var orderedItems: [ClipboardItem] {
         if let orderedCache { return orderedCache }
-        let pinned = pinnedItems
-        // An unpinned history renders `items` as-is, so it never pays for the split.
-        let result = pinned.isEmpty ? items : pinned + items.filter { !$0.isPinned }
+        let result = Self.displayOrder(items)
         orderedCache = result
         return result
     }
 
-    /// The Pinned section's contents in pin order, oldest pin first: a new pin joins the end of the section instead of displacing the ones already there.
-    private var pinnedItems: [ClipboardItem] {
-        items.filter(\.isPinned)
-            .sorted { ($0.pinnedAt ?? .distantFuture) < ($1.pinnedAt ?? .distantFuture) }
+    /// One canonical order for the normal list and every search path: recent pins first, then
+    /// unpinned history by copy time. Original offsets make exact timestamp ties stable.
+    private nonisolated static func displayOrder(_ values: [ClipboardItem]) -> [ClipboardItem] {
+        values.enumerated().sorted { lhs, rhs in
+            let left = lhs.element
+            let right = rhs.element
+            if left.isPinned != right.isPinned { return left.isPinned }
+            if left.isPinned {
+                let leftPinned = left.pinnedAt ?? .distantPast
+                let rightPinned = right.pinnedAt ?? .distantPast
+                if leftPinned != rightPinned { return leftPinned > rightPinned }
+            }
+            if left.createdAt != right.createdAt { return left.createdAt > right.createdAt }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
     }
 
-    /// The row keeps its place in the history and gains a stamp, which puts it at the head of the Pinned section.
+    private var pinnedItems: [ClipboardItem] {
+        Self.displayOrder(items.filter(\.isPinned))
+    }
+
+    /// The row gains a fresh stamp, which puts it at the head of the Pinned section.
     private func pin(_ item: ClipboardItem) {
         let stamp = Date()
         let pinned = item.with(pinnedAt: stamp)
