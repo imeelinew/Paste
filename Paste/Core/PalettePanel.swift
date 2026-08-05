@@ -61,6 +61,16 @@ final class PalettePanel: NSPanel {
             }
         }
         if event.type == .keyDown,
+            Int(event.keyCode) == kVK_Return || Int(event.keyCode) == kVK_ANSI_KeypadEnter
+        {
+            let mods = event.modifierFlags.intersection(Self.shortcutModifiers)
+            if mods.isEmpty || mods == .command,
+                paletteViewModel?.handleReturnKey(command: mods == .command) == true
+            {
+                return
+            }
+        }
+        if event.type == .keyDown,
             Int(event.keyCode) == kVK_Space,
             event.modifierFlags.intersection(Self.shortcutModifiers).isEmpty,
             paletteViewModel?.handleSpaceKey() == true

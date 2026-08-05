@@ -154,8 +154,8 @@ private struct PopoverMenuRow: View {
     }
 }
 
-/// App icon for a menu row (mirrors `AppIconView`): seeds from the warm `IconCache` so the paste target paints on the first frame, decoding off-main only on a miss.
-private struct MenuFileIcon: View {
+/// App icon for a menu row or bar control: seeds from the warm `IconCache` so the paste target paints on the first frame, decoding off-main only on a miss.
+struct MenuFileIcon: View {
     let path: String
     @State private var image: NSImage?
 

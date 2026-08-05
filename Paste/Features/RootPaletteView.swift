@@ -152,6 +152,18 @@ struct RootPaletteView: View {
             guard let request else { return }
             runAppMenuShortcut(request.shortcut)
         }
+        .onChange(of: vm.panelReturnRequest) { _, request in
+            guard let request else { return }
+            switch request.action {
+            case .activate:
+                activateSelection()
+            case .copy:
+                guard searchReady, clipResults.indices.contains(selection) else { return }
+                core.copyToClipboard(clipResults[selection])
+            case .activateMenu:
+                activateMenuItem(menuSelection)
+            }
+        }
         .onChange(of: vm.query) {
             vm.imageQuickLookOpen = false
             ImageQuickLook.close()
@@ -234,18 +246,8 @@ struct RootPaletteView: View {
             }
             return .handled
         }
-        .onKeyPress(keys: [.return], phases: .down) { press in
-            let command = press.modifiers.contains(.command)
-            if menuOpen, !command {
-                activateMenuItem(menuSelection)
-                return .handled
-            }
-            guard command, searchReady, clipResults.indices.contains(selection) else {
-                return .ignored
-            }
-            core.copyToClipboard(clipResults[selection])
-            return .handled
-        }
+        // Return/⌘↵ are handled in `PalettePanel` → `panelReturnRequest` so they keep working
+        // after an AppKit list/preview click steals focus from the search field.
         .onKeyPress(.escape) {
             if vm.imageQuickLookOpen {
                 vm.imageQuickLookOpen = false
@@ -313,6 +315,9 @@ struct RootPaletteView: View {
         HStack(spacing: 2) {
             BarButton(action: activateSelection) {
                 HStack(spacing: Theme.Spacing.sm) {
+                    if let path = vm.pasteTarget?.iconPath {
+                        MenuFileIcon(path: path)
+                    }
                     Text(vm.pasteTarget?.pasteTitle ?? LocalizedStringKey("Paste"))
                         .font(Theme.Typography.bar)
                         .foregroundStyle(.primary)

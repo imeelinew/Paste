@@ -32,6 +32,18 @@ struct AppMenuShortcutRequest: Equatable {
     let shortcut: AppMenuShortcut
 }
 
+/// Return/Enter routed from `PalettePanel` so paste still works when an AppKit list/preview holds focus.
+enum PanelReturnAction: Equatable {
+    case activate
+    case copy
+    case activateMenu
+}
+
+struct PanelReturnRequest: Equatable {
+    let id: UUID
+    let action: PanelReturnAction
+}
+
 @MainActor
 final class PaletteViewModel: ObservableObject {
     @Published var query = ""
@@ -41,6 +53,7 @@ final class PaletteViewModel: ObservableObject {
     @Published var followToken = UUID()
     @Published var pasteTarget: PasteTarget?
     @Published var appMenuShortcutRequest: AppMenuShortcutRequest?
+    @Published var panelReturnRequest: PanelReturnRequest?
     /// Space toggles an overflow image Quick Look when the current selection is an image.
     @Published var imageQuickLookOpen = false
     /// Maintained by the palette view from the selected clip's kind (and menu state).
@@ -71,6 +84,19 @@ final class PaletteViewModel: ObservableObject {
         return true
     }
 
+    /// Return/Enter for `PalettePanel`: activate paste, ⌘↵ copy, or confirm a menu row — without
+    /// depending on the search field remaining first responder after an AppKit click.
+    @discardableResult
+    func handleReturnKey(command: Bool) -> Bool {
+        if menuOpen, !command {
+            panelReturnRequest = PanelReturnRequest(id: UUID(), action: .activateMenu)
+            return true
+        }
+        panelReturnRequest = PanelReturnRequest(
+            id: UUID(), action: command ? .copy : .activate)
+        return true
+    }
+
     /// Space for `PalettePanel`: when the search field is empty, never type a leading space;
     /// if the selection is an image, toggle Quick Look instead.
     @discardableResult
@@ -96,6 +122,7 @@ final class PaletteViewModel: ObservableObject {
         selection = 0
         menuOpen = false
         appMenuShortcutRequest = nil
+        panelReturnRequest = nil
         imageQuickLookOpen = false
         imageQuickLookAvailable = false
         focusToken = UUID()
