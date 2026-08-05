@@ -39,6 +39,8 @@ final class PalettePanel: NSPanel {
                 return
             case kVK_Delete:
                 if paletteViewModel?.clearQueryWithShortcut() == true { return }
+            case kVK_ANSI_C, kVK_ANSI_X, kVK_ANSI_V, kVK_ANSI_A:
+                if handleEditingShortcut(Int(event.keyCode)) { return }
             default:
                 break
             }
@@ -58,6 +60,39 @@ final class PalettePanel: NSPanel {
             return
         }
         super.sendEvent(event)
+    }
+
+    /// This accessory app has no visible Edit menu, so route the standard editing shortcuts to
+    /// the active AppKit field editor ourselves. The preview remains read-only: it accepts Copy
+    /// and Select All, while Cut and Paste are available only in the editable search field.
+    private func handleEditingShortcut(_ keyCode: Int) -> Bool {
+        guard paletteViewModel?.menuOpen != true, let editor = firstResponder as? NSTextView else {
+            return false
+        }
+
+        switch keyCode {
+        case kVK_ANSI_C:
+            guard editor.selectedRange().length > 0 else { return true }
+            editor.copy(nil)
+            if !(editor is PreviewTextView) {
+                Paster.markCurrentPasteboardInternal()
+            }
+            return true
+        case kVK_ANSI_X:
+            guard editor.isEditable, editor.selectedRange().length > 0 else { return true }
+            editor.cut(nil)
+            Paster.markCurrentPasteboardInternal()
+            return true
+        case kVK_ANSI_V:
+            guard editor.isEditable else { return true }
+            editor.paste(nil)
+            return true
+        case kVK_ANSI_A:
+            editor.selectAll(nil)
+            return true
+        default:
+            return false
+        }
     }
 
     init<Content: View>(rootView: Content) {

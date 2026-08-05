@@ -49,6 +49,15 @@ enum Paster {
         _ = write(.text(text))
     }
 
+    /// Keep text copied or cut from Paste's own search field out of clipboard history while
+    /// preserving the field editor's native editing behavior and pasteboard contents.
+    @MainActor
+    static func markCurrentPasteboardInternal() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.addTypes([ClipboardManager.internalType], owner: nil)
+        _ = pasteboard.setData(Data(), forType: ClipboardManager.internalType)
+    }
+
     /// Paste into `app` without activating it, keeping the palette frontmost.
     @MainActor @discardableResult
     static func pasteInPlace(

@@ -77,11 +77,7 @@ struct CodePreview: View {
     @State private var highlighted: AttributedString?
 
     var body: some View {
-        ScrollView {
-            SelectableAttributedText(attributed: highlighted ?? AttributedString(code))
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .overlayScroller()
-        }
+        SelectableAttributedText(attributed: highlighted ?? AttributedString(code))
         .task(id: code + "\u{0}" + query) {
             var attributed = CodeSyntaxHighlighter.highlight(code)
             SearchHighlight.apply(to: &attributed, source: code, query: query)

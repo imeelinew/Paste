@@ -1,34 +1,24 @@
 import AppKit
 import SwiftUI
 
-/// Read-only attributed preview text with select-to-copy. Uses a real `NSTextView` so
-/// selection is observable (SwiftUI `Text` + `.textSelection` is not).
+/// Read-only attributed preview text with select-to-copy. The scroll view and text system are
+/// entirely AppKit so large previews do not need a SwiftUI `ScrollView` around `NSTextView`.
 struct SelectableAttributedText: NSViewRepresentable {
     var attributed: AttributedString
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeNSView(context: Context) -> PreviewTextView {
-        let textView = PreviewTextView()
+    func makeNSView(context: Context) -> PreviewTextScrollView {
+        let scrollView = PreviewTextScrollView()
+        let textView = scrollView.textView
         textView.delegate = context.coordinator
-        textView.drawsBackground = false
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.isRichText = true
-        textView.allowsUndo = false
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.lineFragmentPadding = 0
-        textView.textContainerInset = .zero
-        textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         context.coordinator.onCopy = { Paster.copyString($0) }
-        return textView
+        return scrollView
     }
 
-    func updateNSView(_ textView: PreviewTextView, context: Context) {
+    func updateNSView(_ scrollView: PreviewTextScrollView, context: Context) {
         context.coordinator.onCopy = { Paster.copyString($0) }
+        let textView = scrollView.textView
         let ns = Self.nsAttributed(from: attributed, environment: context.environment)
         let plain = String(attributed.characters)
         if textView.string != plain {
@@ -37,6 +27,7 @@ struct SelectableAttributedText: NSViewRepresentable {
         } else if textView.selectedRange().length == 0, textView.currentAttributedString() != ns {
             textView.textStorage?.setAttributedString(ns)
         }
+        scrollView.updateDocumentGeometry()
     }
 
     /// `AttributedString` stores the highlighters' colors in SwiftUI's attribute scope. The
@@ -121,6 +112,93 @@ struct SelectableAttributedText: NSViewRepresentable {
             self.pending = nil
             onCopy?(pending)
         }
+    }
+}
+
+final class PreviewTextScrollView: NSScrollView {
+    let textView = PreviewTextView()
+    private var styleObserver: NotificationToken?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+
+        drawsBackground = false
+        borderType = .noBorder
+        hasVerticalScroller = true
+        hasHorizontalScroller = false
+        scrollerStyle = .overlay
+        autohidesScrollers = true
+        automaticallyAdjustsContentInsets = false
+        contentView.drawsBackground = false
+
+        textView.drawsBackground = false
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = true
+        textView.allowsUndo = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainerInset = .zero
+        textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        documentView = textView
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else {
+            styleObserver = nil
+            return
+        }
+        observeScrollerStyleChanges()
+        applyOverlayScrollerStyle()
+    }
+
+    override func layout() {
+        super.layout()
+        updateDocumentGeometry()
+    }
+
+    func updateDocumentGeometry() {
+        let width = contentSize.width
+        guard width > 0, let textContainer = textView.textContainer else { return }
+
+        textContainer.containerSize = NSSize(
+            width: width, height: CGFloat.greatestFiniteMagnitude)
+        textView.layoutManager?.ensureLayout(for: textContainer)
+        let contentHeight = textView.intrinsicContentSize.height
+        let height = max(contentSize.height, contentHeight)
+        let size = NSSize(width: width, height: height)
+        if textView.frame.size != size {
+            textView.setFrameSize(size)
+        }
+    }
+
+    private func observeScrollerStyleChanges() {
+        guard styleObserver == nil else { return }
+        let token = NotificationCenter.default.addObserver(
+            forName: NSScroller.preferredScrollerStyleDidChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.async { self?.applyOverlayScrollerStyle() }
+        }
+        styleObserver = NotificationToken(token, center: .default)
+    }
+
+    private func applyOverlayScrollerStyle() {
+        guard scrollerStyle != .overlay || !autohidesScrollers || !hasVerticalScroller else {
+            return
+        }
+        scrollerStyle = .overlay
+        autohidesScrollers = true
+        hasVerticalScroller = true
+        tile()
     }
 }
 

@@ -309,13 +309,9 @@ struct ClipboardPreview: View {
     private func content(for item: ClipboardItem) -> some View {
         switch item.kind {
         case .text:
-            ScrollView {
-                SelectableAttributedText(
-                    attributed: SearchHighlight.attributed(item.text ?? "", query: query)
-                )
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .overlayScroller()
-            }
+            SelectableAttributedText(
+                attributed: SearchHighlight.attributed(item.text ?? "", query: query)
+            )
         case .code:
             CodePreview(code: item.text ?? "", query: query)
         case .image:
