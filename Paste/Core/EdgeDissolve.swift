@@ -1,7 +1,15 @@
 import SwiftUI
 
+struct EdgeDissolveScrollState: Equatable {
+    var top: CGFloat = 0
+    var bottom: CGFloat = 0
+    var canScroll = false
+}
+
 /// Scroll-driven edge dissolve for a scroll view underlapping the palette's floating bars, a port of Raycast's scroll-area mask (see `docs/ui.md` → The edge dissolve).
 struct EdgeDissolveMask: ViewModifier {
+    var externalState: EdgeDissolveScrollState? = nil
+
     /// Band lengths: the bar's occupied height plus Raycast's overshoot into the list (32px below the header, 28px above the footer).
     var topFade: CGFloat = Theme.Size.headerHeight + Theme.Size.headerPadding + 32
     var bottomFade: CGFloat = Theme.Size.bottomBarHeight + 28
@@ -13,39 +21,49 @@ struct EdgeDissolveMask: ViewModifier {
     @State private var bottomDistance: CGFloat = 0
     @State private var canScroll = false
 
-    private struct ScrollState: Equatable {
-        var top: CGFloat
-        var bottom: CGFloat
-        var canScroll: Bool
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let externalState {
+            masked(
+                content
+                    .onAppear { apply(externalState) }
+                    .onChange(of: externalState) { _, new in apply(new) }
+            )
+        } else {
+            masked(
+                content
+                    .onScrollGeometryChange(for: EdgeDissolveScrollState.self) { geo in
+                        let visible =
+                            geo.containerSize.height - geo.contentInsets.top
+                            - geo.contentInsets.bottom
+                        return EdgeDissolveScrollState(
+                            top: geo.contentOffset.y + geo.contentInsets.top,
+                            bottom: geo.contentSize.height + geo.contentInsets.bottom
+                                - geo.containerSize.height - geo.contentOffset.y,
+                            canScroll: geo.contentSize.height > visible
+                        )
+                    } action: { _, new in apply(new) }
+            )
+        }
     }
 
-    func body(content: Content) -> some View {
-        content
-            .onScrollGeometryChange(for: ScrollState.self) { geo in
-                let visible =
-                    geo.containerSize.height - geo.contentInsets.top
-                    - geo.contentInsets.bottom
-                return ScrollState(
-                    top: geo.contentOffset.y + geo.contentInsets.top,
-                    bottom: geo.contentSize.height + geo.contentInsets.bottom
-                        - geo.containerSize.height - geo.contentOffset.y,
-                    canScroll: geo.contentSize.height > visible
+    private func masked<Content: View>(_ content: Content) -> some View {
+        content.mask(
+            // Must span the scroll view's *full* frame — the bars' safe-area insets would otherwise shift the gradient inward, clipping the underlap regions to black.
+            GeometryReader { geo in
+                LinearGradient(
+                    stops: stops(height: geo.size.height),
+                    startPoint: .top, endPoint: .bottom
                 )
-            } action: { _, new in
-                topDistance = max(0, new.top)
-                bottomDistance = max(0, new.bottom)
-                canScroll = new.canScroll
             }
-            .mask(
-                // Must span the scroll view's *full* frame — the bars' safe-area insets would otherwise shift the gradient inward, clipping the underlap regions to black.
-                GeometryReader { geo in
-                    LinearGradient(
-                        stops: stops(height: geo.size.height),
-                        startPoint: .top, endPoint: .bottom
-                    )
-                }
-                .ignoresSafeArea()
-            )
+            .ignoresSafeArea()
+        )
+    }
+
+    private func apply(_ state: EdgeDissolveScrollState) {
+        topDistance = max(0, state.top)
+        bottomDistance = max(0, state.bottom)
+        canScroll = state.canScroll
     }
 
     private func stops(height: CGFloat) -> [Gradient.Stop] {
@@ -68,5 +86,10 @@ extension View {
     /// Attach to a `ScrollView` that underlaps the palette's floating bars (before `thinScrollbar`, so the scrollbar overlay stays unmasked).
     func edgeDissolve() -> some View {
         modifier(EdgeDissolveMask())
+    }
+
+    /// AppKit scroll views report geometry through their representable coordinator.
+    func edgeDissolve(state: EdgeDissolveScrollState) -> some View {
+        modifier(EdgeDissolveMask(externalState: state))
     }
 }

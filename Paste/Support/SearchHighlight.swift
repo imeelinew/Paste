@@ -14,6 +14,34 @@ enum SearchHighlight {
         return output
     }
 
+    /// AppKit counterpart used by reusable clipboard table cells.
+    static func nsAttributed(
+        _ string: String, query: String, font: NSFont, foreground: NSColor = .labelColor
+    ) -> NSAttributedString {
+        let output = NSMutableAttributedString(
+            string: string,
+            attributes: [.font: font, .foregroundColor: foreground]
+        )
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty, !string.isEmpty else {
+            NerdSymbolsFont.applyFallback(to: output, baseFont: font)
+            return output
+        }
+
+        let color = NSColor.controlAccentColor.withAlphaComponent(0.32)
+        for range in literalRanges(source: string, query: needle) {
+            output.addAttribute(.backgroundColor, value: color, range: NSRange(range, in: string))
+        }
+        if Pinyin.queryLooksLatin(needle) {
+            for range in Pinyin.matchingSourceRanges(query: needle, text: string) {
+                output.addAttribute(
+                    .backgroundColor, value: color, range: NSRange(range, in: string))
+            }
+        }
+        NerdSymbolsFont.applyFallback(to: output, baseFont: font)
+        return output
+    }
+
     /// Layers a blue background onto existing attributes (e.g. syntax-colored code) without clearing them.
     static func apply(to output: inout AttributedString, source: String, query: String) {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)

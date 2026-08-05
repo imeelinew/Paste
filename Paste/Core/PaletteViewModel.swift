@@ -45,6 +45,9 @@ final class PaletteViewModel: ObservableObject {
     @Published var imageQuickLookOpen = false
     /// Maintained by the palette view from the selected clip's kind (and menu state).
     var imageQuickLookAvailable = false
+    /// Current filtered-list size, mirrored by `RootPaletteView` so the panel can route arrow
+    /// keys reliably even when an embedded AppKit view is first responder.
+    var navigationItemCount = 0
 
     var menuOpen = false { didSet { onMenuOpenChanged?(menuOpen) } }
     var onMenuOpenChanged: ((Bool) -> Void)?
@@ -55,6 +58,17 @@ final class PaletteViewModel: ObservableObject {
 
     func requestAppMenuShortcut(_ shortcut: AppMenuShortcut) {
         appMenuShortcutRequest = AppMenuShortcutRequest(id: UUID(), shortcut: shortcut)
+    }
+
+    /// Moves the clipboard selection from the panel-level key route and signals the list to
+    /// minimally reveal it. Keeping this in the view model avoids depending on SwiftUI focus.
+    @discardableResult
+    func moveSelection(_ delta: Int) -> Bool {
+        guard !menuOpen, navigationItemCount > 0 else { return false }
+        selection = min(max(selection + delta, 0), navigationItemCount - 1)
+        imageQuickLookOpen = false
+        followToken = UUID()
+        return true
     }
 
     /// Space for `PalettePanel`: when the search field is empty, never type a leading space;

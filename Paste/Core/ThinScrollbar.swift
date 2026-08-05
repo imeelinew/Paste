@@ -1,16 +1,19 @@
 import AppKit
 import SwiftUI
 
+struct ThinScrollbarMetrics: Equatable {
+    /// Normalized vertical content offset, starting at zero at the resting top edge.
+    var offset: CGFloat = 0
+    var insetTop: CGFloat = 0
+    var content: CGFloat = 0
+    var viewport: CGFloat = 0
+    var scrollable: Bool { content > viewport + 1 }
+}
+
 /// A thin auto-hiding SwiftUI overlay scrollbar (hairline thumb while scrolling plus a hover-reveal rail), with all pointer handling isolated in the AppKit `ScrollbarInteraction` view to sidestep SwiftUI/AppKit event-routing gaps.
 struct ThinScrollbar: ViewModifier {
-    private struct Metrics: Equatable {
-        /// Raw `contentOffset.y`; with `safeAreaInset` bars it rests at `-insetTop`, so normalize by `insetTop` before mapping to a track fraction.
-        var offset: CGFloat = 0
-        var insetTop: CGFloat = 0
-        var content: CGFloat = 0
-        var viewport: CGFloat = 0
-        var scrollable: Bool { content > viewport + 1 }
-    }
+    var externalMetrics: ThinScrollbarMetrics? = nil
+    var externalScrollToken: UUID? = nil
 
     // Interaction signals — kept separate so each source of "show the bar" is independent.
     @State private var isScrolling = false
@@ -18,7 +21,7 @@ struct ThinScrollbar: ViewModifier {
     /// Mirrors the AppKit-side thumb drag (`ScrollbarInteraction` owns the actual drag state).
     @State private var isDragging = false
 
-    @State private var metrics = Metrics()
+    @State private var metrics = ThinScrollbarMetrics()
     /// Instantaneous "pointer is in the trailing hover zone" mirror, for edge-transition detection.
     @State private var inZone = false
     @State private var scrollStop: Task<Void, Never>?
@@ -39,24 +42,7 @@ struct ThinScrollbar: ViewModifier {
     private var expanded: Bool { isHoveringTrack || isDragging }
 
     func body(content: Content) -> some View {
-        content
-            .scrollIndicators(.hidden)  // drop the native scroller (and its flash) entirely
-            // Geometry drives the thumb's size/position, never its visibility.
-            .onScrollGeometryChange(for: Metrics.self) { geo in
-                Metrics(
-                    offset: geo.contentOffset.y,
-                    insetTop: geo.contentInsets.top,
-                    content: geo.contentSize.height,
-                    viewport: geo.containerSize.height
-                )
-            } action: { _, new in
-                metrics = new
-            }
-            // Scrolling reveals the thumb (not the rail) and re-hides a beat after it stops; a thumb drag has no scroll phase, so its own handlers own visibility.
-            .onScrollPhaseChange { _, phase in
-                guard !isDragging else { return }
-                phase == .idle ? scheduleScrollStop() : beganScrolling()
-            }
+        tracked(content.scrollIndicators(.hidden))  // drop the native scroller (and its flash) entirely
             .overlay(alignment: .topTrailing) { bar }
             // One tracking view over the whole trailing strip owns all pointer handling: transparent except over the thumb, where it takes the drag and forwards wheel events, and never flickers the rail the way a content-level hover did.
             .overlay {
@@ -71,6 +57,37 @@ struct ThinScrollbar: ViewModifier {
                     onDragChange: dragChanged
                 )
             }
+    }
+
+    @ViewBuilder
+    private func tracked<Tracked: View>(_ content: Tracked) -> some View {
+        if let externalMetrics {
+            content
+                .onAppear { metrics = externalMetrics }
+                .onChange(of: externalMetrics) { _, new in metrics = new }
+                .onChange(of: externalScrollToken) {
+                    beganScrolling()
+                    scheduleScrollStop()
+                }
+        } else {
+            content
+            // Geometry drives the thumb's size/position, never its visibility.
+            .onScrollGeometryChange(for: ThinScrollbarMetrics.self) { geo in
+                ThinScrollbarMetrics(
+                    offset: geo.contentOffset.y,
+                    insetTop: geo.contentInsets.top,
+                    content: geo.contentSize.height,
+                    viewport: geo.containerSize.height
+                )
+            } action: { _, new in
+                metrics = new
+            }
+            // Scrolling reveals the thumb (not the rail) and re-hides a beat after it stops; a thumb drag has no scroll phase, so its own handlers own visibility.
+            .onScrollPhaseChange { _, phase in
+                guard !isDragging else { return }
+                phase == .idle ? scheduleScrollStop() : beganScrolling()
+            }
+        }
     }
 
     @ViewBuilder private var bar: some View {
@@ -172,6 +189,11 @@ extension View {
     /// Attach to a `ScrollView` for a thin SwiftUI scrollbar that appears only while scrolling.
     func thinScrollbar() -> some View {
         modifier(ThinScrollbar())
+    }
+
+    /// AppKit scroll views report geometry and activity through their representable coordinator.
+    func thinScrollbar(metrics: ThinScrollbarMetrics, scrollToken: UUID) -> some View {
+        modifier(ThinScrollbar(externalMetrics: metrics, externalScrollToken: scrollToken))
     }
 
     /// Attach *inside* a `ScrollView` (on its content) to remove the native scrollers so only our `thinScrollbar` shows.

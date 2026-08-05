@@ -46,6 +46,21 @@ final class PalettePanel: NSPanel {
             }
         }
         if event.type == .keyDown,
+            event.modifierFlags.intersection(Self.shortcutModifiers).isEmpty,
+            paletteViewModel?.menuOpen != true
+        {
+            let delta: Int?
+            switch Int(event.keyCode) {
+            case kVK_DownArrow: delta = 1
+            case kVK_UpArrow: delta = -1
+            default: delta = nil
+            }
+            if let delta, paletteViewModel?.moveSelection(delta) == true {
+                ImageQuickLook.close()
+                return
+            }
+        }
+        if event.type == .keyDown,
             Int(event.keyCode) == kVK_Space,
             event.modifierFlags.intersection(Self.shortcutModifiers).isEmpty,
             paletteViewModel?.handleSpaceKey() == true

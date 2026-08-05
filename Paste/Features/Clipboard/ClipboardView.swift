@@ -11,88 +11,636 @@ struct ClipboardList: View {
     let onActivate: () -> Void
     let onActions: (ClipboardItem) -> Void
     @EnvironmentObject private var store: ClipboardStore
-
-    private enum Row: Identifiable {
-        case header(String)
-        case item(ClipboardItem)
-        var id: String {
-            switch self {
-            case .header(let title): return "header-" + title
-            case .item(let item): return item.id.uuidString
-            }
-        }
-    }
-
-    /// Whether the selection sits on flat index 0, whose section header should stay visible.
-    private var firstRowSelected: Bool {
-        selectedID != nil && selectedID == results.first?.id
-    }
-
-    /// Pinned entries come first from the store and share one "Pinned" header; the rest are newest-first, so grouping walks and emits a date header whenever the bucket changes — mirrors the launcher's sectioning.
-    private var rows: [Row] {
-        var rows: [Row] = []
-        var currentTitle: String?
-        for item in results {
-            let title = item.isPinned ? "Pinned" : DateBucket(for: item.createdAt).title
-            if title != currentTitle {
-                rows.append(.header(title))
-                currentTitle = title
-            }
-            rows.append(.item(item))
-        }
-        return rows
-    }
+    @State private var geometry = ClipboardTableGeometry()
+    @State private var scrollActivity = UUID()
 
     var body: some View {
-        let rows = rows
-        return ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(rows) { row in
-                        switch row {
-                        case .header(let title):
-                            SectionHeader(title: title, isFirst: row.id == rows.first?.id)
-                        case .item(let item):
-                            ClipboardRow(
-                                item: item, selected: item.id == selectedID,
-                                query: query,
-                                imageURL: store.imageURL(for: item)
-                            )
-                            .contentShape(Rectangle())
-                            // Single click selects instantly (double-click-to-paste is a `.simultaneousGesture`, so the tap never waits on the double-click timeout); right-click uses the lightweight catcher, since `.contextMenu` stalls clicks for seconds in a LazyVStack.
-                            .onTapGesture { onSelect(item) }
-                            .simultaneousGesture(
-                                TapGesture(count: 2).onEnded {
-                                    onSelect(item)
-                                    onActivate()
-                                }
-                            )
-                            .onRightClick { onActions(item) }
-                        }
-                    }
-                }
-                .padding(.horizontal, Theme.Spacing.md)
-                .padding(.top, Theme.Spacing.xs)
-                .padding(.bottom, Theme.Spacing.md)
-                .hideNativeScrollers()
-                .scrollOriginAnchor()
+        ClipboardTableRepresentable(
+            results: results,
+            selectedID: selectedID,
+            query: query,
+            scroll: scroll,
+            store: store,
+            onSelect: onSelect,
+            onActivate: onActivate,
+            onActions: onActions,
+            onGeometryChange: { geometry = $0 },
+            onScrollActivity: { scrollActivity = UUID() }
+        )
+        .edgeDissolve(state: geometry.dissolve)
+        .thinScrollbar(metrics: geometry.scrollbar, scrollToken: scrollActivity)
+    }
+}
+
+private struct ClipboardTableGeometry: Equatable {
+    var scrollbar = ThinScrollbarMetrics()
+    var dissolve = EdgeDissolveScrollState()
+}
+
+private enum ClipboardTableRow {
+    case header(String)
+    case item(ClipboardItem)
+
+    var id: String {
+        switch self {
+        case .header(let title): return "header-" + title
+        case .item(let item): return item.id.uuidString
+        }
+    }
+}
+
+private struct ClipboardTableRepresentable: NSViewRepresentable {
+    let results: [ClipboardItem]
+    let selectedID: ClipboardItem.ID?
+    let query: String
+    let scroll: ScrollIntent
+    let store: ClipboardStore
+    let onSelect: (ClipboardItem) -> Void
+    let onActivate: () -> Void
+    let onActions: (ClipboardItem) -> Void
+    let onGeometryChange: (ClipboardTableGeometry) -> Void
+    let onScrollActivity: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> ClipboardTableScrollView {
+        context.coordinator.makeScrollView()
+    }
+
+    func updateNSView(_ scrollView: ClipboardTableScrollView, context: Context) {
+        context.coordinator.update(
+            results: results,
+            selectedID: selectedID,
+            query: query,
+            scroll: scroll,
+            locale: context.environment.locale,
+            store: store,
+            onSelect: onSelect,
+            onActivate: onActivate,
+            onActions: onActions,
+            onGeometryChange: onGeometryChange,
+            onScrollActivity: onScrollActivity
+        )
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+        private var rows: [ClipboardTableRow] = []
+        private var selectedID: ClipboardItem.ID?
+        private var query = ""
+        private var locale = Locale.current
+        private weak var store: ClipboardStore?
+        private var onSelect: ((ClipboardItem) -> Void)?
+        private var onActivate: (() -> Void)?
+        private var onActions: ((ClipboardItem) -> Void)?
+        private var onGeometryChange: ((ClipboardTableGeometry) -> Void)?
+        private var onScrollActivity: (() -> Void)?
+        private var boundsToken: NotificationToken?
+        private weak var hostedTableView: ClipboardTableView?
+        private var lastScroll: ScrollIntent?
+        private var applyingSelection = false
+        private var lastGeometry = ClipboardTableGeometry()
+        private var lastBoundsOrigin: NSPoint?
+
+        private let itemIdentifier = NSUserInterfaceItemIdentifier("ClipboardItemCell")
+        private let headerIdentifier = NSUserInterfaceItemIdentifier("ClipboardHeaderCell")
+
+        func makeScrollView() -> ClipboardTableScrollView {
+            let tableView = ClipboardTableView()
+            tableView.headerView = nil
+            tableView.backgroundColor = .clear
+            tableView.usesAlternatingRowBackgroundColors = false
+            tableView.style = .plain
+            tableView.rowSizeStyle = .custom
+            tableView.gridStyleMask = []
+            tableView.intercellSpacing = .zero
+            tableView.selectionHighlightStyle = .none
+            tableView.allowsMultipleSelection = false
+            tableView.allowsEmptySelection = false
+            tableView.focusRingType = .none
+            tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
+            tableView.dataSource = self
+            tableView.delegate = self
+            tableView.doubleAction = #selector(doubleClicked(_:))
+            tableView.target = self
+            tableView.onRightClick = { [weak self] row in self?.rightClicked(row) }
+            hostedTableView = tableView
+
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Clipboard"))
+            column.resizingMask = .autoresizingMask
+            tableView.addTableColumn(column)
+
+            let scrollView = ClipboardTableScrollView()
+            scrollView.drawsBackground = false
+            scrollView.borderType = .noBorder
+            scrollView.hasVerticalScroller = false
+            scrollView.hasHorizontalScroller = false
+            scrollView.automaticallyAdjustsContentInsets = false
+            scrollView.contentInsets = NSEdgeInsets(
+                top: Theme.Spacing.xs,
+                left: 0,
+                bottom: Theme.Spacing.md,
+                right: 0
+            )
+            scrollView.contentView.drawsBackground = false
+            scrollView.documentView = tableView
+            scrollView.onGeometryChange = { [weak self] scrolling in
+                self?.reportGeometry(scrolling: scrolling)
             }
-            .edgeDissolve()
-            .thinScrollbar()
-            .onChange(of: scroll) { _, scroll in
-                switch scroll.kind {
-                case .top:
-                    proxy.scrollToOrigin()
-                case .follow:
-                    // On the first row, snap to the origin so its section header shows too — a nil anchor won't, since the row is already visible.
-                    if firstRowSelected {
-                        proxy.scrollToOrigin()
-                    } else if let selectedID {
-                        proxy.reveal(selectedID.uuidString)
-                    }
+            scrollView.contentView.postsBoundsChangedNotifications = true
+            let token = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.boundsChanged(scrollView.contentView.bounds.origin) }
+            }
+            boundsToken = NotificationToken(token, center: .default)
+            return scrollView
+        }
+
+        func update(
+            results: [ClipboardItem], selectedID: ClipboardItem.ID?, query: String,
+            scroll: ScrollIntent, locale: Locale, store: ClipboardStore,
+            onSelect: @escaping (ClipboardItem) -> Void,
+            onActivate: @escaping () -> Void,
+            onActions: @escaping (ClipboardItem) -> Void,
+            onGeometryChange: @escaping (ClipboardTableGeometry) -> Void,
+            onScrollActivity: @escaping () -> Void
+        ) {
+            guard let tableView = tableView else { return }
+            self.store = store
+            self.onSelect = onSelect
+            self.onActivate = onActivate
+            self.onActions = onActions
+            self.onGeometryChange = onGeometryChange
+            self.onScrollActivity = onScrollActivity
+
+            let newRows = Self.makeRows(results)
+            let contentChanged = rows.map(\.id) != newRows.map(\.id)
+            let appearanceChanged = self.query != query || self.locale != locale
+            rows = newRows
+            self.query = query
+            self.locale = locale
+
+            if contentChanged || appearanceChanged {
+                tableView.reloadData()
+            }
+            applySelection(selectedID, to: tableView)
+
+            if lastScroll != scroll {
+                lastScroll = scroll
+                apply(scroll, selectedID: selectedID, to: tableView)
+            }
+            reportGeometry(scrolling: false)
+        }
+
+        private var tableView: ClipboardTableView? {
+            hostedTableView
+        }
+
+        private static func makeRows(_ results: [ClipboardItem]) -> [ClipboardTableRow] {
+            var rows: [ClipboardTableRow] = []
+            var currentTitle: String?
+            for item in results {
+                let title = item.isPinned ? "Pinned" : DateBucket(for: item.createdAt).title
+                if title != currentTitle {
+                    rows.append(.header(title))
+                    currentTitle = title
+                }
+                rows.append(.item(item))
+            }
+            return rows
+        }
+
+        func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
+
+        func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+            guard rows.indices.contains(row), case .item = rows[row] else { return false }
+            return true
+        }
+
+        func tableViewSelectionDidChange(_ notification: Notification) {
+            guard !applyingSelection, let tableView = notification.object as? NSTableView else {
+                return
+            }
+            let row = tableView.selectedRow
+            guard rows.indices.contains(row), case .item(let item) = rows[row] else { return }
+            selectedID = item.id
+            updateVisibleSelection(in: tableView)
+            onSelect?(item)
+        }
+
+        func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+            guard rows.indices.contains(row) else { return 0 }
+            switch rows[row] {
+            case .item: return 36
+            case .header: return row == 0 ? 24 : 32
+            }
+        }
+
+        func tableView(
+            _ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int
+        ) -> NSView? {
+            guard rows.indices.contains(row) else { return nil }
+            switch rows[row] {
+            case .header(let title):
+                let view =
+                    tableView.makeView(withIdentifier: headerIdentifier, owner: self)
+                        as? ClipboardSectionCellView ?? ClipboardSectionCellView()
+                view.identifier = headerIdentifier
+                view.configure(
+                    title: Self.localized(title, locale: locale), isFirst: row == 0)
+                return view
+            case .item(let item):
+                let view =
+                    tableView.makeView(withIdentifier: itemIdentifier, owner: self)
+                        as? ClipboardItemCellView ?? ClipboardItemCellView()
+                view.identifier = itemIdentifier
+                view.configure(
+                    item: item,
+                    selected: item.id == selectedID,
+                    query: query,
+                    imageURL: store?.imageURL(for: item),
+                    imageTitle: String(localized: "Image", locale: locale)
+                )
+                return view
+            }
+        }
+
+        @objc private func doubleClicked(_ sender: NSTableView) {
+            let row = sender.clickedRow
+            guard rows.indices.contains(row), case .item(let item) = rows[row] else { return }
+            onSelect?(item)
+            onActivate?()
+        }
+
+        private func rightClicked(_ row: Int) {
+            guard let tableView, rows.indices.contains(row), case .item(let item) = rows[row] else {
+                return
+            }
+            applyingSelection = true
+            tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            applyingSelection = false
+            selectedID = item.id
+            updateVisibleSelection(in: tableView)
+            onActions?(item)
+        }
+
+        private func applySelection(_ id: ClipboardItem.ID?, to tableView: NSTableView) {
+            selectedID = id
+            let row = rows.firstIndex {
+                if case .item(let item) = $0 { return item.id == id }
+                return false
+            }
+            applyingSelection = true
+            if let row {
+                tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            } else {
+                tableView.deselectAll(nil)
+            }
+            applyingSelection = false
+            updateVisibleSelection(in: tableView)
+        }
+
+        private func updateVisibleSelection(in tableView: NSTableView) {
+            tableView.enumerateAvailableRowViews { _, row in
+                guard self.rows.indices.contains(row), case .item(let item) = self.rows[row]
+                else { return }
+                (tableView.view(atColumn: 0, row: row, makeIfNecessary: false)
+                    as? ClipboardItemCellView)?.setSelected(item.id == self.selectedID)
+            }
+        }
+
+        private func apply(
+            _ scroll: ScrollIntent, selectedID: ClipboardItem.ID?, to tableView: NSTableView
+        ) {
+            switch scroll.kind {
+            case .top:
+                scrollToTop(tableView)
+            case .follow:
+                if selectedID == resultsFirstItemID {
+                    scrollToTop(tableView)
+                } else if let row = rows.firstIndex(where: {
+                    if case .item(let item) = $0 { return item.id == selectedID }
+                    return false
+                }) {
+                    tableView.scrollRowToVisible(row)
                 }
             }
         }
+
+        private var resultsFirstItemID: ClipboardItem.ID? {
+            rows.compactMap {
+                if case .item(let item) = $0 { return item.id }
+                return nil
+            }.first
+        }
+
+        private func scrollToTop(_ tableView: NSTableView) {
+            guard let scrollView = tableView.enclosingScrollView else { return }
+            let clip = scrollView.contentView
+            clip.scroll(to: NSPoint(x: 0, y: -scrollView.contentInsets.top))
+            scrollView.reflectScrolledClipView(clip)
+        }
+
+        private func reportGeometry(scrolling: Bool) {
+            guard let tableView, let scrollView = tableView.enclosingScrollView else { return }
+            let viewport = scrollView.contentView.bounds.height
+            let content =
+                tableView.bounds.height + scrollView.contentInsets.top
+                + scrollView.contentInsets.bottom
+            let maxOffset = max(0, content - viewport)
+            let offset = min(
+                maxOffset,
+                max(0, scrollView.contentView.bounds.minY + scrollView.contentInsets.top)
+            )
+            let geometry = ClipboardTableGeometry(
+                scrollbar: ThinScrollbarMetrics(
+                    offset: offset, insetTop: 0, content: content, viewport: viewport),
+                dissolve: EdgeDissolveScrollState(
+                    top: offset, bottom: max(0, maxOffset - offset),
+                    canScroll: content > viewport + 1)
+            )
+            guard geometry != lastGeometry || scrolling else { return }
+            lastGeometry = geometry
+            let geometryCallback = onGeometryChange
+            let activityCallback = scrolling ? onScrollActivity : nil
+            DispatchQueue.main.async {
+                geometryCallback?(geometry)
+                activityCallback?()
+            }
+        }
+
+        private func boundsChanged(_ origin: NSPoint) {
+            let scrolling = lastBoundsOrigin.map { $0 != origin } ?? false
+            lastBoundsOrigin = origin
+            reportGeometry(scrolling: scrolling)
+        }
+
+        private static func localized(_ title: String, locale: Locale) -> String {
+            switch title {
+            case "Pinned": return String(localized: "Pinned", locale: locale)
+            case "Today": return String(localized: "Today", locale: locale)
+            case "Yesterday": return String(localized: "Yesterday", locale: locale)
+            case "This Week": return String(localized: "This Week", locale: locale)
+            case "This Month": return String(localized: "This Month", locale: locale)
+            default: return String(localized: "Earlier", locale: locale)
+            }
+        }
+    }
+}
+
+private final class ClipboardTableScrollView: NSScrollView {
+    var onGeometryChange: ((Bool) -> Void)?
+
+    override func layout() {
+        super.layout()
+        onGeometryChange?(false)
+    }
+}
+
+private final class ClipboardTableView: NSTableView {
+    var onRightClick: ((Int) -> Void)?
+
+    override var acceptsFirstResponder: Bool { false }
+
+    override func rightMouseDown(with event: NSEvent) {
+        let row = row(at: convert(event.locationInWindow, from: nil))
+        guard row >= 0 else { return }
+        onRightClick?(row)
+    }
+}
+
+private final class ClipboardSectionCellView: NSTableCellView {
+    private let titleLabel = NSTextField(labelWithString: "")
+    private var topConstraint: NSLayoutConstraint!
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+
+        let size = NSFont.preferredFont(forTextStyle: .subheadline).pointSize
+        titleLabel.font = .systemFont(ofSize: size, weight: .medium)
+        titleLabel.textColor = .secondaryLabelColor
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.maximumNumberOfLines = 1
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleLabel)
+
+        topConstraint = titleLabel.topAnchor.constraint(equalTo: topAnchor)
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
+            topConstraint,
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configure(title: String, isFirst: Bool) {
+        titleLabel.stringValue = title
+        topConstraint.constant = isFirst ? Theme.Spacing.xs : Theme.Spacing.sectionSpacing
+    }
+}
+
+private final class ClipboardItemCellView: NSTableCellView {
+    private let highlightView = NSView()
+    private let thumbnailView = ClipboardThumbnailView()
+    private let titleLabel = NSTextField(labelWithString: "")
+    private var selected = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+
+        highlightView.wantsLayer = true
+        highlightView.layer?.cornerRadius = Theme.Radius.row
+        highlightView.layer?.cornerCurve = .continuous
+        highlightView.translatesAutoresizingMaskIntoConstraints = false
+
+        thumbnailView.translatesAutoresizingMaskIntoConstraints = false
+
+        titleLabel.font = .preferredFont(forTextStyle: .body)
+        titleLabel.textColor = .labelColor
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.maximumNumberOfLines = 1
+        titleLabel.cell?.usesSingleLineMode = true
+        titleLabel.cell?.wraps = false
+        titleLabel.cell?.isScrollable = false
+        titleLabel.cell?.truncatesLastVisibleLine = true
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        addSubview(highlightView)
+        addSubview(thumbnailView)
+        addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            highlightView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            highlightView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            highlightView.topAnchor.constraint(equalTo: topAnchor),
+            highlightView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            thumbnailView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            thumbnailView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            thumbnailView.widthAnchor.constraint(equalToConstant: Theme.Size.rowIcon),
+            thumbnailView.heightAnchor.constraint(equalToConstant: Theme.Size.rowIcon),
+
+            titleLabel.leadingAnchor.constraint(
+                equalTo: thumbnailView.trailingAnchor, constant: Theme.Spacing.lg),
+            titleLabel.trailingAnchor.constraint(
+                lessThanOrEqualTo: trailingAnchor, constant: -16),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            titleLabel.heightAnchor.constraint(lessThanOrEqualToConstant: Theme.Size.rowIcon),
+        ])
+        updateSelectionColor()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        thumbnailView.prepareForReuse()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateSelectionColor()
+        thumbnailView.refreshAppearance()
+    }
+
+    func configure(
+        item: ClipboardItem, selected: Bool, query: String, imageURL: URL?, imageTitle: String
+    ) {
+        self.selected = selected
+        updateSelectionColor()
+
+        switch item.kind {
+        case .text, .code:
+            let text = String((item.text ?? "").prefix(200)).trimmingCharacters(
+                in: .whitespacesAndNewlines)
+            let lineEnd = text.firstIndex(where: { $0.isNewline }) ?? text.endIndex
+            let preview = String(text[..<lineEnd])
+            titleLabel.attributedStringValue = SearchHighlight.nsAttributed(
+                preview, query: query, font: .preferredFont(forTextStyle: .body))
+        case .image:
+            titleLabel.stringValue = imageTitle
+            titleLabel.font = .preferredFont(forTextStyle: .body)
+            titleLabel.textColor = .labelColor
+        }
+        thumbnailView.configure(item: item, imageURL: imageURL)
+    }
+
+    func setSelected(_ selected: Bool) {
+        guard self.selected != selected else { return }
+        self.selected = selected
+        updateSelectionColor()
+    }
+
+    private func updateSelectionColor() {
+        highlightView.layer?.backgroundColor =
+            selected ? NSColor.labelColor.withAlphaComponent(0.10).cgColor : NSColor.clear.cgColor
+    }
+}
+
+private final class ClipboardThumbnailView: NSView {
+    private let symbolView = NSImageView()
+    private var representedID: ClipboardItem.ID?
+    private var loadTask: Task<Void, Never>?
+    private var displayedImage: NSImage?
+    private var symbolName = "photo"
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = Theme.Radius.thumbnail
+        layer?.cornerCurve = .continuous
+        layer?.masksToBounds = true
+        layer?.contentsGravity = .resizeAspectFill
+
+        symbolView.imageScaling = .scaleProportionallyDown
+        symbolView.contentTintColor = .secondaryLabelColor
+        symbolView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(symbolView)
+        NSLayoutConstraint.activate([
+            symbolView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            symbolView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            symbolView.widthAnchor.constraint(equalToConstant: 14),
+            symbolView.heightAnchor.constraint(equalToConstant: 14),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        refreshAppearance()
+    }
+
+    func configure(item: ClipboardItem, imageURL: URL?) {
+        loadTask?.cancel()
+        representedID = item.id
+        displayedImage = nil
+
+        switch item.kind {
+        case .text:
+            showSymbol("text.menu")
+        case .code:
+            showSymbol("chevron.left.forwardslash.chevron.right")
+        case .image:
+            showSymbol("photo")
+            guard let imageURL else { return }
+            if let cached = ImageThumbnail.cached(imageURL, maxPixel: 64) {
+                showImage(cached)
+                return
+            }
+            let id = item.id
+            loadTask = Task { @MainActor [weak self] in
+                let image = await ImageThumbnail.loadAsync(imageURL, maxPixel: 64)
+                guard !Task.isCancelled, let self, representedID == id, let image else { return }
+                showImage(image)
+            }
+        }
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        loadTask?.cancel()
+        loadTask = nil
+        representedID = nil
+        displayedImage = nil
+        showSymbol("photo")
+    }
+
+    func refreshAppearance() {
+        guard let displayedImage else {
+            showSymbol(symbolName)
+            return
+        }
+        showImage(displayedImage)
+    }
+
+    private func showSymbol(_ name: String) {
+        symbolName = name
+        displayedImage = nil
+        layer?.contents = nil
+        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
+        symbolView.isHidden = false
+        let pointSize = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+        let hierarchy = NSImage.SymbolConfiguration(hierarchicalColor: .secondaryLabelColor)
+        symbolView.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(pointSize.applying(hierarchy))
+    }
+
+    private func showImage(_ image: NSImage) {
+        displayedImage = image
+        symbolView.isHidden = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        layer?.contentsScale = scale
+        layer?.contents = image.layerContents(forContentsScale: scale)
     }
 }
 
@@ -174,80 +722,6 @@ enum ClipboardActionsMenu {
                 store.remove(item)
             })
         return PopoverMenuContent(items: items)
-    }
-}
-
-private struct ClipboardRow: View {
-    let item: ClipboardItem
-    let selected: Bool
-    let query: String
-    let imageURL: URL?
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.lg) {
-            thumbnail
-            Group {
-                if item.kind == .image {
-                    Text("Image")
-                } else {
-                    Text(SearchHighlight.attributed(previewText, query: query))
-                }
-            }
-            .font(Theme.Typography.menuRow)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
-                .fill(selected ? Theme.Colors.selection : Color.clear)
-        )
-    }
-
-    private var previewText: String {
-        switch item.kind {
-        // Single-line row, so cap before trimming — never walk a multi-MB clipboard string per row.
-        case .text, .code:
-            return String((item.text ?? "").prefix(200)).trimmingCharacters(
-                in: .whitespacesAndNewlines)
-        case .image: return ""
-        }
-    }
-
-    @ViewBuilder
-    private var thumbnail: some View {
-        switch item.kind {
-        case .text:
-            glyphTile("text.menu")
-        case .code:
-            glyphTile("chevron.left.forwardslash.chevron.right")
-        case .image:
-            AsyncThumbnail(url: imageURL, maxPixel: 64) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: Theme.Size.rowIcon, height: Theme.Size.rowIcon)
-                    .clipShape(
-                        RoundedRectangle(cornerRadius: Theme.Radius.thumbnail, style: .continuous))
-            } placeholder: {
-                glyphTile("photo")
-            }
-        }
-    }
-
-    /// An SF Symbol centered on a rounded tile, sized to match the launcher's app icon so text and image rows share one thumbnail shape.
-    private func glyphTile(_ systemName: String) -> some View {
-        RoundedRectangle(cornerRadius: Theme.Radius.thumbnail, style: .continuous)
-            .fill(Theme.Colors.controlSurface)
-            .frame(width: Theme.Size.rowIcon, height: Theme.Size.rowIcon)
-            .overlay(
-                Image(systemName: systemName)
-                    .font(.system(size: 12))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.secondary)
-            )
     }
 }
 

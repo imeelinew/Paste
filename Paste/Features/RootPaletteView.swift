@@ -187,8 +187,12 @@ struct RootPaletteView: View {
             scroll = ScrollIntent(kind: .follow)
         }
         .onAppear {
+            vm.navigationItemCount = clips.count
             searchFocused = true
             syncImageQuickLook(for: selected)
+        }
+        .onChange(of: clips.count) { _, count in
+            vm.navigationItemCount = count
         }
         .onChange(of: selected?.id) {
             syncImageQuickLook(for: selected)
@@ -276,7 +280,7 @@ struct RootPaletteView: View {
         HStack(alignment: .center, spacing: Theme.Spacing.md) {
             TextField(
                 "", text: $vm.query,
-                prompt: Text("Type to filter entries…")
+                prompt: Text("Search")
                     .foregroundStyle(Theme.Colors.textTertiary)
             )
             .textFieldStyle(.plain)
@@ -332,9 +336,8 @@ struct RootPaletteView: View {
     }
 
     private func move(_ delta: Int) {
-        guard !clipResults.isEmpty else { return }
-        vm.selection = min(max(selection + delta, 0), clipResults.count - 1)
-        scroll = ScrollIntent(kind: .follow)
+        vm.navigationItemCount = clipResults.count
+        _ = vm.moveSelection(delta)
     }
 
     private func moveMenu(_ delta: Int) {
