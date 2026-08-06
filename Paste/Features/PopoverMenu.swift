@@ -154,15 +154,12 @@ private struct PopoverMenuRow: View {
     }
 }
 
-/// App icon for a menu row or bar control: seeds from the warm `IconCache` so the paste target paints on the first frame, decoding off-main only on a miss.
+/// App icon for a menu row or bar control: seeds from the warm `IconCache` so the paste target
+/// paints on the first frame, decoding off-main only on a miss. Reloads whenever `path` changes —
+/// the bottom-bar instance stays mounted across palette shows, so @State must not keep a prior app's icon.
 struct MenuFileIcon: View {
     let path: String
     @State private var image: NSImage?
-
-    init(path: String) {
-        self.path = path
-        _image = State(initialValue: IconCache.cached(forFile: path))
-    }
 
     var body: some View {
         Group {
@@ -174,7 +171,11 @@ struct MenuFileIcon: View {
         }
         .frame(width: Theme.Size.menuIcon, height: Theme.Size.menuIcon)
         .task(id: path) {
-            guard image == nil else { return }
+            if let cached = IconCache.cached(forFile: path) {
+                image = cached
+                return
+            }
+            image = nil
             image = await IconCache.loadAsync(forFile: path)
         }
     }
