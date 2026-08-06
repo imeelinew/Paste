@@ -5,59 +5,40 @@ extension Notification.Name {
 }
 
 enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
-    case general, clipboard
+    case general, appearance, history
 
     var id: Int { rawValue }
 
-    var title: LocalizedStringKey {
+    var localizationKey: String.LocalizationValue {
         switch self {
         case .general: return "General"
-        case .clipboard: return "Clipboard"
+        case .appearance: return "Appearance"
+        case .history: return "History"
         }
     }
 
-}
-
-struct SettingsRootView: View {
-    @State private var tab: SettingsTab
-    @ObservedObject private var settings = AppCore.shared.settings
-
-    init(initialTab: SettingsTab = .general) {
-        _tab = State(initialValue: initialTab)
+    /// Stable identifier for `MacAppSettingsUI` tab items.
+    var tabIdentifier: String {
+        switch self {
+        case .general: return "general"
+        case .appearance: return "appearance"
+        case .history: return "history"
+        }
     }
 
-    var body: some View {
-        ScrollViewReader { proxy in
-            Form {
-                GeneralSettingsView()
-                ClipboardSettingsView()
-                DangerZoneSettingsView()
-            }
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
-            .contentMargins(.horizontal, 20, for: .scrollContent)
-            .contentMargins(.top, 8, for: .scrollContent)
-            .overlayScroller()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
-            .onAppear {
-                DispatchQueue.main.async {
-                    proxy.scrollTo(tab, anchor: .top)
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .pasteSelectSettingsTab)) { note in
-                if let target = note.object as? SettingsTab {
-                    tab = target
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        proxy.scrollTo(target, anchor: .top)
-                    }
-                }
-            }
+    var systemImage: String {
+        switch self {
+        case .general: return "gearshape"
+        case .appearance: return "eyeglasses"
+        case .history: return "clock"
         }
-        .background {
-            SettingsWindowConfigurator()
-                .frame(width: 0, height: 0)
+    }
+
+    var preferredPaneHeight: CGFloat {
+        switch self {
+        case .general: return 300
+        case .appearance: return 180
+        case .history: return 360
         }
-        .environment(\.locale, settings.language.locale)
     }
 }

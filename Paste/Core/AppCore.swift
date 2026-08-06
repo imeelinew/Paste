@@ -15,6 +15,9 @@ final class AppCore: ObservableObject {
     private lazy var windowController = PaletteWindowController(core: self)
     private let activationPolicy = ActivationPolicyCoordinator()
     private lazy var auxWindows = AuxWindowController(activationPolicy: activationPolicy)
+    private lazy var settingsWindowController = PasteSettingsWindowController(
+        activationPolicy: activationPolicy
+    )
     private var aboutCloseToken: NotificationToken?
     private var transferTask: Task<Void, Never>?
     private var transferGeneration = UUID()
@@ -63,22 +66,16 @@ final class AppCore: ObservableObject {
     }
 
     func handleReopen() {
+        if settingsWindowController.isVisible {
+            settingsWindowController.focus()
+            return
+        }
         if auxWindows.focusExisting() { return }
         showPalette()
     }
 
     func showSettings(tab: SettingsTab = .general) {
-        let isNew = auxWindows.show(
-            id: "settings",
-            title: String(localized: "Paste Settings", locale: settings.language.locale),
-            size: CGSize(width: 440, height: 632),
-            seamlessTitleBar: false
-        ) {
-            SettingsRootView(initialTab: tab)
-        }
-        if !isNew {
-            NotificationCenter.default.post(name: .pasteSelectSettingsTab, object: tab)
-        }
+        settingsWindowController.show(tab: tab)
     }
 
     func showAbout() {

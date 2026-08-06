@@ -2,81 +2,88 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ClipboardSettingsView: View {
+struct HistorySettingsView: View {
     @ObservedObject private var settings = AppCore.shared.settings
-    @ObservedObject private var systemClipboardHistory = AppCore.shared.systemClipboardHistory
+    @State private var confirmingClear = false
 
     var body: some View {
-        SettingsPane(tab: .clipboard) {
-            SettingsCard(header: "Shortcut") {
-                SettingsRow(
-                    title: "Show Paste"
-                ) {
-                    ShortcutRecorder()
+        PreferencesForm {
+            PreferencesRow(label: "Keep history for") {
+                Picker("Keep history for", selection: $settings.clipboardRetention) {
+                    ForEach(ClipboardRetention.allCases) { retention in
+                        Text(LocalizedStringKey(retention.title)).tag(retention)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .onChange(of: settings.clipboardRetention) {
+                    let store = AppCore.shared.clipboardStore
+                    store.maxAge = settings.clipboardRetention.maxAge
+                    store.enforceLimits()
                 }
             }
 
-            SettingsCard(header: "System Clipboard") {
-                SettingsRow(
-                    title: "Disable System Clipboard History"
-                ) {
-                    Toggle(
-                        "Disable System Clipboard History",
-                        isOn: Binding(
-                            get: { systemClipboardHistory.isDisabled },
-                            set: { systemClipboardHistory.setDisabled($0) }
-                        )
-                    )
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .accessibilityLabel("Disable System Clipboard History")
-                }
-            }
+            PreferencesRow(label: "Disabled Applications", alignment: .top) {
+                VStack(spacing: 0) {
+                    ForEach(settings.clipboardDisabledApps, id: \.self) { bundleID in
+                        DisabledAppRow(bundleID: bundleID) {
+                            settings.clipboardDisabledApps.removeAll { $0 == bundleID }
+                        }
+                        .padding(.horizontal, Theme.Spacing.lg)
+                        .padding(.vertical, Theme.Spacing.md)
 
-            SettingsCard(header: "History") {
-                SettingsRow(
-                    title: "Keep history for"
-                ) {
-                    Picker("", selection: $settings.clipboardRetention) {
-                        ForEach(ClipboardRetention.allCases) { retention in
-                            Text(LocalizedStringKey(retention.title)).tag(retention)
+                        if bundleID != settings.clipboardDisabledApps.last {
+                            Divider()
                         }
                     }
-                    .labelsHidden()
-                    .fixedSize()
-                    .onChange(of: settings.clipboardRetention) {
-                        let store = AppCore.shared.clipboardStore
-                        store.maxAge = settings.clipboardRetention.maxAge
-                        store.enforceLimits()
+
+                    HStack(spacing: Theme.Spacing.lg) {
+                        Spacer(minLength: Theme.Spacing.xl)
+                        Button(action: addExcludedApp) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Add")
+                    }
+                    .padding(.horizontal, Theme.Spacing.xl)
+                    .padding(.vertical, Theme.Spacing.md)
+                    .overlay(alignment: .top) {
+                        if !settings.clipboardDisabledApps.isEmpty {
+                            Divider()
+                        }
                     }
                 }
+                .background {
+                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                }
+                .frame(maxWidth: PreferencesMetrics.appListMaxWidth, alignment: .leading)
             }
 
-            SettingsCard(header: "Disabled Applications") {
-                ForEach(settings.clipboardDisabledApps, id: \.self) { bundleID in
-                    DisabledAppRow(bundleID: bundleID) {
-                        settings.clipboardDisabledApps.removeAll { $0 == bundleID }
-                    }
-                }
+            PreferencesDivider()
 
-                HStack(spacing: Theme.Spacing.lg) {
-                    Spacer(minLength: Theme.Spacing.xl)
-                    Button(action: addExcludedApp) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Add")
-                }
-                .padding(.horizontal, Theme.Spacing.xl)
-                .padding(.vertical, Theme.Spacing.md)
+            PreferencesRow(label: "Clear history") {
+                Button("Clear") { confirmingClear = true }
+                    .foregroundStyle(.red)
+                    .controlSize(.regular)
             }
         }
-        .onAppear { systemClipboardHistory.refresh() }
-        .onReceive(
-            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-        ) { _ in
-            systemClipboardHistory.refresh()
+        .confirmationDialog(
+            "Clear clipboard history?",
+            isPresented: $confirmingClear,
+            titleVisibility: .visible
+        ) {
+            Button("Clear History", role: .destructive) {
+                AppCore.shared.clipboardStore.clearAll()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This can't be undone.")
         }
     }
 
@@ -99,34 +106,6 @@ struct ClipboardSettingsView: View {
             apps.append(bundleID)
         }
         settings.clipboardDisabledApps = apps
-    }
-}
-
-struct DangerZoneSettingsView: View {
-    @State private var confirmingClear = false
-
-    var body: some View {
-        SettingsCard(header: "Danger Zone") {
-            SettingsRow(
-                title: "Clear history"
-            ) {
-                Button("Clear") { confirmingClear = true }
-                    .foregroundStyle(.red)
-                    .controlSize(.regular)
-            }
-        }
-        .confirmationDialog(
-            "Clear clipboard history?",
-            isPresented: $confirmingClear,
-            titleVisibility: .visible
-        ) {
-            Button("Clear History", role: .destructive) {
-                AppCore.shared.clipboardStore.clearAll()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This can't be undone.")
-        }
     }
 }
 

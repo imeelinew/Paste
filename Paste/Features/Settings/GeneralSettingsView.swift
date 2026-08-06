@@ -3,54 +3,77 @@ import SwiftUI
 
 struct GeneralSettingsView: View {
     @ObservedObject private var settings = AppCore.shared.settings
+    @ObservedObject private var systemClipboardHistory = AppCore.shared.systemClipboardHistory
 
     var body: some View {
-        SettingsPane(tab: .general) {
-            SettingsCard(header: "Language") {
-                SettingsRow(
-                    title: "App Language"
-                ) {
-                    Picker("App Language", selection: $settings.language) {
-                        ForEach(AppLanguage.allCases) { language in
-                            Text(LocalizedStringKey(language.title)).tag(language)
-                        }
+        PreferencesForm {
+            PreferencesRow(label: "Language") {
+                Picker("App Language", selection: $settings.language) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(LocalizedStringKey(language.title)).tag(language)
                     }
-                    .labelsHidden()
-                    .fixedSize()
                 }
+                .labelsHidden()
+                .fixedSize()
             }
 
-            SettingsCard(header: "Startup") {
-                SettingsRow(
-                    title: "Launch at Login"
-                ) {
-                    Toggle("Launch at Login", isOn: $settings.launchAtLogin)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .accessibilityLabel("Launch at Login")
-                }
+            PreferencesRow(label: "Startup", alignment: .firstTextBaseline) {
+                Toggle("Launch at Login", isOn: $settings.launchAtLogin)
+                    .toggleStyle(.checkbox)
             }
 
-            SettingsCard(header: "Input Method") {
-                SettingsRow(
-                    title: "Switch to English When Opening"
-                ) {
-                    Toggle(
-                        "Switch to English When Opening",
-                        isOn: $settings.switchToEnglishInputOnOpen
+            PreferencesRow(label: "Input Method", alignment: .firstTextBaseline) {
+                Toggle(
+                    "Switch to English When Opening",
+                    isOn: $settings.switchToEnglishInputOnOpen
+                )
+                .toggleStyle(.checkbox)
+            }
+
+            PreferencesRow(label: "Shortcut") {
+                ShortcutRecorder()
+                    .accessibilityLabel("Show Paste")
+            }
+
+            PreferencesRow(label: "System Clipboard", alignment: .firstTextBaseline) {
+                Toggle(
+                    "Disable System Clipboard",
+                    isOn: Binding(
+                        get: { systemClipboardHistory.isDisabled },
+                        set: { systemClipboardHistory.setDisabled($0) }
                     )
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .accessibilityLabel("Switch to English When Opening")
-                }
-            }
-
-            SettingsCard(header: "Appearance") {
-                AppearanceIconPicker(selection: $settings.appearance)
+                )
+                .toggleStyle(.checkbox)
             }
         }
         .onAppear {
             settings.launchAtLogin = LaunchAtLogin.isEnabled
+            systemClipboardHistory.refresh()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            systemClipboardHistory.refresh()
+        }
+    }
+}
+
+struct AppearanceSettingsView: View {
+    @ObservedObject private var settings = AppCore.shared.settings
+
+    var body: some View {
+        PreferencesForm {
+            PreferencesRow(label: "Appearance") {
+                Picker("Appearance", selection: $settings.appearance) {
+                    ForEach(AppAppearance.allCases) { option in
+                        Text(LocalizedStringKey(option.title)).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityLabel("Theme")
+            }
         }
     }
 }

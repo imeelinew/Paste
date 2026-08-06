@@ -20,6 +20,9 @@ packages:
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts
     from: 2.0.0
+  MacAppSettingsUI:
+    url: https://github.com/usagimaru/MacAppSettingsUI
+    from: 1.4.0
 
 targets:
   Paste:
@@ -29,6 +32,7 @@ targets:
       - path: Paste
     dependencies:
       - package: KeyboardShortcuts
+      - package: MacAppSettingsUI
     settings:
       base:
         PRODUCT_NAME: Paste
