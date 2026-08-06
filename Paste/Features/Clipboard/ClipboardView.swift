@@ -14,8 +14,7 @@ struct ClipboardList: View {
     @State private var geometry = ClipboardTableGeometry()
     @State private var scrollActivity = UUID()
 
-    var body: some View {
-        ClipboardTableRepresentable(
+    var body: some View {        ClipboardTableRepresentable(
             results: results,
             selectedID: selectedID,
             query: query,
