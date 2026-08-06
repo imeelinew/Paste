@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import Combine
 import MacAppSettingsUI
 import SwiftUI
 
@@ -10,9 +11,17 @@ final class PasteSettingsWindowController {
     private var controller: SettingsWindowController?
     private var closeObserver: NSObjectProtocol?
     private var commandWMonitor: Any?
+    private var builtLanguage: AppLanguage?
+    private var languageObserver: AnyCancellable?
 
     init(activationPolicy: ActivationPolicyCoordinator) {
         self.activationPolicy = activationPolicy
+        languageObserver = AppCore.shared.settings.$language
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.handleLanguageChange()
+            }
     }
 
     var isVisible: Bool {
@@ -20,13 +29,13 @@ final class PasteSettingsWindowController {
     }
 
     func show(tab: SettingsTab = .general) {
+        let language = AppCore.shared.settings.language
         let needsRebuild =
             controller == nil
             || controller?.tabViewController.panes.count != SettingsTab.allCases.count
+            || builtLanguage != language
         if needsRebuild {
-            closeObserver = nil
-            removeCommandWMonitor()
-            controller = makeController()
+            rebuildController(preservingTab: tab, makeVisible: false)
         }
         guard let controller else { return }
 
@@ -51,10 +60,52 @@ final class PasteSettingsWindowController {
 
     // MARK: - Private
 
+    private func handleLanguageChange() {
+        guard controller != nil else {
+            builtLanguage = nil
+            return
+        }
+        rebuildController(
+            preservingTab: selectedTab() ?? .general,
+            makeVisible: isVisible
+        )
+    }
+
+    private func rebuildController(preservingTab tab: SettingsTab, makeVisible: Bool) {
+        let frame = controller?.window?.frame
+        tearDownController()
+        builtLanguage = AppCore.shared.settings.language
+        controller = makeController()
+        guard let controller else { return }
+
+        select(tab, in: controller)
+        if let frame {
+            controller.window?.setFrame(frame, display: false)
+        }
+
+        guard makeVisible else { return }
+        // Keep the existing settings activation; tear-down closed the window
+        // without releasing so we don't acquire a second time here.
+        attachCloseObserverIfNeeded(to: controller.window)
+        installCommandWMonitorIfNeeded()
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func tearDownController() {
+        if let closeObserver {
+            NotificationCenter.default.removeObserver(closeObserver)
+            self.closeObserver = nil
+        }
+        removeCommandWMonitor()
+        controller?.close()
+        controller = nil
+    }
+
     private func makeController() -> SettingsWindowController {
         let locale = AppCore.shared.settings.language.locale
         let panes: [SettingsPaneViewController] = SettingsTab.allCases.map { tab in
-            SwiftUISettingsPaneController(tab: tab, locale: locale) {
+            SwiftUISettingsPaneController(tab: tab) {
                 switch tab {
                 case .general:
                     GeneralSettingsView()
@@ -78,6 +129,15 @@ final class PasteSettingsWindowController {
             locale: locale
         )
         return controller
+    }
+
+    private func selectedTab() -> SettingsTab? {
+        guard let controller,
+            let index = controller.tabViewController.selectedTabIndex,
+            controller.tabViewController.panes.indices.contains(index)
+        else { return nil }
+        let identifier = controller.tabViewController.panes[index].tabIdentifier
+        return SettingsTab.allCases.first { $0.tabIdentifier == identifier }
     }
 
     private func select(_ tab: SettingsTab, in controller: SettingsWindowController) {
@@ -135,13 +195,11 @@ private final class SwiftUISettingsPaneController: SettingsPaneViewController {
 
     init(
         tab: SettingsTab,
-        locale: Locale,
         @ViewBuilder content: () -> some View
     ) {
+        let locale = AppCore.shared.settings.language.locale
         self.rootView = AnyView(
-            content()
-                .environment(\.locale, locale)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            SettingsPaneLocalizedRoot(content: content())
         )
         self.paneHeight = tab.preferredPaneHeight
         super.init(nibName: nil, bundle: nil)
@@ -162,5 +220,17 @@ private final class SwiftUISettingsPaneController: SettingsPaneViewController {
         view = hosting
         preferredPaneSize = NSSize(width: Self.paneWidth, height: paneHeight)
         view.setFrameSize(preferredPaneSize ?? .zero)
+    }
+}
+
+/// Keeps SwiftUI settings content on the live app-language locale.
+private struct SettingsPaneLocalizedRoot<Content: View>: View {
+    @ObservedObject private var settings = AppCore.shared.settings
+    let content: Content
+
+    var body: some View {
+        content
+            .environment(\.locale, settings.language.locale)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
