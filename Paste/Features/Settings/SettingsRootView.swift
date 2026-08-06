@@ -5,7 +5,7 @@ extension Notification.Name {
 }
 
 enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
-    case general, appearance, history
+    case general, appearance, history, about
 
     var id: Int { rawValue }
 
@@ -14,6 +14,7 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         case .general: return "General"
         case .appearance: return "Appearance"
         case .history: return "History"
+        case .about: return "About"
         }
     }
 
@@ -23,6 +24,7 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         case .general: return "general"
         case .appearance: return "appearance"
         case .history: return "history"
+        case .about: return "about"
         }
     }
 
@@ -31,6 +33,7 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         case .general: return "gearshape"
         case .appearance: return "eyeglasses"
         case .history: return "clock"
+        case .about: return "info.circle"
         }
     }
 
@@ -39,6 +42,7 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         case .general: return 300
         case .appearance: return 180
         case .history: return 360
+        case .about: return 320
         }
     }
 }

@@ -1,4 +1,6 @@
 "About Paste" = "About Paste";
+"About" = "About";
+"Acknowledgments" = "Acknowledgments";
 "Actions" = "Actions";
 "Add" = "Add";
 "App Language" = "App Language";
@@ -50,6 +52,7 @@
 "Quit" = "Quit";
 "Quit Paste" = "Quit Paste";
 "Quit Paste?" = "Quit Paste?";
+"Repository" = "Repository";
 "Select All" = "Select All";
 "Settings" = "Settings";
 "Shortcut" = "Shortcut";
@@ -66,6 +69,8 @@
 "Type" = "Type";
 "Search" = "Search";
 "Unpin Entry" = "Unpin Entry";
+"Version" = "Version";
+"GitHub Repository" = "GitHub Repository";
 "Words" = "Words";
 "Yesterday" = "Yesterday";
 "1 Day" = "1 Day";

@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import MacAppSettingsUI
 import SwiftUI
 
@@ -8,6 +9,7 @@ final class PasteSettingsWindowController {
     private let activationPolicy: ActivationPolicyCoordinator
     private var controller: SettingsWindowController?
     private var closeObserver: NSObjectProtocol?
+    private var commandWMonitor: Any?
 
     init(activationPolicy: ActivationPolicyCoordinator) {
         self.activationPolicy = activationPolicy
@@ -18,13 +20,19 @@ final class PasteSettingsWindowController {
     }
 
     func show(tab: SettingsTab = .general) {
-        if controller == nil {
+        let needsRebuild =
+            controller == nil
+            || controller?.tabViewController.panes.count != SettingsTab.allCases.count
+        if needsRebuild {
+            closeObserver = nil
+            removeCommandWMonitor()
             controller = makeController()
         }
         guard let controller else { return }
 
         select(tab, in: controller)
         attachCloseObserverIfNeeded(to: controller.window)
+        installCommandWMonitorIfNeeded()
 
         activationPolicy.acquire("settings")
         NSApp.activate(ignoringOtherApps: true)
@@ -54,6 +62,8 @@ final class PasteSettingsWindowController {
                     AppearanceSettingsView()
                 case .history:
                     HistorySettingsView()
+                case .about:
+                    AboutSettingsView()
                 }
             }
         }
@@ -85,8 +95,34 @@ final class PasteSettingsWindowController {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.removeCommandWMonitor()
                 self?.activationPolicy.release("settings")
             }
+        }
+    }
+
+    /// Agent apps lack File → Close, so mirror `AuxiliaryWindow` and handle ⌘W locally.
+    private func installCommandWMonitorIfNeeded() {
+        guard commandWMonitor == nil else { return }
+        commandWMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+            [weak self] event in
+            guard let self else { return event }
+            let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            guard modifiers == .command, event.keyCode == UInt16(kVK_ANSI_W) else {
+                return event
+            }
+            guard let window = self.controller?.window, window.isKeyWindow else {
+                return event
+            }
+            window.performClose(nil)
+            return nil
+        }
+    }
+
+    private func removeCommandWMonitor() {
+        if let commandWMonitor {
+            NSEvent.removeMonitor(commandWMonitor)
+            self.commandWMonitor = nil
         }
     }
 }

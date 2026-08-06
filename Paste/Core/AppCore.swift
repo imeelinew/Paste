@@ -18,7 +18,6 @@ final class AppCore: ObservableObject {
     private lazy var settingsWindowController = PasteSettingsWindowController(
         activationPolicy: activationPolicy
     )
-    private var aboutCloseToken: NotificationToken?
     private var transferTask: Task<Void, Never>?
     private var transferGeneration = UUID()
     private var selectionTask: Task<Void, Never>?
@@ -79,25 +78,7 @@ final class AppCore: ObservableObject {
     }
 
     func showAbout() {
-        activationPolicy.acquire("about")
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.orderFrontStandardAboutPanel(options: [:])
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            guard let window = NSApp.keyWindow else {
-                self.activationPolicy.release("about")
-                return
-            }
-            let token = NotificationCenter.default.addObserver(
-                forName: NSWindow.willCloseNotification, object: window, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.aboutCloseToken = nil
-                    self?.activationPolicy.release("about")
-                }
-            }
-            self.aboutCloseToken = NotificationToken(token, center: .default)
-        }
+        showSettings(tab: .about)
     }
 
     func requestQuit() {

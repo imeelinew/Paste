@@ -1,4 +1,6 @@
 "About Paste" = "关于 Paste";
+"About" = "关于";
+"Acknowledgments" = "致谢";
 "Actions" = "操作";
 "Add" = "添加";
 "App Language" = "应用语言";
@@ -50,6 +52,7 @@
 "Quit" = "退出";
 "Quit Paste" = "退出 Paste";
 "Quit Paste?" = "要退出 Paste 吗？";
+"Repository" = "代码仓库";
 "Select All" = "全选";
 "Settings" = "设置";
 "Shortcut" = "快捷键";
@@ -66,6 +69,8 @@
 "Type" = "类型";
 "Search" = "搜索";
 "Unpin Entry" = "取消固定";
+"Version" = "版本";
+"GitHub Repository" = "GitHub 仓库";
 "Words" = "词数";
 "Yesterday" = "昨天";
 "1 Day" = "1 天";
