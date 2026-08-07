@@ -39,7 +39,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.eli.Paste
         INFOPLIST_FILE: Paste/Info.plist
         CODE_SIGN_ENTITLEMENTS: Paste/Paste.entitlements
-        ASSETCATALOG_COMPILER_APPICON_NAME: paste
+        ASSETCATALOG_COMPILER_APPICON_NAME: Paste
         COMBINE_HIDPI_IMAGES: YES
         OTHER_LDFLAGS:
           - "$(inherited)"
