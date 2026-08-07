@@ -9,3 +9,8 @@ script = ""
 name = "Build"
 icon = "hammer"
 command = "xcodebuild -project Paste.xcodeproj -scheme Paste -configuration Debug build"
+
+[[actions]]
+name = "Run"
+icon = "run"
+command = "./script/build_and_run.sh"

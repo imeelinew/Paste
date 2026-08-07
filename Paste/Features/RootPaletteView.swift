@@ -1,83 +1,30 @@
 import SwiftUI
 
 struct RootPaletteView: View {
-    @EnvironmentObject private var core: AppCore
     @EnvironmentObject private var vm: PaletteViewModel
-    @EnvironmentObject private var store: ClipboardStore
     @ObservedObject private var settings = AppCore.shared.settings
 
     @FocusState private var searchFocused: Bool
-    @State private var showActions = false
-    @State private var showAppMenu = false
-    @State private var menuSelection = 0
-    @State private var menuButtonPressed = false
-    @State private var actionsButtonPressed = false
-    @State private var menuRowPressedIndex: Int? = nil
-    @State private var menuShortcutTask: Task<Void, Never>?
     @State private var scroll = ScrollIntent(kind: .top)
-    @State private var searchedClips: [ClipboardItem] = []
-    @State private var searchedQuery = ""
 
     private var isQueryEmpty: Bool {
-        vm.query.trimmingCharacters(in: .whitespaces).isEmpty
+        vm.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var normalizedQuery: String {
-        vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var showActions: Bool {
+        if case .actions = vm.overlay { return true }
+        return false
     }
 
-    private var clipResults: [ClipboardItem] {
-        guard !normalizedQuery.isEmpty else { return store.displayItems }
-        return searchedClips
-    }
+    private var showAppMenu: Bool { vm.overlay == .appMenu }
 
-    private var searchReady: Bool {
-        normalizedQuery.isEmpty || searchedQuery == normalizedQuery
-    }
-
-    private var selection: Int {
-        clipResults.isEmpty ? 0 : min(max(vm.selection, 0), clipResults.count - 1)
-    }
-
-    private var selectedClipItem: ClipboardItem? {
-        clipResults.indices.contains(selection) ? clipResults[selection] : nil
-    }
-
-    private var menuOpen: Bool { showActions || showAppMenu }
-
-    private var actionsContent: PopoverMenuContent? {
-        guard let item = selectedClipItem else { return nil }
-        return ClipboardActionsMenu.content(
-            item: item, core: core, store: store, target: vm.pasteTarget)
-    }
-
-    private var appMenuContent: PopoverMenuContent {
-        PopoverMenuContent(items: [
-            PopoverMenuItem(title: "About Paste") {
-                core.showAbout()
-            },
-            PopoverMenuItem(title: "Settings", shortcut: "⌘,") {
-                core.showSettings()
-            },
-            PopoverMenuItem(
-                title: "Quit Paste", shortcut: "⌘Q", isDestructive: true
-            ) {
-                core.requestQuit()
-            },
-        ])
-    }
-
-    private var menuContent: PopoverMenuContent? {
-        if showActions { return actionsContent }
-        if showAppMenu { return appMenuContent }
-        return nil
+    private var menuItems: [PopoverMenuItem] {
+        vm.menuActions.map { PopoverMenuItem(action: $0, target: vm.pasteTarget) }
     }
 
     var body: some View {
-        let clips = clipResults
-        let selectedIndex = clips.isEmpty ? 0 : min(max(vm.selection, 0), clips.count - 1)
-        let selected = clips.indices.contains(selectedIndex) ? clips[selectedIndex] : nil
-        let clipFollow = ClipFollowKey(id: store.items.first?.id, token: vm.followToken)
+        let clips = vm.results
+        let selected = vm.selectedItem
 
         return Group {
             if clips.isEmpty {
@@ -87,15 +34,12 @@ struct RootPaletteView: View {
                 HStack(spacing: 0) {
                     ClipboardList(
                         results: clips,
-                        selectedID: selected?.id,
+                        selectedID: vm.selectedID,
                         query: vm.query,
                         scroll: scroll,
-                        onSelect: { item in vm.selection = clips.firstIndex(of: item) ?? 0 },
-                        onActivate: activateSelection,
-                        onActions: { item in
-                            if let index = clips.firstIndex(of: item) { vm.selection = index }
-                            openActions()
-                        }
+                        onSelect: { vm.select($0.id) },
+                        onActivate: { vm.handle(.activate) },
+                        onActions: { vm.openActions(for: $0.id) }
                     )
                     .frame(width: Theme.Size.clipboardListWidth)
                     Rectangle()
@@ -110,18 +54,19 @@ struct RootPaletteView: View {
             bottomBar(showActionGroup: selected != nil)
         }
         .overlay {
-            if menuOpen {
+            if vm.menuOpen {
                 Color.black.opacity(0.001)
                     .contentShape(Rectangle())
-                    .onTapGesture(perform: closeMenus)
+                    .onTapGesture {
+                        withAnimation(Self.menuAnimation) { vm.closeMenu() }
+                    }
             }
         }
         .overlay(alignment: .bottomLeading) {
             if showAppMenu {
-                let content = appMenuContent
                 PopoverMenu(
-                    header: content.header, items: content.items, selection: $menuSelection,
-                    pressedIndex: menuRowPressedIndex,
+                    items: menuItems,
+                    selection: $vm.menuSelection,
                     onActivate: activateMenuItem
                 )
                 .padding(Self.menuInset)
@@ -129,10 +74,10 @@ struct RootPaletteView: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            if showActions, let content = actionsContent {
+            if showActions {
                 PopoverMenu(
-                    header: content.header, items: content.items, selection: $menuSelection,
-                    pressedIndex: menuRowPressedIndex,
+                    items: menuItems,
+                    selection: $vm.menuSelection,
                     onActivate: activateMenuItem
                 )
                 .padding(Self.menuInset)
@@ -144,136 +89,19 @@ struct RootPaletteView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
         .onChange(of: vm.focusToken) {
             searchFocused = true
-            cancelMenuShortcut()
-            showActions = false
-            showAppMenu = false
-        }
-        .onChange(of: vm.appMenuShortcutRequest) { _, request in
-            guard let request else { return }
-            runAppMenuShortcut(request.shortcut)
-        }
-        .onChange(of: vm.panelReturnRequest) { _, request in
-            guard let request else { return }
-            switch request.action {
-            case .activate:
-                activateSelection()
-            case .copy:
-                guard searchReady, clipResults.indices.contains(selection) else { return }
-                core.copyToClipboard(clipResults[selection])
-            case .activateMenu:
-                activateMenuItem(menuSelection)
-            }
-        }
-        .onChange(of: vm.query) {
-            vm.imageQuickLookOpen = false
-            ImageQuickLook.close()
-            vm.selection = 0
-            scroll = ScrollIntent(kind: .top)
         }
         .onChange(of: vm.resetToken) {
             scroll = ScrollIntent(kind: .top)
         }
-        .onChange(of: showActions) {
-            if showActions {
-                showAppMenu = false
-                menuSelection = 0
-            }
-            vm.menuOpen = menuOpen
-        }
-        .onChange(of: showAppMenu) {
-            if showAppMenu {
-                showActions = false
-                if vm.appMenuShortcutRequest == nil {
-                    menuSelection = 0
-                }
-            }
-            vm.menuOpen = menuOpen
-        }
-        .onChange(of: clipFollow) { old, new in
-            guard old.id != nil else { return }
-            if isQueryEmpty, old.id != new.id, let id = new.id,
-                let index = clips.firstIndex(where: { $0.id == id })
-            {
-                vm.selection = index
-            }
+        .onChange(of: vm.followToken) {
             scroll = ScrollIntent(kind: .follow)
         }
         .onAppear {
-            vm.navigationItemCount = clips.count
             searchFocused = true
             syncImageQuickLook(for: selected)
         }
-        .onChange(of: clips.count) { _, count in
-            vm.navigationItemCount = count
-        }
         .onChange(of: selected?.id) {
             syncImageQuickLook(for: selected)
-        }
-        .onChange(of: menuOpen) {
-            if menuOpen {
-                vm.imageQuickLookOpen = false
-                ImageQuickLook.close()
-            }
-        }
-        .task(id: ClipboardSearchRequest(query: normalizedQuery, revision: store.revision)) {
-            let query = normalizedQuery
-            let results = await store.searchAsync(query)
-            guard !Task.isCancelled, query == normalizedQuery else { return }
-            searchedQuery = query
-            searchedClips = results
-        }
-        .onKeyPress(.downArrow) {
-            if menuOpen {
-                moveMenu(1)
-            } else {
-                if vm.imageQuickLookOpen {
-                    vm.imageQuickLookOpen = false
-                    ImageQuickLook.close()
-                }
-                move(1)
-            }
-            return .handled
-        }
-        .onKeyPress(.upArrow) {
-            if menuOpen {
-                moveMenu(-1)
-            } else {
-                if vm.imageQuickLookOpen {
-                    vm.imageQuickLookOpen = false
-                    ImageQuickLook.close()
-                }
-                move(-1)
-            }
-            return .handled
-        }
-        // Return/⌘↵ are handled in `PalettePanel` → `panelReturnRequest` so they keep working
-        // after an AppKit list/preview click steals focus from the search field.
-        .onKeyPress(.escape) {
-            if vm.imageQuickLookOpen {
-                vm.imageQuickLookOpen = false
-                ImageQuickLook.close()
-                return .handled
-            }
-            if menuShortcutTask != nil || menuOpen {
-                cancelMenuShortcut()
-                closeMenus()
-            } else {
-                core.hidePalette()
-            }
-            return .handled
-        }
-        .onKeyPress(keys: ["k"], phases: .down) { press in
-            guard press.modifiers.contains(.command) else { return .ignored }
-            guard searchReady, !clipResults.isEmpty else { return .handled }
-            toggleActions()
-            return .handled
-        }
-        .onKeyPress(keys: ["p"], phases: .down) { press in
-            guard searchReady, press.modifiers.contains(.command),
-                clipResults.indices.contains(selection)
-            else { return .ignored }
-            core.togglePinnedClip(clipResults[selection])
-            return .handled
         }
         .environment(\.locale, settings.language.locale)
     }
@@ -289,7 +117,6 @@ struct RootPaletteView: View {
             .font(Theme.Typography.searchField)
             .tint(Color.primary)
             .focused($searchFocused)
-            .onSubmit(activateSelection)
         }
         .padding(.horizontal, Theme.Spacing.md * 2)
         .frame(height: Theme.Size.headerHeight)
@@ -299,9 +126,8 @@ struct RootPaletteView: View {
 
     private func bottomBar(showActionGroup: Bool) -> some View {
         HStack(spacing: 0) {
-            MenuCircleButton(pressed: menuButtonPressed || showAppMenu) {
-                cancelMenuShortcut()
-                withAnimation(Self.menuAnimation) { showAppMenu.toggle() }
+            MenuCircleButton(pressed: showAppMenu) {
+                withAnimation(Self.menuAnimation) { vm.toggleAppMenu() }
             }
             Spacer()
             if showActionGroup { actionGroup }
@@ -313,7 +139,7 @@ struct RootPaletteView: View {
 
     private var actionGroup: some View {
         HStack(spacing: 2) {
-            BarButton(action: activateSelection) {
+            BarButton(action: { vm.handle(.activate) }) {
                 HStack(spacing: Theme.Spacing.sm) {
                     if let path = vm.pasteTarget?.iconPath {
                         MenuFileIcon(path: path)
@@ -324,7 +150,12 @@ struct RootPaletteView: View {
                     KeyCapChip(text: "↵", style: .outline)
                 }
             }
-            BarButton(pressed: actionsButtonPressed || showActions, action: toggleActions) {
+            BarButton(
+                pressed: showActions,
+                action: {
+                    _ = withAnimation(Self.menuAnimation) { vm.handle(.toggleActions) }
+                }
+            ) {
                 HStack(spacing: Theme.Spacing.sm) {
                     Text("Actions")
                         .font(Theme.Typography.bar)
@@ -340,19 +171,8 @@ struct RootPaletteView: View {
         .frosted(in: Capsule())
     }
 
-    private func move(_ delta: Int) {
-        vm.navigationItemCount = clipResults.count
-        _ = vm.moveSelection(delta)
-    }
-
-    private func moveMenu(_ delta: Int) {
-        guard let count = menuContent?.items.count, count > 0 else { return }
-        menuSelection = min(max(menuSelection + delta, 0), count - 1)
-    }
-
-    private func activateSelection() {
-        guard searchReady, clipResults.indices.contains(selection) else { return }
-        core.paste(clipResults[selection])
+    private func activateMenuItem(_ index: Int) {
+        withAnimation(Self.menuAnimation) { vm.activateMenuItem(at: index) }
     }
 
     private func syncImageQuickLook(for item: ClipboardItem?) {
@@ -361,95 +181,12 @@ struct RootPaletteView: View {
         if !available { vm.imageQuickLookOpen = false }
     }
 
-    private func openActions() {
-        guard searchReady else { return }
-        withAnimation(Self.menuAnimation) { showActions = true }
-    }
-
-    private func toggleActions() {
-        cancelMenuShortcut()
-        if showActions {
-            withAnimation(Self.menuAnimation) { showActions = false }
-        } else {
-            openActions()
-        }
-    }
-
-    private func closeMenus() {
-        withAnimation(Self.menuAnimation) {
-            showActions = false
-            showAppMenu = false
-        }
-        menuRowPressedIndex = nil
-        menuButtonPressed = false
-        actionsButtonPressed = false
-    }
-
-    private func activateMenuItem(_ index: Int) {
-        guard let items = menuContent?.items, items.indices.contains(index) else { return }
-        items[index].action()
-        closeMenus()
-    }
-
-    private func cancelMenuShortcut() {
-        menuShortcutTask?.cancel()
-        menuShortcutTask = nil
-        menuButtonPressed = false
-        actionsButtonPressed = false
-        menuRowPressedIndex = nil
-        if vm.appMenuShortcutRequest != nil {
-            vm.appMenuShortcutRequest = nil
-        }
-    }
-
-    /// ⌘, / ⌘Q: press the menu button, open the menu, highlight the item, press it, then run the action.
-    private func runAppMenuShortcut(_ shortcut: AppMenuShortcut) {
-        menuShortcutTask?.cancel()
-        menuShortcutTask = Task { @MainActor in
-            showActions = false
-            actionsButtonPressed = false
-            menuRowPressedIndex = nil
-            menuButtonPressed = true
-            try? await Task.sleep(nanoseconds: 90_000_000)
-            guard !Task.isCancelled else { return }
-
-            menuSelection = shortcut.itemIndex
-            withAnimation(Self.menuAnimation) { showAppMenu = true }
-            menuSelection = shortcut.itemIndex
-            menuButtonPressed = false
-
-            try? await Task.sleep(nanoseconds: 180_000_000)
-            guard !Task.isCancelled else { return }
-
-            menuRowPressedIndex = shortcut.itemIndex
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            guard !Task.isCancelled else { return }
-
-            menuRowPressedIndex = nil
-            let index = shortcut.itemIndex
-            // Keep request non-nil until activate so showAppMenu's onChange won't reset selection.
-            menuShortcutTask = nil
-            activateMenuItem(index)
-            vm.appMenuShortcutRequest = nil
-        }
-    }
-
     private static let menuInset: CGFloat = 8
     private static let menuAnimation: Animation = .easeOut(duration: 0.14)
 
     private static func menuTransition(_ anchor: UnitPoint) -> AnyTransition {
         .opacity.combined(with: .scale(scale: 0.96, anchor: anchor))
     }
-}
-
-private struct ClipFollowKey: Equatable {
-    let id: ClipboardItem.ID?
-    let token: UUID
-}
-
-private struct ClipboardSearchRequest: Hashable {
-    let query: String
-    let revision: UInt64
 }
 
 private struct MenuCircleButton: View {

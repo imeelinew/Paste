@@ -2,6 +2,8 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
+/// The sole keyboard gateway for the palette window. It receives key events before the current
+/// first responder, so embedded AppKit views and SwiftUI focus changes cannot disable commands.
 final class PalettePanel: NSPanel {
     weak var paletteViewModel: PaletteViewModel? {
         didSet {
@@ -11,14 +13,67 @@ final class PalettePanel: NSPanel {
         }
     }
 
-    private static let menuNavKeys: Set<Int> = [
-        kVK_UpArrow, kVK_DownArrow, kVK_LeftArrow, kVK_RightArrow,
-        kVK_Return, kVK_ANSI_KeypadEnter, kVK_Escape, kVK_Tab,
-    ]
-
-    private static let shortcutModifiers: NSEvent.ModifierFlags = [
+    private static let relevantModifiers: NSEvent.ModifierFlags = [
         .command, .option, .control, .shift,
     ]
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, route(event) { return }
+        super.sendEvent(event)
+    }
+
+    private func route(_ event: NSEvent) -> Bool {
+        guard let paletteViewModel else { return false }
+        let keyCode = Int(event.keyCode)
+        let modifiers = event.modifierFlags.intersection(Self.relevantModifiers)
+
+        if modifiers == .command {
+            switch keyCode {
+            case kVK_ANSI_Comma:
+                return handleOnce(.settings, event: event)
+            case kVK_ANSI_Q:
+                return handleOnce(.quit, event: event)
+            case kVK_Delete:
+                return paletteViewModel.handle(.clearQuery)
+            case kVK_ANSI_K:
+                return handleOnce(.toggleActions, event: event)
+            case kVK_ANSI_P:
+                return handleOnce(.togglePin, event: event)
+            case kVK_Return, kVK_ANSI_KeypadEnter:
+                return handleOnce(.copy, event: event)
+            case kVK_ANSI_C, kVK_ANSI_X, kVK_ANSI_V, kVK_ANSI_A:
+                if handleEditingShortcut(keyCode) { return true }
+            default:
+                break
+            }
+        }
+
+        if modifiers.isEmpty {
+            switch keyCode {
+            case kVK_DownArrow:
+                return paletteViewModel.handle(.move(1))
+            case kVK_UpArrow:
+                return paletteViewModel.handle(.move(-1))
+            case kVK_Return, kVK_ANSI_KeypadEnter:
+                return handleOnce(.activate, event: event)
+            case kVK_Escape:
+                return paletteViewModel.handle(.cancel)
+            case kVK_Space:
+                return handleOnce(.toggleQuickLook, event: event)
+            default:
+                break
+            }
+        }
+
+        // An overlay menu is modal. Unsupported keys must not leak into the search editor or the
+        // read-only preview behind it.
+        return paletteViewModel.menuOpen
+    }
+
+    private func handleOnce(_ command: PaletteCommand, event: NSEvent) -> Bool {
+        if event.isARepeat { return true }
+        return paletteViewModel?.handle(command) ?? false
+    }
 
     private func setSearchCaretHidden(_ hidden: Bool) {
         guard let editor = firstResponder as? NSTextView else { return }
@@ -26,70 +81,8 @@ final class PalettePanel: NSPanel {
         editor.updateInsertionPointStateAndRestartTimer(!hidden)
     }
 
-    override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown,
-            event.modifierFlags.intersection(Self.shortcutModifiers) == .command
-        {
-            switch Int(event.keyCode) {
-            case kVK_ANSI_Comma:
-                paletteViewModel?.requestAppMenuShortcut(.settings)
-                return
-            case kVK_ANSI_Q:
-                paletteViewModel?.requestAppMenuShortcut(.quit)
-                return
-            case kVK_Delete:
-                if paletteViewModel?.clearQueryWithShortcut() == true { return }
-            case kVK_ANSI_C, kVK_ANSI_X, kVK_ANSI_V, kVK_ANSI_A:
-                if handleEditingShortcut(Int(event.keyCode)) { return }
-            default:
-                break
-            }
-        }
-        if event.type == .keyDown,
-            event.modifierFlags.intersection(Self.shortcutModifiers).isEmpty,
-            paletteViewModel?.menuOpen != true
-        {
-            let delta: Int?
-            switch Int(event.keyCode) {
-            case kVK_DownArrow: delta = 1
-            case kVK_UpArrow: delta = -1
-            default: delta = nil
-            }
-            if let delta, paletteViewModel?.moveSelection(delta) == true {
-                ImageQuickLook.close()
-                return
-            }
-        }
-        if event.type == .keyDown,
-            Int(event.keyCode) == kVK_Return || Int(event.keyCode) == kVK_ANSI_KeypadEnter
-        {
-            let mods = event.modifierFlags.intersection(Self.shortcutModifiers)
-            if mods.isEmpty || mods == .command,
-                paletteViewModel?.handleReturnKey(command: mods == .command) == true
-            {
-                return
-            }
-        }
-        if event.type == .keyDown,
-            Int(event.keyCode) == kVK_Space,
-            event.modifierFlags.intersection(Self.shortcutModifiers).isEmpty,
-            paletteViewModel?.handleSpaceKey() == true
-        {
-            return
-        }
-        if event.type == .keyDown,
-            paletteViewModel?.menuOpen == true,
-            event.modifierFlags.intersection([.command, .control]).isEmpty,
-            !Self.menuNavKeys.contains(Int(event.keyCode))
-        {
-            return
-        }
-        super.sendEvent(event)
-    }
-
-    /// This accessory app has no visible Edit menu, so route the standard editing shortcuts to
-    /// the active AppKit field editor ourselves. The preview remains read-only: it accepts Copy
-    /// and Select All, while Cut and Paste are available only in the editable search field.
+    /// This accessory app has no visible Edit menu, so route standard editing commands to the
+    /// active AppKit field editor ourselves.
     private func handleEditingShortcut(_ keyCode: Int) -> Bool {
         guard paletteViewModel?.menuOpen != true, let editor = firstResponder as? NSTextView else {
             return false

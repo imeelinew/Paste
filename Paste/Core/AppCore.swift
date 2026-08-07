@@ -9,7 +9,7 @@ final class AppCore: ObservableObject {
     let settings = AppSettings()
     let clipboardStore = ClipboardStore()
     let clipboardManager: ClipboardManager
-    let palette = PaletteViewModel()
+    lazy var palette = PaletteViewModel(core: self)
     let systemClipboardHistory = SystemClipboardHistory()
 
     private lazy var windowController = PaletteWindowController(core: self)
@@ -20,7 +20,6 @@ final class AppCore: ObservableObject {
     )
     private var transferTask: Task<Void, Never>?
     private var transferGeneration = UUID()
-    private var selectionTask: Task<Void, Never>?
 
     private init() {
         clipboardManager = ClipboardManager(store: clipboardStore, settings: settings)
@@ -115,7 +114,7 @@ final class AppCore: ObservableObject {
                 return
             }
             if succeeded {
-                self.select(item)
+                self.palette.select(item.id)
             } else if hidden {
                 self.windowController.show()
             }
@@ -128,7 +127,7 @@ final class AppCore: ObservableObject {
         startTransfer { [weak self] generation in
             guard let self else { return }
             if await Paster.pasteInPlace(item, store: self.clipboardStore, into: previous) {
-                self.select(item)
+                self.palette.select(item.id)
             }
             self.finishTransfer(generation)
         }
@@ -147,7 +146,7 @@ final class AppCore: ObservableObject {
                 return
             }
             if succeeded {
-                self.select(item)
+                self.palette.select(item.id)
             } else if hidden {
                 self.windowController.show()
             }
@@ -155,27 +154,10 @@ final class AppCore: ObservableObject {
         }
     }
 
-    func togglePinnedClip(_ item: ClipboardItem) {
-        clipboardStore.togglePinned(item)
-        select(item, follow: true)
-    }
-
     func revealClipboardImage(_ item: ClipboardItem) {
         guard let url = clipboardStore.imageURL(for: item) else { return }
         hidePalette(restoreFocus: false)
         NSWorkspace.shared.activateFileViewerSelecting([url])
-    }
-
-    private func select(_ item: ClipboardItem, follow: Bool = false) {
-        selectionTask?.cancel()
-        let query = palette.query
-        selectionTask = Task { [weak self] in
-            guard let self else { return }
-            let results = await self.clipboardStore.searchAsync(query)
-            guard !Task.isCancelled, self.palette.query == query else { return }
-            self.palette.selection = results.firstIndex { $0.id == item.id } ?? 0
-            if follow { self.palette.followToken = UUID() }
-        }
     }
 
     private func startTransfer(

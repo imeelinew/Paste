@@ -12,72 +12,67 @@ enum PopoverMenuIcon: Equatable {
     }
 }
 
-/// One popover-menu row's data: the render path and the keyboard handlers both address rows through these, so a selection index can drive highlight and activation. Actions are pure — closing the menu is the caller's job (one central `onActivate`).
+/// Display metadata derived from the same semantic action the palette state machine executes.
 struct PopoverMenuItem {
     let title: LocalizedStringKey
     let icon: PopoverMenuIcon?
     var shortcut: String? = nil
-    /// Destructive rows (delete) tint their icon + label red, matching the native menu convention.
     var isDestructive: Bool = false
-    let action: () -> Void
 
-    init(
-        title: LocalizedStringKey, icon: PopoverMenuIcon? = nil, shortcut: String? = nil,
-        isDestructive: Bool = false,
-        action: @escaping () -> Void
-    ) {
-        self.title = title
-        self.icon = icon
-        self.shortcut = shortcut
-        self.isDestructive = isDestructive
-        self.action = action
+    init(action: PaletteMenuAction, target: PasteTarget?) {
+        switch action {
+        case .about:
+            title = "About Paste"
+            icon = nil
+        case .settings:
+            title = "Settings"
+            icon = nil
+            shortcut = "⌘,"
+        case .quit:
+            title = "Quit Paste"
+            icon = nil
+            shortcut = "⌘Q"
+            isDestructive = true
+        case .paste:
+            title = target?.pasteTitle ?? "Paste"
+            icon = .paste(target)
+            shortcut = "↵"
+        case .pasteKeepingOpen:
+            title = "Paste & Keep Window Open"
+            icon = .paste(target)
+        case .copy:
+            title = "Copy to Clipboard"
+            icon = nil
+            shortcut = "⌘↵"
+        case .togglePin(let item):
+            title = item.isPinned ? "Unpin Entry" : "Pin Entry"
+            icon = .symbol(item.isPinned ? "pin.slash" : "pin")
+            shortcut = "⌘P"
+        case .revealInFinder:
+            title = "Show in Finder"
+            icon = nil
+        case .delete:
+            title = "Delete Entry"
+            icon = .symbol("trash")
+            isDestructive = true
+        }
     }
-
-    init(
-        title: LocalizedStringKey, systemImage: String, shortcut: String? = nil,
-        isDestructive: Bool = false,
-        action: @escaping () -> Void
-    ) {
-        self.init(
-            title: title, icon: .symbol(systemImage), shortcut: shortcut,
-            isDestructive: isDestructive, action: action)
-    }
-}
-
-/// A popover menu's header + rows, built once per feature and consumed by both the render path and `RootPaletteView`'s keyboard handlers.
-struct PopoverMenuContent {
-    var header: String? = nil
-    let items: [PopoverMenuItem]
 }
 
 /// In-window overlay menu (not a system popover), anchored to a bottom corner so it stays clipped inside the palette, with a stock Liquid Glass surface. Data-driven so `selection` can highlight a row for keyboard navigation; `onActivate(index)` is the single path fired by both a click and Return.
 struct PopoverMenu: View {
-    var header: String? = nil
     let items: [PopoverMenuItem]
     @Binding var selection: Int
-    /// When set, that row briefly shows a pressed-in state (used by ⌘, / ⌘Q choreography).
-    var pressedIndex: Int? = nil
     let onActivate: (Int) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            if let header {
-                Text(header)
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.horizontal, Theme.Spacing.lg)
-                    .padding(.top, Theme.Spacing.xs)
-                    .padding(.bottom, Theme.Spacing.xs / 2)
-            }
             // Index-as-id is stable because a menu's rows never reorder while it is open, and the index is what selection/activation address.
             let reservesIconSpace = items.contains { $0.icon != nil }
             ForEach(items.indices, id: \.self) { index in
                 PopoverMenuRow(
                     item: items[index],
                     selected: index == selection,
-                    pressed: pressedIndex == index,
                     reservesIconSpace: reservesIconSpace,
                     onHover: { selection = index },
                     onActivate: { onActivate(index) }
@@ -97,7 +92,6 @@ struct PopoverMenu: View {
 private struct PopoverMenuRow: View {
     let item: PopoverMenuItem
     let selected: Bool
-    var pressed: Bool = false
     /// When any row in the menu has an icon, empty rows keep a blank slot so labels stay column-aligned.
     var reservesIconSpace: Bool = false
     /// Fired when the cursor enters the row so the owner can move selection here — keyboard and mouse then share one highlight.
@@ -141,13 +135,9 @@ private struct PopoverMenuRow: View {
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.menuRow, style: .continuous)
                     .fill(
-                        pressed
-                            ? Theme.Colors.selection
-                            : (selected ? Theme.Colors.menuHover : Color.clear)
+                        selected ? Theme.Colors.menuHover : Color.clear
                     )
             )
-            .scaleEffect(pressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.08), value: pressed)
         }
         .buttonStyle(.plain)
         .onHover { if $0 { onHover() } }

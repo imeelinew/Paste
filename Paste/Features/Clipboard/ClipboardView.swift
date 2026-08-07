@@ -681,58 +681,6 @@ private final class ClipboardThumbnailView: NSView {
     }
 }
 
-/// Actions menu content for a clipboard entry, shown bottom-right on right-click, mirroring `AppActionsMenu`.
-@MainActor
-enum ClipboardActionsMenu {
-    static func content(
-        item: ClipboardItem, core: AppCore, store: ClipboardStore, target: PasteTarget?
-    ) -> PopoverMenuContent {
-        let appIcon = PopoverMenuIcon.paste(target)
-        var items: [PopoverMenuItem] = [
-            PopoverMenuItem(
-                title: target?.pasteTitle ?? "Paste",
-                icon: appIcon, shortcut: "↵"
-            ) {
-                core.paste(item)
-            },
-            PopoverMenuItem(
-                title: "Paste & Keep Window Open", icon: appIcon
-            ) {
-                core.pasteKeepingWindowOpen(item)
-            },
-            PopoverMenuItem(title: "Copy to Clipboard", shortcut: "⌘↵") {
-                core.copyToClipboard(item)
-            },
-        ]
-        if item.isPinned {
-            items.append(
-                PopoverMenuItem(
-                    title: "Unpin Entry", systemImage: "pin.slash", shortcut: "⌘P"
-                ) {
-                    core.togglePinnedClip(item)
-                })
-        } else {
-            items.append(
-                PopoverMenuItem(title: "Pin Entry", systemImage: "pin", shortcut: "⌘P") {
-                    core.togglePinnedClip(item)
-                })
-        }
-        if item.kind == .image {
-            items.append(
-                PopoverMenuItem(title: "Show in Finder") {
-                    core.revealClipboardImage(item)
-                })
-        }
-        items.append(
-            PopoverMenuItem(
-                title: "Delete Entry", systemImage: "trash", isDestructive: true
-            ) {
-                store.remove(item)
-            })
-        return PopoverMenuContent(items: items)
-    }
-}
-
 /// Renders a downsampled clipboard thumbnail, decoding misses off the main thread (cache hits resolve on the first tick, misses show `placeholder`); `content` styles the loaded image per site.
 private struct AsyncThumbnail<Content: View, Placeholder: View>: View {
     let url: URL?

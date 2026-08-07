@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 struct PasteTarget: Equatable {
@@ -14,118 +15,353 @@ struct PasteTarget: Equatable {
     var pasteTitle: LocalizedStringKey { "Paste to \(name)" }
 }
 
-/// App-menu items reached by ⌘, / ⌘Q; the palette plays the menu open → select → press choreography first.
-enum AppMenuShortcut: Equatable {
-    case settings
-    case quit
+enum PaletteOverlay: Equatable {
+    case none
+    case actions(ClipboardItem.ID)
+    case appMenu
 
-    var itemIndex: Int {
-        switch self {
-        case .settings: return 1
-        case .quit: return 2
-        }
-    }
+    var isOpen: Bool { self != .none }
 }
 
-struct AppMenuShortcutRequest: Equatable {
-    let id: UUID
-    let shortcut: AppMenuShortcut
-}
-
-/// Return/Enter routed from `PalettePanel` so paste still works when an AppKit list/preview holds focus.
-enum PanelReturnAction: Equatable {
+enum PaletteCommand: Equatable {
+    case move(Int)
     case activate
     case copy
-    case activateMenu
+    case cancel
+    case toggleActions
+    case togglePin
+    case toggleQuickLook
+    case clearQuery
+    case settings
+    case quit
 }
 
-struct PanelReturnRequest: Equatable {
-    let id: UUID
-    let action: PanelReturnAction
+enum PaletteMenuAction: Equatable {
+    case about
+    case settings
+    case quit
+    case paste(ClipboardItem)
+    case pasteKeepingOpen(ClipboardItem)
+    case copy(ClipboardItem)
+    case togglePin(ClipboardItem)
+    case revealInFinder(ClipboardItem)
+    case delete(ClipboardItem)
 }
 
+/// The palette's single interaction state machine. AppKit keyboard events and SwiftUI mouse
+/// actions both enter here, so commands do not depend on whichever embedded view is first responder.
 @MainActor
 final class PaletteViewModel: ObservableObject {
-    @Published var query = ""
-    @Published var selection = 0
+    @Published var query = "" {
+        didSet { queryChanged() }
+    }
+    @Published private(set) var results: [ClipboardItem] = []
+    @Published private(set) var selectedID: ClipboardItem.ID?
+    @Published private(set) var searchReady = true
     @Published var focusToken = UUID()
     @Published var resetToken = UUID()
     @Published var followToken = UUID()
     @Published var pasteTarget: PasteTarget?
-    @Published var appMenuShortcutRequest: AppMenuShortcutRequest?
-    @Published var panelReturnRequest: PanelReturnRequest?
-    /// Space toggles an overflow image Quick Look when the current selection is an image.
     @Published var imageQuickLookOpen = false
-    /// Maintained by the palette view from the selected clip's kind (and menu state).
-    var imageQuickLookAvailable = false
-    /// Current filtered-list size, mirrored by `RootPaletteView` so the panel can route arrow
-    /// keys reliably even when an embedded AppKit view is first responder.
-    var navigationItemCount = 0
+    @Published private(set) var overlay: PaletteOverlay = .none {
+        didSet {
+            if overlay.isOpen {
+                imageQuickLookOpen = false
+                ImageQuickLook.close()
+            }
+            if oldValue.isOpen != overlay.isOpen {
+                onMenuOpenChanged?(overlay.isOpen)
+            }
+        }
+    }
+    @Published var menuSelection = 0
 
-    var menuOpen = false { didSet { onMenuOpenChanged?(menuOpen) } }
+    /// Maintained by the view from the selected clip's kind.
+    var imageQuickLookAvailable = false
     var onMenuOpenChanged: ((Bool) -> Void)?
 
-    private var isQueryEmpty: Bool {
-        query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private unowned let core: AppCore
+    private var searchTask: Task<Void, Never>?
+    private var revisionObserver: AnyCancellable?
+
+    init(core: AppCore) {
+        self.core = core
+        revisionObserver = core.clipboardStore.$revision
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard let self else { return }
+                refreshResults(resetSelection: !searchReady, blockCommands: false)
+            }
     }
 
-    func requestAppMenuShortcut(_ shortcut: AppMenuShortcut) {
-        appMenuShortcutRequest = AppMenuShortcutRequest(id: UUID(), shortcut: shortcut)
+    var menuOpen: Bool { overlay.isOpen }
+
+    var selectionIndex: Int {
+        guard let selectedID,
+            let index = results.firstIndex(where: { $0.id == selectedID })
+        else { return 0 }
+        return index
     }
 
-    /// Moves the clipboard selection from the panel-level key route and signals the list to
-    /// minimally reveal it. Keeping this in the view model avoids depending on SwiftUI focus.
-    @discardableResult
-    func moveSelection(_ delta: Int) -> Bool {
-        guard !menuOpen, navigationItemCount > 0 else { return false }
-        selection = min(max(selection + delta, 0), navigationItemCount - 1)
-        imageQuickLookOpen = false
-        followToken = UUID()
-        return true
+    var selectedItem: ClipboardItem? {
+        guard let selectedID else { return nil }
+        return results.first { $0.id == selectedID }
     }
 
-    /// Return/Enter for `PalettePanel`: activate paste, ⌘↵ copy, or confirm a menu row — without
-    /// depending on the search field remaining first responder after an AppKit click.
-    @discardableResult
-    func handleReturnKey(command: Bool) -> Bool {
-        if menuOpen, !command {
-            panelReturnRequest = PanelReturnRequest(id: UUID(), action: .activateMenu)
-            return true
+    var menuActions: [PaletteMenuAction] {
+        switch overlay {
+        case .none:
+            return []
+        case .appMenu:
+            return [.about, .settings, .quit]
+        case .actions(let id):
+            guard let item = item(withID: id) else { return [] }
+            var actions: [PaletteMenuAction] = [
+                .paste(item),
+                .pasteKeepingOpen(item),
+                .copy(item),
+                .togglePin(item),
+            ]
+            if item.kind == .image {
+                actions.append(.revealInFinder(item))
+            }
+            actions.append(.delete(item))
+            return actions
         }
-        panelReturnRequest = PanelReturnRequest(
-            id: UUID(), action: command ? .copy : .activate)
-        return true
-    }
-
-    /// Space for `PalettePanel`: when the search field is empty, never type a leading space;
-    /// if the selection is an image, toggle Quick Look instead.
-    @discardableResult
-    func handleSpaceKey() -> Bool {
-        guard !menuOpen, isQueryEmpty else { return false }
-        if imageQuickLookAvailable {
-            imageQuickLookOpen.toggle()
-        }
-        return true
-    }
-
-    /// ⌘⌫ clears the search field (Finder-style), rather than deleting a clip.
-    @discardableResult
-    func clearQueryWithShortcut() -> Bool {
-        guard !menuOpen else { return false }
-        guard !isQueryEmpty else { return true }
-        query = ""
-        return true
     }
 
     func prepare() {
-        query = ""
-        selection = 0
-        menuOpen = false
-        appMenuShortcutRequest = nil
-        panelReturnRequest = nil
+        searchTask?.cancel()
+        overlay = .none
+        menuSelection = 0
+        selectedID = nil
         imageQuickLookOpen = false
         imageQuickLookAvailable = false
+        query = ""
         focusToken = UUID()
         resetToken = UUID()
+    }
+
+    func select(_ id: ClipboardItem.ID, follow: Bool = false) {
+        selectedID = id
+        imageQuickLookOpen = false
+        if follow { followToken = UUID() }
+    }
+
+    func openActions(for id: ClipboardItem.ID) {
+        guard searchReady, item(withID: id) != nil else { return }
+        select(id)
+        overlay = .actions(id)
+        menuSelection = 0
+    }
+
+    func toggleAppMenu() {
+        overlay = overlay == .appMenu ? .none : .appMenu
+        menuSelection = 0
+    }
+
+    func closeMenu() {
+        overlay = .none
+        menuSelection = 0
+    }
+
+    func activateMenuItem(at index: Int) {
+        let actions = menuActions
+        guard actions.indices.contains(index) else { return }
+        overlay = .none
+        menuSelection = 0
+        perform(actions[index])
+    }
+
+    @discardableResult
+    func handle(_ command: PaletteCommand) -> Bool {
+        switch command {
+        case .move(let delta):
+            if menuOpen {
+                moveMenu(delta)
+            } else {
+                moveSelection(delta)
+            }
+        case .activate:
+            if menuOpen {
+                activateMenuItem(at: menuSelection)
+            } else if searchReady, let item = selectedItem {
+                core.paste(item)
+            }
+        case .copy:
+            guard searchReady, let item = actionTarget else { return true }
+            overlay = .none
+            core.copyToClipboard(item)
+        case .cancel:
+            if imageQuickLookOpen {
+                imageQuickLookOpen = false
+                ImageQuickLook.close()
+            } else if menuOpen {
+                overlay = .none
+                menuSelection = 0
+            } else {
+                core.hidePalette()
+            }
+        case .toggleActions:
+            guard searchReady, let id = selectedID else { return true }
+            overlay = overlay == .actions(id) ? .none : .actions(id)
+            menuSelection = 0
+        case .togglePin:
+            guard searchReady, let item = actionTarget else { return true }
+            overlay = .none
+            togglePin(item)
+        case .toggleQuickLook:
+            guard !menuOpen, queryIsEmpty else { return true }
+            if imageQuickLookAvailable {
+                imageQuickLookOpen.toggle()
+            }
+        case .clearQuery:
+            guard !menuOpen else { return true }
+            if !queryIsEmpty { query = "" }
+        case .settings:
+            overlay = .none
+            core.showSettings()
+        case .quit:
+            overlay = .none
+            core.requestQuit()
+        }
+        return true
+    }
+
+    private var queryIsEmpty: Bool {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var actionTarget: ClipboardItem? {
+        switch overlay {
+        case .actions(let id):
+            return item(withID: id)
+        case .none:
+            return selectedItem
+        case .appMenu:
+            return nil
+        }
+    }
+
+    private func item(withID id: ClipboardItem.ID) -> ClipboardItem? {
+        core.clipboardStore.items.first { $0.id == id }
+            ?? results.first { $0.id == id }
+    }
+
+    private func moveSelection(_ delta: Int) {
+        guard searchReady, !results.isEmpty else { return }
+        let next = min(max(selectionIndex + delta, 0), results.count - 1)
+        selectedID = results[next].id
+        imageQuickLookOpen = false
+        ImageQuickLook.close()
+        followToken = UUID()
+    }
+
+    private func moveMenu(_ delta: Int) {
+        let count = menuActions.count
+        guard count > 0 else { return }
+        menuSelection = min(max(menuSelection + delta, 0), count - 1)
+    }
+
+    private func perform(_ action: PaletteMenuAction) {
+        switch action {
+        case .about:
+            core.showAbout()
+        case .settings:
+            core.showSettings()
+        case .quit:
+            core.requestQuit()
+        case .paste(let item):
+            core.paste(item)
+        case .pasteKeepingOpen(let item):
+            core.pasteKeepingWindowOpen(item)
+        case .copy(let item):
+            core.copyToClipboard(item)
+        case .togglePin(let item):
+            togglePin(item)
+        case .revealInFinder(let item):
+            core.revealClipboardImage(item)
+        case .delete(let item):
+            let removedIndex = selectionIndex
+            core.clipboardStore.remove(item)
+            results.removeAll { $0.id == item.id }
+            if results.isEmpty {
+                selectedID = nil
+            } else {
+                selectedID = results[min(removedIndex, results.count - 1)].id
+            }
+        }
+    }
+
+    private func togglePin(_ item: ClipboardItem) {
+        core.clipboardStore.togglePinned(item)
+        select(item.id, follow: true)
+    }
+
+    private func queryChanged() {
+        overlay = .none
+        menuSelection = 0
+        imageQuickLookOpen = false
+        ImageQuickLook.close()
+        resetToken = UUID()
+        refreshResults(resetSelection: true, blockCommands: true)
+    }
+
+    private func refreshResults(resetSelection: Bool, blockCommands: Bool) {
+        searchTask?.cancel()
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let priorID = selectedID
+        let priorIndex = selectionIndex
+        if blockCommands { searchReady = false }
+
+        if query.isEmpty {
+            applyResults(
+                core.clipboardStore.displayItems,
+                resetSelection: resetSelection,
+                priorID: priorID,
+                priorIndex: priorIndex)
+            return
+        }
+
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            let matches = await core.clipboardStore.searchAsync(query)
+            guard !Task.isCancelled,
+                self.query.trimmingCharacters(in: .whitespacesAndNewlines) == query
+            else { return }
+            applyResults(
+                matches,
+                resetSelection: resetSelection,
+                priorID: priorID,
+                priorIndex: priorIndex)
+        }
+    }
+
+    private func applyResults(
+        _ newResults: [ClipboardItem], resetSelection: Bool,
+        priorID: ClipboardItem.ID?, priorIndex: Int
+    ) {
+        results = newResults
+        searchReady = true
+
+        guard !newResults.isEmpty else {
+            selectedID = nil
+            overlay = .none
+            return
+        }
+        if !resetSelection, let priorID,
+            newResults.contains(where: { $0.id == priorID })
+        {
+            selectedID = priorID
+        } else {
+            let index = resetSelection ? 0 : min(priorIndex, newResults.count - 1)
+            selectedID = newResults[index].id
+        }
+
+        if case .actions(let id) = overlay,
+            !newResults.contains(where: { $0.id == id })
+        {
+            overlay = .none
+        }
     }
 }
