@@ -38,7 +38,11 @@ struct RootPaletteView: View {
                         query: vm.query,
                         scroll: scroll,
                         onSelect: { vm.select($0.id) },
-                        onActions: { vm.openActions(for: $0.id) }
+                        onActions: { item in
+                            withAnimation(Self.menuAnimation) {
+                                vm.openActions(for: item.id)
+                            }
+                        }
                     )
                     .frame(width: Theme.Size.clipboardListWidth)
                     Rectangle()

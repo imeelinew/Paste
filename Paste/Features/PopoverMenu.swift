@@ -44,6 +44,9 @@ struct PopoverMenuItem {
             title = "Copy to Clipboard"
             icon = nil
             shortcut = "⌘↵"
+        case .pinImageToScreen:
+            title = "Pin to Screen"
+            icon = nil
         case .togglePin(let item):
             title = item.isPinned ? "Unpin Entry" : "Pin Entry"
             icon = .symbol(item.isPinned ? "pin.slash" : "pin")

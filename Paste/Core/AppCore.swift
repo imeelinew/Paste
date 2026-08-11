@@ -15,6 +15,7 @@ final class AppCore: ObservableObject {
     private lazy var windowController = PaletteWindowController(core: self)
     private let activationPolicy = ActivationPolicyCoordinator()
     private lazy var auxWindows = AuxWindowController(activationPolicy: activationPolicy)
+    private lazy var pinnedImageWindows = PinnedImageWindowController()
     private lazy var settingsWindowController = PasteSettingsWindowController(
         activationPolicy: activationPolicy
     )
@@ -158,6 +159,13 @@ final class AppCore: ObservableObject {
         guard let url = clipboardStore.imageURL(for: item) else { return }
         hidePalette(restoreFocus: false)
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    func pinImageToScreen(_ item: ClipboardItem) {
+        guard item.kind == .image, let url = clipboardStore.imageURL(for: item) else { return }
+        let title = String(localized: "Pinned Image", locale: settings.language.locale)
+        hidePalette()
+        pinnedImageWindows.show(itemID: item.id, url: url, title: title)
     }
 
     private func startTransfer(

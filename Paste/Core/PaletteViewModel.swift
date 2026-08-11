@@ -43,6 +43,7 @@ enum PaletteMenuAction: Equatable {
     case paste(ClipboardItem)
     case pasteKeepingOpen(ClipboardItem)
     case copy(ClipboardItem)
+    case pinImageToScreen(ClipboardItem)
     case togglePin(ClipboardItem)
     case revealInFinder(ClipboardItem)
     case delete(ClipboardItem)
@@ -124,8 +125,11 @@ final class PaletteViewModel: ObservableObject {
                 .paste(item),
                 .pasteKeepingOpen(item),
                 .copy(item),
-                .togglePin(item),
             ]
+            if item.kind == .image {
+                actions.append(.pinImageToScreen(item))
+            }
+            actions.append(.togglePin(item))
             if item.kind == .image {
                 actions.append(.revealInFinder(item))
             }
@@ -278,6 +282,8 @@ final class PaletteViewModel: ObservableObject {
             core.pasteKeepingWindowOpen(item)
         case .copy(let item):
             core.copyToClipboard(item)
+        case .pinImageToScreen(let item):
+            core.pinImageToScreen(item)
         case .togglePin(let item):
             togglePin(item)
         case .revealInFinder(let item):
