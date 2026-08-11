@@ -4,10 +4,12 @@ import Carbon.HIToolbox
 enum Paster {
     /// Stamped on Paste's own synthetic keystrokes so listeners can ignore them.
     static let pasteEventTag: Int64 = 0x50415354  // "PAST"
+    private static let finderBundleID = "com.apple.finder"
 
     private enum Payload: Sendable {
         case text(String)
         case image(Data)
+        case file(URL)
     }
 
     /// Prepare, target, write, and deliver as one ordered transaction. The caller hides the palette
@@ -22,7 +24,7 @@ enum Paster {
         let pid = app.processIdentifier
         return await PasteTransaction.run(
             permission: Permissions.ensureAccessibility,
-            prepare: { await prepare(item, store: store) },
+            prepare: { await prepare(item, store: store, targetBundleID: app.bundleIdentifier) },
             willDeliver: willDeliver,
             targetReady: { await activateAndWait(app) },
             write: write,
@@ -36,7 +38,9 @@ enum Paster {
     static func copy(
         _ item: ClipboardItem, store: ClipboardStore, willWrite: () -> Void
     ) async -> Bool {
-        guard let payload = await prepare(item, store: store), !Task.isCancelled else { return false }
+        guard let payload = await prepare(item, store: store, targetBundleID: nil),
+            !Task.isCancelled
+        else { return false }
         willWrite()
         guard write(payload) else { return false }
         store.promote(item)
@@ -67,7 +71,7 @@ enum Paster {
         let pid = app.processIdentifier
         return await PasteTransaction.run(
             permission: Permissions.ensureAccessibility,
-            prepare: { await prepare(item, store: store) },
+            prepare: { await prepare(item, store: store, targetBundleID: app.bundleIdentifier) },
             willDeliver: {},
             targetReady: { !app.isTerminated },
             write: write,
@@ -76,12 +80,18 @@ enum Paster {
     }
 
     @MainActor
-    private static func prepare(_ item: ClipboardItem, store: ClipboardStore) async -> Payload? {
+    private static func prepare(
+        _ item: ClipboardItem, store: ClipboardStore, targetBundleID: String?
+    ) async -> Payload? {
         switch item.kind {
         case .text, .code, .link:
             return item.text.map(Payload.text)
         case .image:
             guard let url = store.imageURL(for: item) else { return nil }
+            if targetBundleID == finderBundleID {
+                guard FileManager.default.isReadableFile(atPath: url.path) else { return nil }
+                return .file(url)
+            }
             return await Task.detached(priority: .userInitiated) {
                 guard !Task.isCancelled,
                     let data = try? Data(contentsOf: url, options: [.mappedIfSafe])
@@ -119,6 +129,9 @@ enum Paster {
         case .image(let data):
             pb.declareTypes([.png, ClipboardManager.internalType], owner: nil)
             guard pb.setData(data, forType: .png) else { return false }
+        case .file(let url):
+            guard pb.writeObjects([url as NSURL]) else { return false }
+            pb.addTypes([ClipboardManager.internalType], owner: nil)
         }
         return pb.setData(Data(), forType: ClipboardManager.internalType)
     }

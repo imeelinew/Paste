@@ -38,7 +38,6 @@ struct RootPaletteView: View {
                         query: vm.query,
                         scroll: scroll,
                         onSelect: { vm.select($0.id) },
-                        onActivate: { vm.handle(.activate) },
                         onActions: { vm.openActions(for: $0.id) }
                     )
                     .frame(width: Theme.Size.clipboardListWidth)
@@ -88,7 +87,7 @@ struct RootPaletteView: View {
         .background(VisualEffectView())
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
         .onChange(of: vm.focusToken) {
-            searchFocused = true
+            requestSearchFocus()
         }
         .onChange(of: vm.resetToken) {
             scroll = ScrollIntent(kind: .top)
@@ -97,11 +96,7 @@ struct RootPaletteView: View {
             scroll = ScrollIntent(kind: .follow)
         }
         .onAppear {
-            searchFocused = true
-            syncImageQuickLook(for: selected)
-        }
-        .onChange(of: selected?.id) {
-            syncImageQuickLook(for: selected)
+            requestSearchFocus()
         }
         .environment(\.locale, settings.language.locale)
     }
@@ -175,10 +170,14 @@ struct RootPaletteView: View {
         withAnimation(Self.menuAnimation) { vm.activateMenuItem(at: index) }
     }
 
-    private func syncImageQuickLook(for item: ClipboardItem?) {
-        let available = item?.kind == .image
-        vm.imageQuickLookAvailable = available
-        if !available { vm.imageQuickLookOpen = false }
+    /// `@FocusState` can remain logically true after AppKit has lost its field editor. Pulse the
+    /// binding so every window-level focus request produces a fresh first-responder transition.
+    private func requestSearchFocus() {
+        searchFocused = false
+        Task { @MainActor in
+            await Task.yield()
+            searchFocused = true
+        }
     }
 
     private static let menuInset: CGFloat = 8

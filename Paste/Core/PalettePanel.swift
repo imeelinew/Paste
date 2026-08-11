@@ -59,7 +59,9 @@ final class PalettePanel: NSPanel {
             case kVK_Escape:
                 return paletteViewModel.handle(.cancel)
             case kVK_Space:
-                return handleOnce(.toggleQuickLook, event: event)
+                if paletteViewModel.canToggleQuickLook {
+                    return handleOnce(.toggleQuickLook, event: event)
+                }
             default:
                 break
             }

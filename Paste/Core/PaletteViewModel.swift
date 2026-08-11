@@ -76,8 +76,6 @@ final class PaletteViewModel: ObservableObject {
     }
     @Published var menuSelection = 0
 
-    /// Maintained by the view from the selected clip's kind.
-    var imageQuickLookAvailable = false
     var onMenuOpenChanged: ((Bool) -> Void)?
 
     private unowned let core: AppCore
@@ -95,6 +93,12 @@ final class PaletteViewModel: ObservableObject {
     }
 
     var menuOpen: Bool { overlay.isOpen }
+
+    /// Space belongs to Quick Look only in this state. Otherwise it remains a normal search-field
+    /// input event (or is swallowed by the modal-menu rule in `PalettePanel`).
+    var canToggleQuickLook: Bool {
+        !menuOpen && queryIsEmpty && selectedItem?.kind == .image
+    }
 
     var selectionIndex: Int {
         guard let selectedID,
@@ -136,7 +140,6 @@ final class PaletteViewModel: ObservableObject {
         menuSelection = 0
         selectedID = nil
         imageQuickLookOpen = false
-        imageQuickLookAvailable = false
         query = ""
         focusToken = UUID()
         resetToken = UUID()
@@ -211,10 +214,8 @@ final class PaletteViewModel: ObservableObject {
             overlay = .none
             togglePin(item)
         case .toggleQuickLook:
-            guard !menuOpen, queryIsEmpty else { return true }
-            if imageQuickLookAvailable {
-                imageQuickLookOpen.toggle()
-            }
+            guard canToggleQuickLook else { return menuOpen }
+            imageQuickLookOpen.toggle()
         case .clearQuery:
             guard !menuOpen else { return true }
             if !queryIsEmpty { query = "" }

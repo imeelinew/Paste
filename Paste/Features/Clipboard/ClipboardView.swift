@@ -8,7 +8,6 @@ struct ClipboardList: View {
     /// Changes only when the list should scroll (keyboard nav / reset), so mouse selection never yanks the scroll position.
     let scroll: ScrollIntent
     let onSelect: (ClipboardItem) -> Void
-    let onActivate: () -> Void
     let onActions: (ClipboardItem) -> Void
     @EnvironmentObject private var store: ClipboardStore
     @State private var geometry = ClipboardTableGeometry()
@@ -21,7 +20,6 @@ struct ClipboardList: View {
             scroll: scroll,
             store: store,
             onSelect: onSelect,
-            onActivate: onActivate,
             onActions: onActions,
             onGeometryChange: { geometry = $0 },
             onScrollActivity: { scrollActivity = UUID() }
@@ -86,7 +84,6 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
     let scroll: ScrollIntent
     let store: ClipboardStore
     let onSelect: (ClipboardItem) -> Void
-    let onActivate: () -> Void
     let onActions: (ClipboardItem) -> Void
     let onGeometryChange: (ClipboardTableGeometry) -> Void
     let onScrollActivity: () -> Void
@@ -106,7 +103,6 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             locale: context.environment.locale,
             store: store,
             onSelect: onSelect,
-            onActivate: onActivate,
             onActions: onActions,
             onGeometryChange: onGeometryChange,
             onScrollActivity: onScrollActivity
@@ -121,7 +117,6 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
         private var locale = Locale.current
         private weak var store: ClipboardStore?
         private var onSelect: ((ClipboardItem) -> Void)?
-        private var onActivate: (() -> Void)?
         private var onActions: ((ClipboardItem) -> Void)?
         private var onGeometryChange: ((ClipboardTableGeometry) -> Void)?
         private var onScrollActivity: (() -> Void)?
@@ -151,8 +146,6 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
             tableView.dataSource = self
             tableView.delegate = self
-            tableView.doubleAction = #selector(doubleClicked(_:))
-            tableView.target = self
             tableView.onRightClick = { [weak self] row in self?.rightClicked(row) }
             hostedTableView = tableView
 
@@ -193,7 +186,6 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             results: [ClipboardItem], selectedID: ClipboardItem.ID?, query: String,
             scroll: ScrollIntent, locale: Locale, store: ClipboardStore,
             onSelect: @escaping (ClipboardItem) -> Void,
-            onActivate: @escaping () -> Void,
             onActions: @escaping (ClipboardItem) -> Void,
             onGeometryChange: @escaping (ClipboardTableGeometry) -> Void,
             onScrollActivity: @escaping () -> Void
@@ -201,7 +193,6 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             guard let tableView = tableView else { return }
             self.store = store
             self.onSelect = onSelect
-            self.onActivate = onActivate
             self.onActions = onActions
             self.onGeometryChange = onGeometryChange
             self.onScrollActivity = onScrollActivity
@@ -301,13 +292,6 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
                 )
                 return view
             }
-        }
-
-        @objc private func doubleClicked(_ sender: NSTableView) {
-            let row = sender.clickedRow
-            guard rows.indices.contains(row), case .item(let item) = rows[row] else { return }
-            onSelect?(item)
-            onActivate?()
         }
 
         private func rightClicked(_ row: Int) {
