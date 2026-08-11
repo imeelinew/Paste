@@ -1,10 +1,12 @@
 {
-  "fill" : "automatic",
+  "fill" : {
+    "automatic-gradient" : "display-p3:0.96783,0.33269,0.44395,1.00000"
+  },
   "groups" : [
     {
       "layers" : [
         {
-          "hidden" : true,
+          "hidden" : false,
           "image-name" : "square.text.square.fill.svg",
           "name" : "square.text.square.fill",
           "position" : {
@@ -28,6 +30,7 @@
     {
       "layers" : [
         {
+          "hidden" : true,
           "image-name" : "document.on.clipboard.fill.svg",
           "name" : "document.on.clipboard.fill",
           "position" : {
