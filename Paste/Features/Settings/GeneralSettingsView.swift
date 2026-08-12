@@ -105,6 +105,10 @@ struct AboutSettingsView: View {
     private static let repositoryURL = URL(string: "https://github.com/imeelinew/Paste")!
     private static let acknowledgments: [(name: String, url: URL)] = [
         (
+            "TinyCast",
+            URL(string: "https://github.com/abue-ammar/tinycast")!
+        ),
+        (
             "KeyboardShortcuts",
             URL(string: "https://github.com/sindresorhus/KeyboardShortcuts")!
         ),
