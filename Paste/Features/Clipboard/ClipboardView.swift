@@ -754,7 +754,9 @@ struct ClipboardPreview: View {
     @ViewBuilder
     private func content(for item: ClipboardItem) -> some View {
         switch item.kind {
-        case .text, .link:
+        case .text:
+            MarkdownPreview(source: item.text ?? "", query: query)
+        case .link:
             SelectableAttributedText(
                 attributed: SearchHighlight.attributed(item.text ?? "", query: query)
             )
