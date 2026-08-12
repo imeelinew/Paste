@@ -93,7 +93,7 @@ jobs:
             --link "https://github.com/$GITHUB_REPOSITORY" \
             --maximum-versions 10 \
             --maximum-deltas 0 \
-            -o appcast.xml \
+            -o "$RUNNER_TEMP/updates/appcast.xml" \
             "$RUNNER_TEMP/updates"
 
           grep -q 'sparkle:edSignature=' "$RUNNER_TEMP/updates/appcast.xml"
