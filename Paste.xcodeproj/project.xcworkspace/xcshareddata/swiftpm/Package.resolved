@@ -1,5 +1,5 @@
 {
-  "originHash" : "7f76cd4a0dae815f5b4620d59ec89e9b3b164f135c0a18fc2bf38a24ec5a2f4c",
+  "originHash" : "486ceb658e2682d79cb97ff43002f88932889fb56fa0de1049356cfc4ef59909",
   "pins" : [
     {
       "identity" : "keyboardshortcuts",
@@ -17,6 +17,24 @@
       "state" : {
         "revision" : "86428fb3d6e5c4f0e05e5f4f4a8474bb13924459",
         "version" : "1.4.0"
+      }
+    },
+    {
+      "identity" : "swift-cmark",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-cmark.git",
+      "state" : {
+        "revision" : "924936d0427cb25a61169739a7660230bffa6ea6",
+        "version" : "0.8.0"
+      }
+    },
+    {
+      "identity" : "swift-markdown",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-markdown",
+      "state" : {
+        "revision" : "3c6f9523da3a1ec2fd829673e472d95b8097a3b8",
+        "version" : "0.8.0"
       }
     }
   ],

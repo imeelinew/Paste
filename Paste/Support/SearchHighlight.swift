@@ -58,8 +58,8 @@ enum SearchHighlight {
         }
     }
 
-    /// Adds search emphasis without rebuilding an AppKit attributed string, preserving Markdown
-    /// presentation intents used for paragraph and list layout.
+    /// Adds search emphasis without rebuilding an AppKit attributed string, preserving every
+    /// explicit font and paragraph-layout attribute produced by the Markdown renderer.
     static func applying(to attributed: NSAttributedString, query: String) -> NSAttributedString {
         let output = NSMutableAttributedString(attributedString: attributed)
         let source = output.string

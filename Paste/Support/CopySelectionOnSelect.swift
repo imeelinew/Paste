@@ -97,19 +97,22 @@ struct SelectableAttributedText: NSViewRepresentable {
         return mutable
     }
 
-    /// Markdown created directly as `NSAttributedString` carries AppKit's block-level
-    /// presentation intents. Preserve them untouched so TextKit can lay out paragraphs and lists.
+    /// Fully styled AppKit previews already contain their fonts and paragraph geometry. Fill only
+    /// missing baseline attributes, preserving the renderer's layout verbatim.
     private static func nsAttributed(from attributed: NSAttributedString) -> NSAttributedString {
         let mutable = NSMutableAttributedString(attributedString: attributed)
         let full = NSRange(location: 0, length: mutable.length)
         guard full.length > 0 else { return mutable }
 
+        let font = NSFont.preferredFont(forTextStyle: .subheadline)
+        mutable.enumerateAttribute(.font, in: full) { value, range, _ in
+            if value == nil { mutable.addAttribute(.font, value: font, range: range) }
+        }
         mutable.enumerateAttribute(.foregroundColor, in: full) { value, range, _ in
             if value == nil {
                 mutable.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range)
             }
         }
-        let font = NSFont.preferredFont(forTextStyle: .subheadline)
         NerdSymbolsFont.applyFallback(to: mutable, baseFont: font)
         return mutable
     }
