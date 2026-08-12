@@ -567,12 +567,19 @@ private final class ClipboardThumbnailView: NSView {
     /// Well above the 48 device pixels needed by the 24pt row slot on a 2× display, leaving enough
     /// source detail for high-quality final downsampling.
     private static let imageMaxPixel: CGFloat = 128
+    private static let markdownCache = NSCache<NSUUID, NSNumber>()
+
+    private enum Placeholder {
+        case symbol(String)
+        case markdown
+    }
 
     private let symbolView = NSImageView()
+    private let markdownLabel = NSTextField(labelWithString: "")
     private var representedID: ClipboardItem.ID?
     private var loadTask: Task<Void, Never>?
     private var displayedImage: NSImage?
-    private var symbolName = "photo"
+    private var placeholder = Placeholder.symbol("photo")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -586,11 +593,29 @@ private final class ClipboardThumbnailView: NSView {
         symbolView.contentTintColor = .secondaryLabelColor
         symbolView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(symbolView)
+
+        if let iconFont = NerdSymbolsFont.nsFont(ofSize: 13) {
+            markdownLabel.stringValue = "\u{F48A}"
+            markdownLabel.font = iconFont
+        } else {
+            markdownLabel.stringValue = "MD"
+            markdownLabel.font = .systemFont(ofSize: 8, weight: .bold)
+        }
+        markdownLabel.textColor = .secondaryLabelColor
+        markdownLabel.alignment = .center
+        markdownLabel.isHidden = true
+        markdownLabel.translatesAutoresizingMaskIntoConstraints = false
+        markdownLabel.setAccessibilityLabel("Markdown")
+        addSubview(markdownLabel)
+
         NSLayoutConstraint.activate([
             symbolView.centerXAnchor.constraint(equalTo: centerXAnchor),
             symbolView.centerYAnchor.constraint(equalTo: centerYAnchor),
             symbolView.widthAnchor.constraint(equalToConstant: 14),
             symbolView.heightAnchor.constraint(equalToConstant: 14),
+
+            markdownLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            markdownLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
 
@@ -635,6 +660,21 @@ private final class ClipboardThumbnailView: NSView {
         switch item.kind {
         case .text:
             showSymbol("text.menu")
+            guard let source = item.text, !source.isEmpty else { return }
+            let cacheKey = item.id as NSUUID
+            if let cached = Self.markdownCache.object(forKey: cacheKey) {
+                if cached.boolValue { showMarkdownSymbol() }
+                return
+            }
+            let id = item.id
+            loadTask = Task { @MainActor [weak self] in
+                let isMarkdown = await Task.detached(priority: .utility) {
+                    MarkdownAttributedRenderer.isMarkdown(source)
+                }.value
+                Self.markdownCache.setObject(NSNumber(value: isMarkdown), forKey: cacheKey)
+                guard !Task.isCancelled, let self, representedID == id else { return }
+                if isMarkdown { showMarkdownSymbol() }
+            }
         case .code:
             showSymbol("chevron.left.forwardslash.chevron.right")
         case .link:
@@ -669,18 +709,22 @@ private final class ClipboardThumbnailView: NSView {
 
     func refreshAppearance() {
         guard let displayedImage else {
-            showSymbol(symbolName)
+            switch placeholder {
+            case .symbol(let name): showSymbol(name)
+            case .markdown: showMarkdownSymbol()
+            }
             return
         }
         showImage(displayedImage)
     }
 
     private func showSymbol(_ name: String) {
-        symbolName = name
+        placeholder = .symbol(name)
         displayedImage = nil
         layer?.contents = nil
         layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
         needsDisplay = true
+        markdownLabel.isHidden = true
         symbolView.isHidden = false
         let pointSize = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
         let hierarchy = NSImage.SymbolConfiguration(hierarchicalColor: .secondaryLabelColor)
@@ -688,9 +732,21 @@ private final class ClipboardThumbnailView: NSView {
             .withSymbolConfiguration(pointSize.applying(hierarchy))
     }
 
+    private func showMarkdownSymbol() {
+        placeholder = .markdown
+        displayedImage = nil
+        layer?.contents = nil
+        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
+        needsDisplay = true
+        symbolView.isHidden = true
+        markdownLabel.textColor = .secondaryLabelColor
+        markdownLabel.isHidden = false
+    }
+
     private func showImage(_ image: NSImage) {
         displayedImage = image
         symbolView.isHidden = true
+        markdownLabel.isHidden = true
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.contents = nil
         needsDisplay = true
