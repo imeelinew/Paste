@@ -4,7 +4,20 @@ import SwiftUI
 /// Read-only attributed preview text with select-to-copy. The scroll view and text system are
 /// entirely AppKit so large previews do not need a SwiftUI `ScrollView` around `NSTextView`.
 struct SelectableAttributedText: NSViewRepresentable {
-    var attributed: AttributedString
+    private enum Storage {
+        case swiftUI(AttributedString)
+        case appKit(NSAttributedString)
+    }
+
+    private let storage: Storage
+
+    init(attributed: AttributedString) {
+        storage = .swiftUI(attributed)
+    }
+
+    init(nsAttributed: NSAttributedString) {
+        storage = .appKit(nsAttributed)
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -19,8 +32,14 @@ struct SelectableAttributedText: NSViewRepresentable {
     func updateNSView(_ scrollView: PreviewTextScrollView, context: Context) {
         context.coordinator.onCopy = { Paster.copyString($0) }
         let textView = scrollView.textView
-        let ns = Self.nsAttributed(from: attributed, environment: context.environment)
-        let plain = String(attributed.characters)
+        let ns: NSAttributedString
+        switch storage {
+        case .swiftUI(let attributed):
+            ns = Self.nsAttributed(from: attributed, environment: context.environment)
+        case .appKit(let attributed):
+            ns = Self.nsAttributed(from: attributed)
+        }
+        let plain = ns.string
         if textView.string != plain {
             textView.textStorage?.setAttributedString(ns)
             textView.invalidateIntrinsicContentSize()
@@ -74,6 +93,23 @@ struct SelectableAttributedText: NSViewRepresentable {
                 mutable.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range)
             }
         }
+        NerdSymbolsFont.applyFallback(to: mutable, baseFont: font)
+        return mutable
+    }
+
+    /// Markdown created directly as `NSAttributedString` carries AppKit's block-level
+    /// presentation intents. Preserve them untouched so TextKit can lay out paragraphs and lists.
+    private static func nsAttributed(from attributed: NSAttributedString) -> NSAttributedString {
+        let mutable = NSMutableAttributedString(attributedString: attributed)
+        let full = NSRange(location: 0, length: mutable.length)
+        guard full.length > 0 else { return mutable }
+
+        mutable.enumerateAttribute(.foregroundColor, in: full) { value, range, _ in
+            if value == nil {
+                mutable.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range)
+            }
+        }
+        let font = NSFont.preferredFont(forTextStyle: .subheadline)
         NerdSymbolsFont.applyFallback(to: mutable, baseFont: font)
         return mutable
     }

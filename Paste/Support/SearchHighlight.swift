@@ -58,6 +58,27 @@ enum SearchHighlight {
         }
     }
 
+    /// Adds search emphasis without rebuilding an AppKit attributed string, preserving Markdown
+    /// presentation intents used for paragraph and list layout.
+    static func applying(to attributed: NSAttributedString, query: String) -> NSAttributedString {
+        let output = NSMutableAttributedString(attributedString: attributed)
+        let source = output.string
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty, !source.isEmpty else { return output }
+
+        let color = NSColor.controlAccentColor.withAlphaComponent(0.32)
+        for range in literalRanges(source: source, query: needle) {
+            output.addAttribute(.backgroundColor, value: color, range: NSRange(range, in: source))
+        }
+        if Pinyin.queryLooksLatin(needle) {
+            for range in Pinyin.matchingSourceRanges(query: needle, text: source) {
+                output.addAttribute(
+                    .backgroundColor, value: color, range: NSRange(range, in: source))
+            }
+        }
+        return output
+    }
+
     private static func literalRanges(source: String, query: String) -> [Range<String.Index>] {
         var ranges: [Range<String.Index>] = []
         var searchStart = source.startIndex

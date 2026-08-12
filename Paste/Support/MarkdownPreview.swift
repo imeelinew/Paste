@@ -8,7 +8,13 @@ struct MarkdownPreview: View {
     let source: String
     var query: String = ""
 
-    @State private var rendered: AttributedString?
+    @State private var rendered: NSAttributedString?
+
+    /// Immutable after creation; only the main actor reads the value returned by the detached
+    /// parser task.
+    private struct SendableRendered: @unchecked Sendable {
+        let value: NSAttributedString
+    }
 
     private struct Request: Hashable {
         let source: String
@@ -16,31 +22,39 @@ struct MarkdownPreview: View {
     }
 
     var body: some View {
-        SelectableAttributedText(attributed: rendered ?? AttributedString(source))
-            .task(id: Request(source: source, query: query)) {
-                rendered = nil
-                var output = await Task.detached(priority: .userInitiated) {
-                    Self.render(source)
-                }.value
-                guard !Task.isCancelled else { return }
-
-                // Markdown removes its delimiters, so highlight against the rendered characters
-                // instead of trying to reuse source-string ranges.
-                let visibleText = String(output.characters)
-                SearchHighlight.apply(to: &output, source: visibleText, query: query)
-                rendered = output
+        Group {
+            if let rendered {
+                SelectableAttributedText(nsAttributed: rendered)
+            } else {
+                SelectableAttributedText(
+                    attributed: SearchHighlight.attributed(source, query: query))
             }
+        }
+        .task(id: Request(source: source, query: query)) {
+            rendered = nil
+            let parsed = await Task.detached(priority: .userInitiated) {
+                Self.render(source).map(SendableRendered.init)
+            }.value
+            guard !Task.isCancelled else { return }
+            rendered = parsed.map {
+                SearchHighlight.applying(to: $0.value, query: query)
+            }
+        }
     }
 
-    private nonisolated static func render(_ source: String) -> AttributedString {
+    private nonisolated static func render(_ source: String) -> NSAttributedString? {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .full,
             failurePolicy: .returnPartiallyParsedIfPossible
         )
-        guard let parsed = try? AttributedString(markdown: source, options: options),
-            containsFormatting(parsed)
-        else { return AttributedString(source) }
-        return parsed
+        guard let semantic = try? AttributedString(markdown: source, options: options),
+            containsFormatting(semantic)
+        else { return nil }
+
+        // Parsing directly to NSAttributedString preserves block presentation intents. Bridging
+        // from Swift's AttributedString keeps inline styling but drops the information TextKit
+        // needs to lay out headings, paragraphs, and lists.
+        return try? NSAttributedString(markdown: source, options: options)
     }
 
     /// Full Markdown parsing can normalize otherwise ordinary whitespace. Keep genuinely plain
