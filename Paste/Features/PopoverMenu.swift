@@ -27,7 +27,7 @@ struct PopoverMenuItem {
             title = "About Paste"
             icon = nil
         case .checkForUpdates:
-            title = "Check for Updates…"
+            title = "Check for Updates"
             icon = nil
             isEnabled = AppCore.shared.updateService.canCheckForUpdates
         case .settings:
