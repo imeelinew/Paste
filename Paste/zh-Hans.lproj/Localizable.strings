@@ -55,6 +55,10 @@
 "Pin Entry" = "固定项目";
 "Pin to Screen" = "钉到屏幕上";
 "Pinned Image" = "钉选图片";
+"Pinned Image Size" = "钉选图片大小";
+"Small" = "小";
+"Medium" = "中";
+"Large" = "大";
 "Close Pinned Image" = "关闭钉选图片";
 "Close All Pinned Images" = "关闭所有钉选图片";
 "Dismiss Pinned Image" = "退出钉选图片";

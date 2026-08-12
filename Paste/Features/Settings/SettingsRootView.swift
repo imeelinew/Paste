@@ -44,7 +44,7 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         switch self {
         case .general: return 300
         case .shortcuts: return 620
-        case .appearance: return 180
+        case .appearance: return 220
         case .history: return 360
         case .about: return 320
         }

@@ -23,7 +23,12 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
     private var panels: [ClipboardItem.ID: PinnedImagePanel] = [:]
     private var closingPanels: Set<ClipboardItem.ID> = []
 
-    func show(itemID: ClipboardItem.ID, url: URL, title: String) {
+    func show(
+        itemID: ClipboardItem.ID,
+        url: URL,
+        title: String,
+        preferredLongEdge: @escaping () -> CGFloat
+    ) {
         if let panel = panels[itemID] {
             activate(panel)
             return
@@ -36,7 +41,8 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         let imageSize = NSImage(contentsOf: url)?.size ?? pixelSize
         let initialSize = PinnedImageLayout.initialSize(
             imageSize: imageSize,
-            visibleFrame: visibleFrame
+            visibleFrame: visibleFrame,
+            preferredLongEdge: preferredLongEdge()
         )
 
         let panel = PinnedImagePanel(
@@ -63,7 +69,13 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         )
         panel.delegate = self
         panel.onCommand = { [weak self] command in
-            self?.handle(command, itemID: itemID, url: url, imageSize: imageSize)
+            self?.handle(
+                command,
+                itemID: itemID,
+                url: url,
+                imageSize: imageSize,
+                preferredLongEdge: preferredLongEdge
+            )
         }
 
         let decodeMaxPixel = NSScreen.screens.reduce(CGFloat(1_600)) { result, candidate in
@@ -150,7 +162,8 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         _ command: PinnedImageCommand,
         itemID: ClipboardItem.ID,
         url: URL,
-        imageSize: CGSize
+        imageSize: CGSize,
+        preferredLongEdge: () -> CGFloat
     ) {
         guard let panel = panels[itemID] else { return }
 
@@ -168,16 +181,25 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         case .zoomOut:
             panel.resize(by: 0.9)
         case .resetSize:
-            resetSize(of: panel, imageSize: imageSize)
+            resetSize(
+                of: panel,
+                imageSize: imageSize,
+                preferredLongEdge: preferredLongEdge()
+            )
         }
     }
 
-    private func resetSize(of panel: PinnedImagePanel, imageSize: CGSize) {
+    private func resetSize(
+        of panel: PinnedImagePanel,
+        imageSize: CGSize,
+        preferredLongEdge: CGFloat
+    ) {
         let visibleFrame = panel.screen?.visibleFrame ?? targetScreen()?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1_280, height: 800)
         let size = PinnedImageLayout.initialSize(
             imageSize: imageSize,
-            visibleFrame: visibleFrame
+            visibleFrame: visibleFrame,
+            preferredLongEdge: preferredLongEdge
         )
         let center = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
         let origin = CGPoint(
@@ -207,15 +229,18 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
 /// multi-display bounds remain deterministic.
 enum PinnedImageLayout {
     static func initialSize(
-        imageSize: CGSize, visibleFrame: CGRect
+        imageSize: CGSize,
+        visibleFrame: CGRect,
+        preferredLongEdge: CGFloat
     ) -> CGSize {
         let natural = normalized(imageSize)
         let maxSize = CGSize(
             width: max(visibleFrame.width - 24, 1),
             height: max(visibleFrame.height - 24, 1)
         )
-        let fitScale = min(maxSize.width / natural.width, maxSize.height / natural.height)
-        let scale = max(min(fitScale, 1), 0.001)
+        let preferredScale = max(preferredLongEdge, 1) / max(natural.width, natural.height)
+        let screenScale = min(maxSize.width / natural.width, maxSize.height / natural.height)
+        let scale = max(min(preferredScale, screenScale, 1), 0.001)
         return rounded(CGSize(width: natural.width * scale, height: natural.height * scale))
     }
 

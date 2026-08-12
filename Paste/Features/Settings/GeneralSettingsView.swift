@@ -86,6 +86,17 @@ struct AppearanceSettingsView: View {
                 .fixedSize()
                 .accessibilityLabel("Theme")
             }
+
+            PreferencesRow(label: "Pinned Image Size") {
+                Picker("Pinned Image Size", selection: $settings.pinnedImageSize) {
+                    ForEach(PinnedImageSize.allCases) { option in
+                        Text(LocalizedStringKey(option.title)).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
         }
     }
 }

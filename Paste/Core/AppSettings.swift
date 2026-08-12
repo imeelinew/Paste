@@ -50,6 +50,30 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+enum PinnedImageSize: String, CaseIterable, Identifiable {
+    case small
+    case medium
+    case large
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .small: return "Small"
+        case .medium: return "Medium"
+        case .large: return "Large"
+        }
+    }
+
+    var longestEdge: CGFloat {
+        switch self {
+        case .small: return 360
+        case .medium: return 480
+        case .large: return 640
+        }
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
@@ -63,6 +87,7 @@ final class AppSettings: ObservableObject {
         static let renderMarkdown = "renderMarkdown"
         static let language = "appLanguage"
         static let appearance = "appAppearance"
+        static let pinnedImageSize = "pinnedImageSize"
     }
 
     @Published var clipboardRetention: ClipboardRetention {
@@ -105,6 +130,10 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published var pinnedImageSize: PinnedImageSize {
+        didSet { defaults.set(pinnedImageSize.rawValue, forKey: Key.pinnedImageSize) }
+    }
+
     init() {
         clipboardRetention =
             ClipboardRetention(rawValue: defaults.integer(forKey: Key.clipboardRetention))
@@ -120,5 +149,8 @@ final class AppSettings: ObservableObject {
         appearance =
             defaults.string(forKey: Key.appearance).flatMap(AppAppearance.init(rawValue:))
             ?? .system
+        pinnedImageSize =
+            defaults.string(forKey: Key.pinnedImageSize).flatMap(PinnedImageSize.init(rawValue:))
+            ?? .medium
     }
 }

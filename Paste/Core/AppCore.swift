@@ -171,7 +171,14 @@ final class AppCore: ObservableObject {
         guard item.kind == .image, let url = clipboardStore.imageURL(for: item) else { return }
         let title = String(localized: "Pinned Image", locale: settings.language.locale)
         hidePalette()
-        pinnedImageWindows.show(itemID: item.id, url: url, title: title)
+        pinnedImageWindows.show(
+            itemID: item.id,
+            url: url,
+            title: title,
+            preferredLongEdge: { [weak settings] in
+                settings?.pinnedImageSize.longestEdge ?? PinnedImageSize.medium.longestEdge
+            }
+        )
     }
 
     private func startTransfer(
