@@ -1,9 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
-  <channel>
-    <title>Paste Updates</title>
-    <link>https://github.com/imeelinew/Paste</link>
-    <description>Sparkle appcast for Paste</description>
-    <language>en</language>
-  </channel>
+    <channel>
+        <title>Paste Updates</title>
+        <link>https://github.com/imeelinew/Paste</link>
+        <description>Sparkle appcast for Paste</description>
+        <language>en</language>
+        <item>
+            <title>0.1.3</title>
+            <pubDate>Wed, 12 Aug 2026 09:46:04 +0000</pubDate>
+            <link>https://github.com/imeelinew/Paste</link>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>0.1.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/imeelinew/Paste/releases/download/v0.1.3/Paste-0.1.3.zip" length="5930375" type="application/octet-stream" sparkle:edSignature="BFoyHLxWE3EGRsYiREgbbEc5pyPwiRSvqAAXbcBuswftChg1hilYDNYRZulWvCAklWLkPQ8JQpln0v1ZRbIqBQ=="/>
+        </item>
+    </channel>
 </rss>
