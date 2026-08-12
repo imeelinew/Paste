@@ -1,5 +1,20 @@
 import AppKit
+import KeyboardShortcuts
 import SwiftUI
+
+private enum PinnedImageCommand {
+    case close
+    case closeAll
+    case dismiss
+    case copy
+    case zoomIn
+    case zoomOut
+    case resetSize
+
+    var allowsKeyRepeat: Bool {
+        self == .zoomIn || self == .zoomOut
+    }
+}
 
 /// Owns transient image panels independently from the clipboard palette. Each clipboard image
 /// gets at most one panel; pinning it again brings the existing panel forward.
@@ -47,6 +62,9 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
             visibleFrame: visibleFrame
         )
         panel.delegate = self
+        panel.onCommand = { [weak self] command in
+            self?.handle(command, itemID: itemID, url: url, imageSize: imageSize)
+        }
 
         let decodeMaxPixel = NSScreen.screens.reduce(CGFloat(1_600)) { result, candidate in
             max(
@@ -128,6 +146,47 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    private func handle(
+        _ command: PinnedImageCommand,
+        itemID: ClipboardItem.ID,
+        url: URL,
+        imageSize: CGSize
+    ) {
+        guard let panel = panels[itemID] else { return }
+
+        switch command {
+        case .close, .dismiss:
+            close(itemID)
+        case .closeAll:
+            for id in Array(panels.keys) {
+                close(id)
+            }
+        case .copy:
+            Task { _ = await Paster.copyImage(at: url) }
+        case .zoomIn:
+            panel.resize(by: 1.1)
+        case .zoomOut:
+            panel.resize(by: 0.9)
+        case .resetSize:
+            resetSize(of: panel, imageSize: imageSize)
+        }
+    }
+
+    private func resetSize(of panel: PinnedImagePanel, imageSize: CGSize) {
+        let visibleFrame = panel.screen?.visibleFrame ?? targetScreen()?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1_280, height: 800)
+        let size = PinnedImageLayout.initialSize(
+            imageSize: imageSize,
+            visibleFrame: visibleFrame
+        )
+        let center = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
+        let origin = CGPoint(
+            x: min(max(center.x - size.width / 2, visibleFrame.minX), visibleFrame.maxX - size.width),
+            y: min(max(center.y - size.height / 2, visibleFrame.minY), visibleFrame.maxY - size.height)
+        )
+        panel.setFrame(NSRect(origin: origin, size: size), display: true, animate: true)
+    }
+
     private func targetScreen() -> NSScreen? {
         let mouse = NSEvent.mouseLocation
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
@@ -186,24 +245,31 @@ enum PinnedImageLayout {
 }
 
 private final class PinnedImagePanel: NSPanel {
+    var onCommand: ((PinnedImageCommand) -> Void)?
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
     override func sendEvent(_ event: NSEvent) {
-        guard event.type == .magnify else {
-            super.sendEvent(event)
+        if event.type == .keyDown, let command = command(for: event) {
+            if !event.isARepeat || command.allowsKeyRepeat {
+                onCommand?(command)
+            }
             return
         }
-        resizeByMagnification(event.magnification)
+        if event.type == .magnify {
+            resize(by: max(1 + event.magnification, 0.1))
+            return
+        }
+        super.sendEvent(event)
     }
 
-    private func resizeByMagnification(_ magnification: CGFloat) {
-        guard magnification.isFinite, magnification != 0 else { return }
+    func resize(by requestedScale: CGFloat) {
+        guard requestedScale.isFinite, requestedScale > 0, requestedScale != 1 else { return }
 
         let current = frame
         guard current.width > 0, current.height > 0 else { return }
 
-        let requestedScale = max(1 + magnification, 0.1)
         let minimumScale = max(
             contentMinSize.width / current.width,
             contentMinSize.height / current.height
@@ -217,6 +283,18 @@ private final class PinnedImagePanel: NSPanel {
             height: size.height
         )
         setFrame(resizedFrame, display: true)
+    }
+
+    private func command(for event: NSEvent) -> PinnedImageCommand? {
+        let shortcut = KeyboardShortcuts.Shortcut(event: event)
+        if PinnedImageShortcut.close.matches(shortcut) { return .close }
+        if PinnedImageShortcut.closeAll.matches(shortcut) { return .closeAll }
+        if PinnedImageShortcut.dismiss.matches(shortcut) { return .dismiss }
+        if PinnedImageShortcut.copy.matches(shortcut) { return .copy }
+        if PinnedImageShortcut.zoomIn.matches(shortcut) { return .zoomIn }
+        if PinnedImageShortcut.zoomOut.matches(shortcut) { return .zoomOut }
+        if PinnedImageShortcut.resetSize.matches(shortcut) { return .resetSize }
+        return nil
     }
 }
 

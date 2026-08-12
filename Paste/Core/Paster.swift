@@ -53,6 +53,13 @@ enum Paster {
         _ = write(.text(text))
     }
 
+    /// Copies a pinned image without routing through the palette or synthesizing a paste event.
+    @MainActor @discardableResult
+    static func copyImage(at url: URL) async -> Bool {
+        guard let payload = await imagePayload(at: url), !Task.isCancelled else { return false }
+        return write(payload)
+    }
+
     /// Keep text copied or cut from Paste's own search field out of clipboard history while
     /// preserving the field editor's native editing behavior and pasteboard contents.
     @MainActor
@@ -92,13 +99,17 @@ enum Paster {
                 guard FileManager.default.isReadableFile(atPath: url.path) else { return nil }
                 return .file(url)
             }
-            return await Task.detached(priority: .userInitiated) {
-                guard !Task.isCancelled,
-                    let data = try? Data(contentsOf: url, options: [.mappedIfSafe])
-                else { return nil }
-                return Payload.image(data)
-            }.value
+            return await imagePayload(at: url)
         }
+    }
+
+    private static func imagePayload(at url: URL) async -> Payload? {
+        await Task.detached(priority: .userInitiated) {
+            guard !Task.isCancelled,
+                let data = try? Data(contentsOf: url, options: [.mappedIfSafe])
+            else { return nil }
+            return Payload.image(data)
+        }.value
     }
 
     /// Wait for the target's actual activation state instead of guessing with a fixed delay.

@@ -56,6 +56,12 @@
 "Pin to Screen" = "Pin to Screen";
 "Pinned Image" = "Pinned Image";
 "Close Pinned Image" = "Close Pinned Image";
+"Close All Pinned Images" = "Close All Pinned Images";
+"Dismiss Pinned Image" = "Dismiss Pinned Image";
+"Copy Pinned Image" = "Copy Pinned Image";
+"Zoom In Pinned Image" = "Zoom In Pinned Image";
+"Zoom Out Pinned Image" = "Zoom Out Pinned Image";
+"Fit Pinned Image to Screen" = "Fit Pinned Image to Screen";
 "Pinned" = "Pinned";
 "Quit" = "Quit";
 "Quit Paste" = "Quit Paste";

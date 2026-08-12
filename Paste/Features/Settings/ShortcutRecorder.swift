@@ -20,6 +20,34 @@ extension KeyboardShortcuts.Name {
         default: .init(.p, modifiers: [.command])
     )
     static let paletteShowInFinder = Self("paletteShowInFinder")
+    static let pinnedImageClose = Self(
+        "pinnedImageClose",
+        default: .init(.w, modifiers: [.command])
+    )
+    static let pinnedImageCloseAll = Self(
+        "pinnedImageCloseAll",
+        default: .init(.w, modifiers: [.command, .option])
+    )
+    static let pinnedImageDismiss = Self(
+        "pinnedImageDismiss",
+        default: .init(.escape)
+    )
+    static let pinnedImageCopy = Self(
+        "pinnedImageCopy",
+        default: .init(.c, modifiers: [.command])
+    )
+    static let pinnedImageZoomIn = Self(
+        "pinnedImageZoomIn",
+        default: .init(.equal, modifiers: [.command, .shift])
+    )
+    static let pinnedImageZoomOut = Self(
+        "pinnedImageZoomOut",
+        default: .init(.minus, modifiers: [.command])
+    )
+    static let pinnedImageResetSize = Self(
+        "pinnedImageResetSize",
+        default: .init(.zero, modifiers: [.command])
+    )
 }
 
 enum PaletteShortcut {
@@ -59,8 +87,48 @@ enum PaletteShortcut {
         return eventShortcut == shortcut
     }
 
-    func keepLocal() {
+    private static func local(
+        _ name: KeyboardShortcuts.Name
+    ) -> KeyboardShortcuts.Name {
         KeyboardShortcuts.disable(name)
+        return name
+    }
+}
+
+enum PinnedImageShortcut {
+    case close
+    case closeAll
+    case dismiss
+    case copy
+    case zoomIn
+    case zoomOut
+    case resetSize
+
+    private static let closeName = local(.pinnedImageClose)
+    private static let closeAllName = local(.pinnedImageCloseAll)
+    private static let dismissName = local(.pinnedImageDismiss)
+    private static let copyName = local(.pinnedImageCopy)
+    private static let zoomInName = local(.pinnedImageZoomIn)
+    private static let zoomOutName = local(.pinnedImageZoomOut)
+    private static let resetSizeName = local(.pinnedImageResetSize)
+
+    var name: KeyboardShortcuts.Name {
+        switch self {
+        case .close: Self.closeName
+        case .closeAll: Self.closeAllName
+        case .dismiss: Self.dismissName
+        case .copy: Self.copyName
+        case .zoomIn: Self.zoomInName
+        case .zoomOut: Self.zoomOutName
+        case .resetSize: Self.resetSizeName
+        }
+    }
+
+    func matches(_ eventShortcut: KeyboardShortcuts.Shortcut?) -> Bool {
+        guard let eventShortcut, let shortcut = KeyboardShortcuts.getShortcut(for: name) else {
+            return false
+        }
+        return eventShortcut == shortcut
     }
 
     private static func local(
@@ -71,15 +139,15 @@ enum PaletteShortcut {
     }
 }
 
-private struct PaletteShortcutRecorder: View {
-    let shortcut: PaletteShortcut
+private struct LocalShortcutRecorder: View {
+    let name: KeyboardShortcuts.Name
 
     var body: some View {
-        KeyboardShortcuts.Recorder(for: shortcut.name) { _ in
-            shortcut.keepLocal()
+        KeyboardShortcuts.Recorder(for: name) { _ in
+            KeyboardShortcuts.disable(name)
         }
         .onAppear {
-            shortcut.keepLocal()
+            KeyboardShortcuts.disable(name)
         }
     }
 }
@@ -98,6 +166,16 @@ struct ShortcutsSettingsView: View {
             shortcutRow("Pin to Screen", shortcut: .pinToScreen)
             shortcutRow("Pin Entry", shortcut: .togglePin)
             shortcutRow("Show in Finder", shortcut: .showInFinder)
+
+            PreferencesDivider()
+
+            pinnedImageShortcutRow("Close Pinned Image", shortcut: .close)
+            pinnedImageShortcutRow("Close All Pinned Images", shortcut: .closeAll)
+            pinnedImageShortcutRow("Dismiss Pinned Image", shortcut: .dismiss)
+            pinnedImageShortcutRow("Copy Pinned Image", shortcut: .copy)
+            pinnedImageShortcutRow("Zoom In Pinned Image", shortcut: .zoomIn)
+            pinnedImageShortcutRow("Zoom Out Pinned Image", shortcut: .zoomOut)
+            pinnedImageShortcutRow("Fit Pinned Image to Screen", shortcut: .resetSize)
         }
     }
 
@@ -106,7 +184,16 @@ struct ShortcutsSettingsView: View {
         shortcut: PaletteShortcut
     ) -> some View {
         PreferencesRow(label: label) {
-            PaletteShortcutRecorder(shortcut: shortcut)
+            LocalShortcutRecorder(name: shortcut.name)
+        }
+    }
+
+    private func pinnedImageShortcutRow(
+        _ label: LocalizedStringKey,
+        shortcut: PinnedImageShortcut
+    ) -> some View {
+        PreferencesRow(label: label) {
+            LocalShortcutRecorder(name: shortcut.name)
         }
     }
 }
