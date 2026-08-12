@@ -40,9 +40,7 @@ struct RootPaletteView: View {
                         scroll: scroll,
                         onSelect: { vm.select($0.id) },
                         onActions: { item in
-                            withAnimation(Self.menuAnimation) {
-                                vm.openActions(for: item.id)
-                            }
+                            vm.openActions(for: item.id)
                         }
                     )
                     .frame(width: Theme.Size.clipboardListWidth)
@@ -62,7 +60,7 @@ struct RootPaletteView: View {
                 Color.black.opacity(0.001)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        withAnimation(Self.menuAnimation) { vm.closeMenu() }
+                        vm.closeMenu()
                     }
             }
         }
@@ -88,6 +86,9 @@ struct RootPaletteView: View {
                 .transition(Self.menuTransition(.bottomTrailing))
             }
         }
+        // Animate the state transition, not individual input paths. Mouse, keyboard, and future
+        // commands all receive the same menu entrance and exit automatically.
+        .animation(Self.menuAnimation, value: vm.overlay)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(VisualEffectView())
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
@@ -127,7 +128,7 @@ struct RootPaletteView: View {
     private func bottomBar(showActionGroup: Bool) -> some View {
         HStack(spacing: 0) {
             MenuCircleButton(pressed: showAppMenu) {
-                withAnimation(Self.menuAnimation) { vm.toggleAppMenu() }
+                vm.toggleAppMenu()
             }
             Spacer()
             if showActionGroup { actionGroup }
@@ -154,7 +155,7 @@ struct RootPaletteView: View {
             BarButton(
                 pressed: showActions,
                 action: {
-                    _ = withAnimation(Self.menuAnimation) { vm.handle(.toggleActions) }
+                    vm.handle(.toggleActions)
                 }
             ) {
                 HStack(spacing: Theme.Spacing.sm) {
@@ -176,7 +177,7 @@ struct RootPaletteView: View {
     }
 
     private func activateMenuItem(_ index: Int) {
-        withAnimation(Self.menuAnimation) { vm.activateMenuItem(at: index) }
+        vm.activateMenuItem(at: index)
     }
 
     /// `@FocusState` can remain logically true after AppKit has lost its field editor. Pulse the
