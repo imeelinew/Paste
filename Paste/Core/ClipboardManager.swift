@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class ClipboardManager {
@@ -61,7 +62,9 @@ final class ClipboardManager {
         } else if types.contains(.tiff) {
             imageType = .tiff
         } else {
-            imageType = nil
+            imageType = types.first {
+                UTType($0.rawValue)?.conforms(to: .image) == true
+            }
         }
         let generation = store.captureGeneration
         let previous = captureTail
@@ -115,9 +118,14 @@ final class ClipboardManager {
         guard pasteboard.changeCount == changeCount else { return nil }
         let text = pasteboard.string(forType: .string)
         let imageData = imageType.flatMap { pasteboard.data(forType: $0) }
+        let fileURLs =
+            (pasteboard.readObjects(
+                forClasses: [NSURL.self],
+                options: [.urlReadingFileURLsOnly: true]
+            ) as? [NSURL])?.map { $0 as URL } ?? []
         guard !Task.isCancelled, pasteboard.changeCount == changeCount else { return nil }
         return PasteboardSnapshot(
-            text: text, imageData: imageData, imageIsPNG: imageType == .png,
+            text: text, imageData: imageData, imageIsPNG: imageType == .png, fileURLs: fileURLs,
             sourceBundleID: sourceBundleID, generation: generation)
     }
 }

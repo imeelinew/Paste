@@ -32,7 +32,7 @@ final class AppCore: ObservableObject {
         settings.appearance.apply()
 
         clipboardStore.maxAge = settings.clipboardRetention.maxAge
-        Task { clipboardStore.load() }
+        clipboardStore.load()
         clipboardManager.start()
 
         KeyboardShortcuts.onKeyUp(for: .toggleClipboard) { [weak self] in

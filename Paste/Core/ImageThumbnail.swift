@@ -1,5 +1,13 @@
 import AppKit
+import CryptoKit
 import ImageIO
+
+/// Stable identity for the normalized PNG payload owned by the clipboard store.
+enum ImageFingerprint {
+    static func digest(data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+}
 
 /// Downsampled, memory-capped image loading for the clipboard UI: ImageIO decodes each on-disk image to exactly the pixel size needed and caches it in a system-evicted `NSCache`.
 enum ImageThumbnail {

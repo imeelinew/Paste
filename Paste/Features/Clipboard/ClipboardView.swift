@@ -564,6 +564,10 @@ private final class ClipboardItemCellView: NSTableCellView {
 }
 
 private final class ClipboardThumbnailView: NSView {
+    /// Well above the 48 device pixels needed by the 24pt row slot on a 2× display, leaving enough
+    /// source detail for high-quality final downsampling.
+    private static let imageMaxPixel: CGFloat = 128
+
     private let symbolView = NSImageView()
     private var representedID: ClipboardItem.ID?
     private var loadTask: Task<Void, Never>?
@@ -595,7 +599,32 @@ private final class ClipboardThumbnailView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        layer?.contentsScale = window?.backingScaleFactor ?? 2
         refreshAppearance()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        layer?.contentsScale = window?.backingScaleFactor ?? 2
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let image = displayedImage, image.size.width > 0, image.size.height > 0 else {
+            return
+        }
+        let factor = max(bounds.width / image.size.width, bounds.height / image.size.height)
+        let size = NSSize(width: image.size.width * factor, height: image.size.height * factor)
+        let destination = NSRect(
+            x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
+            width: size.width, height: size.height)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(
+            in: destination, from: .zero, operation: .copy, fraction: 1,
+            respectFlipped: true, hints: nil)
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     func configure(item: ClipboardItem, imageURL: URL?) {
@@ -613,13 +642,16 @@ private final class ClipboardThumbnailView: NSView {
         case .image:
             showSymbol("photo")
             guard let imageURL else { return }
-            if let cached = ImageThumbnail.cached(imageURL, maxPixel: 64) {
+            if let cached = ImageThumbnail.cached(
+                imageURL, maxPixel: Self.imageMaxPixel)
+            {
                 showImage(cached)
                 return
             }
             let id = item.id
             loadTask = Task { @MainActor [weak self] in
-                let image = await ImageThumbnail.loadAsync(imageURL, maxPixel: 64)
+                let image = await ImageThumbnail.loadAsync(
+                    imageURL, maxPixel: Self.imageMaxPixel)
                 guard !Task.isCancelled, let self, representedID == id, let image else { return }
                 showImage(image)
             }
@@ -648,6 +680,7 @@ private final class ClipboardThumbnailView: NSView {
         displayedImage = nil
         layer?.contents = nil
         layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
+        needsDisplay = true
         symbolView.isHidden = false
         let pointSize = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
         let hierarchy = NSImage.SymbolConfiguration(hierarchicalColor: .secondaryLabelColor)
@@ -659,9 +692,8 @@ private final class ClipboardThumbnailView: NSView {
         displayedImage = image
         symbolView.isHidden = true
         layer?.backgroundColor = NSColor.clear.cgColor
-        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
-        layer?.contentsScale = scale
-        layer?.contents = image.layerContents(forContentsScale: scale)
+        layer?.contents = nil
+        needsDisplay = true
     }
 }
 

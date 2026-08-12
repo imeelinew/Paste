@@ -23,6 +23,8 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
     let text: String?
     /// Absolute path to the image owned by this store.
     let imagePath: String?
+    /// SHA-256 of canonical visible pixels. Text rows leave it nil.
+    let imageFingerprint: String?
     let createdAt: Date
     /// Bundle ID of the app frontmost when the copy was captured (see `ClipboardManager.poll`).
     let sourceBundleID: String?
@@ -34,24 +36,25 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
     init(text: String, sourceBundleID: String?) {
         self.init(
             id: UUID(), kind: ClipboardTextClassifier.kind(for: text), text: text,
-            imagePath: nil, createdAt: Date(),
+            imagePath: nil, imageFingerprint: nil, createdAt: Date(),
             sourceBundleID: sourceBundleID)
     }
 
-    init(imagePath: String, sourceBundleID: String?) {
+    init(imagePath: String, imageFingerprint: String, sourceBundleID: String?) {
         self.init(
-            id: UUID(), kind: .image, text: nil, imagePath: imagePath, createdAt: Date(),
-            sourceBundleID: sourceBundleID)
+            id: UUID(), kind: .image, text: nil, imagePath: imagePath,
+            imageFingerprint: imageFingerprint, createdAt: Date(), sourceBundleID: sourceBundleID)
     }
 
     fileprivate init(
-        id: UUID, kind: Kind, text: String?, imagePath: String?, createdAt: Date,
-        sourceBundleID: String?, pinnedAt: Date? = nil
+        id: UUID, kind: Kind, text: String?, imagePath: String?, imageFingerprint: String?,
+        createdAt: Date, sourceBundleID: String?, pinnedAt: Date? = nil
     ) {
         self.id = id
         self.kind = kind
         self.text = text
         self.imagePath = imagePath
+        self.imageFingerprint = imageFingerprint
         self.createdAt = createdAt
         self.sourceBundleID = sourceBundleID
         self.pinnedAt = pinnedAt
@@ -61,8 +64,16 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
     func with(createdAt: Date? = nil, pinnedAt: Date?) -> ClipboardItem {
         ClipboardItem(
             id: id, kind: kind, text: text, imagePath: imagePath,
-            createdAt: createdAt ?? self.createdAt, sourceBundleID: sourceBundleID,
-            pinnedAt: pinnedAt)
+            imageFingerprint: imageFingerprint, createdAt: createdAt ?? self.createdAt,
+            sourceBundleID: sourceBundleID, pinnedAt: pinnedAt)
+    }
+
+    /// A repeated image is the same entry with a fresh copy time and source application.
+    func refreshed(sourceBundleID: String?) -> ClipboardItem {
+        ClipboardItem(
+            id: id, kind: kind, text: text, imagePath: imagePath,
+            imageFingerprint: imageFingerprint, createdAt: Date(),
+            sourceBundleID: sourceBundleID, pinnedAt: pinnedAt)
     }
 
     /// Case-insensitive literal or pinyin match for resident and pinned entries.
@@ -282,12 +293,15 @@ final class ClipboardStore: ObservableObject {
           created_at REAL NOT NULL,
           source_app TEXT,
           pinned_at REAL,
+          image_fingerprint TEXT,
           pinyin TEXT,
           pinyin_initials TEXT
         );
         CREATE INDEX IF NOT EXISTS items_created_at ON items(created_at);
         CREATE INDEX IF NOT EXISTS items_pinned_at
           ON items(pinned_at) WHERE pinned_at IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS items_image_fingerprint
+          ON items(image_fingerprint) WHERE image_fingerprint IS NOT NULL;
         """
 
     private static let searchSchema = """
@@ -322,6 +336,7 @@ final class ClipboardStore: ObservableObject {
     private var pinStmt: OpaquePointer?
     private var staleImagesStmt: OpaquePointer?
     private var deleteStaleStmt: OpaquePointer?
+    private var imageByFingerprintStmt: OpaquePointer?
     private var searchMetadataTask: Task<Void, Never>?
 
     /// Tests pass a throwaway directory so a harness run can never reach real history.
@@ -397,8 +412,18 @@ final class ClipboardStore: ObservableObject {
     ) async {
         let generation = expectedGeneration ?? captureGeneration
         guard generation == captureGeneration else { return }
+        let fingerprint = await Task.detached(priority: .utility) {
+            ImageFingerprint.digest(data: data)
+        }.value
+        guard generation == captureGeneration else { return }
+        if let existing = image(matching: fingerprint) {
+            reinsert(existing.refreshed(sourceBundleID: sourceBundleID))
+            return
+        }
         let url = imagesDir.appendingPathComponent(UUID().uuidString + ".png")
-        let item = ClipboardItem(imagePath: url.path, sourceBundleID: sourceBundleID)
+        let item = ClipboardItem(
+            imagePath: url.path, imageFingerprint: fingerprint,
+            sourceBundleID: sourceBundleID)
         let wrote = await Task.detached(priority: .utility) {
             (try? data.write(to: url, options: .atomic)) != nil
         }.value
@@ -513,12 +538,14 @@ final class ClipboardStore: ObservableObject {
         let sql =
             usesFTS
             ? """
-              SELECT i.id, i.kind, i.text, i.image_path, i.created_at, i.source_app, i.pinned_at
+              SELECT i.id, i.kind, i.text, i.image_path, i.created_at, i.source_app,
+                     i.pinned_at, i.image_fingerprint
               FROM items_fts f JOIN items i ON i.rowid = f.rowid
               WHERE items_fts MATCH ? ORDER BY f.rowid DESC LIMIT 2000
               """
             : """
-              SELECT id, kind, text, image_path, created_at, source_app, pinned_at
+              SELECT id, kind, text, image_path, created_at, source_app, pinned_at,
+                     image_fingerprint
               FROM items
               WHERE text LIKE ? ESCAPE '\\' OR pinyin LIKE ? ESCAPE '\\'
                  OR pinyin_initials LIKE ? ESCAPE '\\'
@@ -724,7 +751,27 @@ final class ClipboardStore: ObservableObject {
         } else {
             sqlite3_bind_null(stmt, 7)
         }
+        if let fingerprint = item.imageFingerprint {
+            sqlite3_bind_text(stmt, 8, fingerprint, -1, SQLITE_TRANSIENT)
+        } else {
+            sqlite3_bind_null(stmt, 8)
+        }
         stepAndReset(stmt, operation: "save clipboard entry")
+    }
+
+    private func image(matching fingerprint: String) -> ClipboardItem? {
+        guard let stmt = imageByFingerprintStmt else {
+            preconditionFailure("Clipboard database is closed")
+        }
+        sqlite3_bind_text(stmt, 1, fingerprint, -1, SQLITE_TRANSIENT)
+        let status = sqlite3_step(stmt)
+        let item = status == SQLITE_ROW ? Self.row(stmt) : nil
+        sqlite3_reset(stmt)
+        sqlite3_clear_bindings(stmt)
+        precondition(
+            status == SQLITE_ROW || status == SQLITE_DONE,
+            "Could not find duplicate clipboard image: \(databaseMessage)")
+        return item
     }
 
     private func prune() {
@@ -769,21 +816,22 @@ final class ClipboardStore: ObservableObject {
                 == SQLITE_OK,
             sqlite3_exec(
                 db, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=1000;",
-                nil, nil, nil)
-                == SQLITE_OK,
+                nil, nil, nil) == SQLITE_OK,
             sqlite3_exec(db, Self.coreSchema, nil, nil, nil) == SQLITE_OK
         else { return false }
         guard sqlite3_exec(db, Self.searchSchema, nil, nil, nil) == SQLITE_OK else { return false }
         insertStmt = prepare(
             """
-            INSERT INTO items(id, kind, text, image_path, created_at, source_app, pinned_at)
-            VALUES(?,?,?,?,?,?,?)
+            INSERT INTO items(
+              id, kind, text, image_path, created_at, source_app, pinned_at, image_fingerprint
+            ) VALUES(?,?,?,?,?,?,?,?)
             """
         )
         // Every pinned row plus the newest `memoryWindow` unpinned ones, keyed off the floor rowid `windowFloor` looks up. Two indexed branches rather than one `pinned_at IS NOT NULL OR rowid >= ?`: the planner can't drive an OR from an index while holding the row order, so that form reads the whole table.
         loadStmt = prepare(
             """
-            SELECT id, kind, text, image_path, created_at, source_app, pinned_at FROM (
+            SELECT id, kind, text, image_path, created_at, source_app, pinned_at,
+                   image_fingerprint FROM (
               SELECT rowid AS rid, * FROM items WHERE rowid >= ?1
               UNION ALL
               SELECT rowid AS rid, * FROM items WHERE pinned_at IS NOT NULL AND rowid < ?1
@@ -800,9 +848,15 @@ final class ClipboardStore: ObservableObject {
             WHERE created_at < ? AND pinned_at IS NULL AND image_path IS NOT NULL
             """)
         deleteStaleStmt = prepare("DELETE FROM items WHERE created_at < ? AND pinned_at IS NULL")
+        imageByFingerprintStmt = prepare(
+            """
+            SELECT id, kind, text, image_path, created_at, source_app, pinned_at,
+                   image_fingerprint
+            FROM items WHERE image_fingerprint = ? LIMIT 1
+            """)
         return insertStmt != nil && loadStmt != nil && windowFloorStmt != nil
             && deleteByIDStmt != nil && pinStmt != nil && staleImagesStmt != nil
-            && deleteStaleStmt != nil
+            && deleteStaleStmt != nil && imageByFingerprintStmt != nil
     }
 
     private func prepare(_ sql: String) -> OpaquePointer? {
@@ -826,7 +880,7 @@ final class ClipboardStore: ObservableObject {
     private func closeDatabase() {
         [
             insertStmt, loadStmt, windowFloorStmt, deleteByIDStmt, pinStmt,
-            staleImagesStmt, deleteStaleStmt,
+            staleImagesStmt, deleteStaleStmt, imageByFingerprintStmt,
         ].forEach { sqlite3_finalize($0) }
         insertStmt = nil
         loadStmt = nil
@@ -835,6 +889,7 @@ final class ClipboardStore: ObservableObject {
         pinStmt = nil
         staleImagesStmt = nil
         deleteStaleStmt = nil
+        imageByFingerprintStmt = nil
         sqlite3_close_v2(db)
         db = nil
     }
@@ -846,6 +901,7 @@ final class ClipboardStore: ObservableObject {
         else { return nil }
         return ClipboardItem(
             id: id, kind: storedKind, text: columnString(stmt, 2), imagePath: columnString(stmt, 3),
+            imageFingerprint: columnString(stmt, 7),
             createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4)),
             sourceBundleID: columnString(stmt, 5), pinnedAt: columnDate(stmt, 6))
     }
