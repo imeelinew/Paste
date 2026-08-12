@@ -30,6 +30,11 @@ struct GeneralSettingsView: View {
                 .toggleStyle(.checkbox)
             }
 
+            PreferencesRow(label: "Content Preview", alignment: .firstTextBaseline) {
+                Toggle("Render Markdown", isOn: $settings.renderMarkdown)
+                    .toggleStyle(.checkbox)
+            }
+
             PreferencesRow(label: "System Clipboard", alignment: .firstTextBaseline) {
                 Toggle(
                     "Disable System Clipboard",

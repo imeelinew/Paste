@@ -737,6 +737,7 @@ struct ClipboardPreview: View {
     var query: String = ""
     @EnvironmentObject private var store: ClipboardStore
     @EnvironmentObject private var vm: PaletteViewModel
+    @ObservedObject private var settings = AppCore.shared.settings
 
     var body: some View {
         if let item {
@@ -755,7 +756,13 @@ struct ClipboardPreview: View {
     private func content(for item: ClipboardItem) -> some View {
         switch item.kind {
         case .text:
-            MarkdownPreview(source: item.text ?? "", query: query)
+            if settings.renderMarkdown {
+                MarkdownPreview(source: item.text ?? "", query: query)
+            } else {
+                SelectableAttributedText(
+                    attributed: SearchHighlight.attributed(item.text ?? "", query: query)
+                )
+            }
         case .link:
             SelectableAttributedText(
                 attributed: SearchHighlight.attributed(item.text ?? "", query: query)
@@ -807,6 +814,7 @@ private struct ClipboardInfoSection: View {
     private struct Details: Equatable, Sendable {
         var characters: Int?
         var words: Int?
+        var isMarkdown = false
         var pixelSize: CGSize?
         var fileBytes: Int?
     }
@@ -871,7 +879,9 @@ private struct ClipboardInfoSection: View {
         }
         switch item.kind {
         case .text, .code, .link:
-            rows.append(InfoRow(label: "Type", value: item.kind.typeLabel, localizesValue: true))
+            let typeLabel = item.kind == .text && details.isMarkdown
+                ? "Markdown" : item.kind.typeLabel
+            rows.append(InfoRow(label: "Type", value: typeLabel, localizesValue: true))
             if let characters = details.characters {
                 rows.append(
                     InfoRow(
@@ -921,6 +931,9 @@ private struct ClipboardInfoSection: View {
             if let text {
                 details.characters = text.count
                 details.words = Self.wordCount(text)
+                if item.kind == .text {
+                    details.isMarkdown = MarkdownAttributedRenderer.isMarkdown(text)
+                }
             }
             if let url {
                 details.pixelSize = ImageThumbnail.pixelSize(of: url)

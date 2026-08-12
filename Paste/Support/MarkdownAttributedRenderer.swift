@@ -9,13 +9,21 @@ enum MarkdownAttributedRenderer {
     private static let maximumRenderedBytes = 512 * 1024
 
     nonisolated static func render(_ source: String) -> NSAttributedString? {
-        guard source.utf8.count <= maximumRenderedBytes else { return nil }
-        let document = Document(parsing: source, options: [.disableSmartOpts])
-        guard containsVisibleMarkup(document) else { return nil }
+        guard let document = markdownDocument(for: source) else { return nil }
 
         var renderer = Renderer()
         renderer.renderDocument(document)
         return NSAttributedString(attributedString: renderer.output)
+    }
+
+    nonisolated static func isMarkdown(_ source: String) -> Bool {
+        markdownDocument(for: source) != nil
+    }
+
+    private nonisolated static func markdownDocument(for source: String) -> Document? {
+        guard source.utf8.count <= maximumRenderedBytes else { return nil }
+        let document = Document(parsing: source, options: [.disableSmartOpts])
+        return containsVisibleMarkup(document) ? document : nil
     }
 
     /// A document containing only plain paragraphs and soft wrapping should remain byte-for-byte

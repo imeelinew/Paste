@@ -60,6 +60,7 @@ final class AppSettings: ObservableObject {
         static let clipboardDisabledApps = "clipboardDisabledApps"
         static let launchAtLogin = "launchAtLogin"
         static let switchToEnglishInputOnOpen = "switchToEnglishInputOnOpen"
+        static let renderMarkdown = "renderMarkdown"
         static let language = "appLanguage"
         static let appearance = "appAppearance"
     }
@@ -89,6 +90,10 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(switchToEnglishInputOnOpen, forKey: Key.switchToEnglishInputOnOpen) }
     }
 
+    @Published var renderMarkdown: Bool {
+        didSet { defaults.set(renderMarkdown, forKey: Key.renderMarkdown) }
+    }
+
     @Published var language: AppLanguage {
         didSet { defaults.set(language.rawValue, forKey: Key.language) }
     }
@@ -109,6 +114,7 @@ final class AppSettings: ObservableObject {
             ?? ["com.apple.keychainaccess", "com.apple.Passwords"]
         launchAtLogin = LaunchAtLogin.isEnabled
         switchToEnglishInputOnOpen = defaults.bool(forKey: Key.switchToEnglishInputOnOpen)
+        renderMarkdown = defaults.object(forKey: Key.renderMarkdown) as? Bool ?? true
         language =
             defaults.string(forKey: Key.language).flatMap(AppLanguage.init(rawValue:)) ?? .system
         appearance =

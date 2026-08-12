@@ -14,6 +14,7 @@
 "Clipboard" = "Clipboard";
 "Show Paste" = "Show Paste";
 "Code" = "Code";
+"Content Preview" = "Content Preview";
 "Clipboard history is empty" = "Clipboard history is empty";
 "Copied" = "Copied";
 "Copy" = "Copy";
@@ -37,6 +38,7 @@
 "Language" = "Language";
 "Light" = "Light";
 "Link" = "Link";
+"Markdown" = "Markdown";
 "Launch at Login" = "Launch at Login";
 "Switch to English When Opening" = "Switch to English When Opening";
 "No matching entries" = "No matching entries";
@@ -44,6 +46,7 @@
 "Paste & Keep Window Open" = "Paste & Keep Window Open";
 "Paste Settings" = "Paste Settings";
 "Paste to %@" = "Paste to %@";
+"Plain Text" = "Plain Text";
 "Paste will stop monitoring the clipboard until you open it again." = "Paste will stop monitoring the clipboard";
 "Past 30 Days" = "Past 30 Days";
 "Past 7 Days" = "Past 7 Days";
@@ -56,6 +59,7 @@
 "Quit Paste" = "Quit Paste";
 "Quit Paste?" = "Quit Paste?";
 "Repository" = "Repository";
+"Render Markdown" = "Render Markdown";
 "Select All" = "Select All";
 "Settings" = "Settings";
 "Shortcut" = "Shortcut";

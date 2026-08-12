@@ -10,7 +10,7 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
         /// Localization key for the Information "Type" row.
         var typeLabel: String {
             switch self {
-            case .text: "Text"
+            case .text: "Plain Text"
             case .code: "Code"
             case .link: "Link"
             case .image: "Image"

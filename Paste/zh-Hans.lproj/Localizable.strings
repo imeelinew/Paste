@@ -14,6 +14,7 @@
 "Clipboard" = "剪贴板";
 "Show Paste" = "打开 Paste";
 "Code" = "代码";
+"Content Preview" = "内容预览";
 "Clipboard history is empty" = "剪贴板历史为空";
 "Copied" = "复制时间";
 "Copy" = "拷贝";
@@ -37,6 +38,7 @@
 "Language" = "语言";
 "Light" = "浅色";
 "Link" = "链接";
+"Markdown" = "Markdown";
 "Launch at Login" = "登录时启动";
 "Switch to English When Opening" = "打开时切换到英文输入法";
 "No matching entries" = "没有匹配的项目";
@@ -44,6 +46,7 @@
 "Paste & Keep Window Open" = "粘贴并保持窗口打开";
 "Paste Settings" = "Paste 设置";
 "Paste to %@" = "粘贴到 %@";
+"Plain Text" = "纯文本";
 "Paste will stop monitoring the clipboard until you open it again." = "退出后，Paste 将停止监控剪贴板";
 "Past 30 Days" = "过去 30 天";
 "Past 7 Days" = "过去 7 天";
@@ -56,6 +59,7 @@
 "Quit Paste" = "退出 Paste";
 "Quit Paste?" = "要退出 Paste 吗？";
 "Repository" = "代码仓库";
+"Render Markdown" = "渲染 Markdown";
 "Select All" = "全选";
 "Settings" = "设置";
 "Shortcut" = "快捷键";
