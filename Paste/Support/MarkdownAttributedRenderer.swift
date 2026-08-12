@@ -211,7 +211,7 @@ enum MarkdownAttributedRenderer {
         /// A three-column table is unreadable in the palette's ~460pt preview. Render each row as
         /// an adaptive group of labeled values; column order and inline formatting remain intact.
         private mutating func appendTable(_ table: Table, leftIndent: CGFloat) {
-            let headers = table.head.cells.map {
+            let headers = Array(table.head.cells).map {
                 inlineContent(of: $0, inheritedStyle: .strong).string
                     .trimmingCharacters(in: .whitespacesAndNewlines)
             }
