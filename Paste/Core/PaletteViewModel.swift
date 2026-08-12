@@ -40,6 +40,7 @@ enum PaletteCommand: Equatable {
 
 enum PaletteMenuAction: Equatable {
     case about
+    case checkForUpdates
     case settings
     case quit
     case paste(ClipboardItem)
@@ -120,7 +121,7 @@ final class PaletteViewModel: ObservableObject {
         case .none:
             return []
         case .appMenu:
-            return [.about, .settings, .quit]
+            return [.about, .checkForUpdates, .settings, .quit]
         case .actions(let id):
             guard let item = item(withID: id) else { return [] }
             var actions: [PaletteMenuAction] = [
@@ -282,6 +283,8 @@ final class PaletteViewModel: ObservableObject {
         switch action {
         case .about:
             core.showAbout()
+        case .checkForUpdates:
+            core.checkForUpdates()
         case .settings:
             core.showSettings()
         case .quit:

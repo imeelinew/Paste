@@ -18,6 +18,7 @@ struct PopoverMenuItem {
     let icon: PopoverMenuIcon?
     var shortcut: String? = nil
     var isDestructive: Bool = false
+    var isEnabled = true
 
     @MainActor
     init(action: PaletteMenuAction, target: PasteTarget?) {
@@ -25,6 +26,10 @@ struct PopoverMenuItem {
         case .about:
             title = "About Paste"
             icon = nil
+        case .checkForUpdates:
+            title = "Check for Updates…"
+            icon = nil
+            isEnabled = AppCore.shared.updateService.canCheckForUpdates
         case .settings:
             title = "Settings"
             icon = nil
@@ -83,6 +88,7 @@ struct PopoverMenu: View {
                     onHover: { selection = index },
                     onActivate: { onActivate(index) }
                 )
+                .disabled(!items[index].isEnabled)
             }
         }
         .padding(Theme.Spacing.sm)

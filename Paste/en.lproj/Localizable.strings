@@ -5,12 +5,14 @@
 "Add" = "Add";
 "App Language" = "App Language";
 "Appearance" = "Appearance";
+"Automatically Check for Updates" = "Automatically Check for Updates";
 "Cancel" = "Cancel";
 "Characters" = "Characters";
 "Clear" = "Clear";
 "Clear clipboard history?" = "Clear clipboard history?";
 "Clear history" = "Clear history";
 "Clear History" = "Clear History";
+"Check for Updates…" = "Check for Updates…";
 "Clipboard" = "Clipboard";
 "Show Paste" = "Show Paste";
 "Code" = "Code";
@@ -77,6 +79,7 @@
 "Type" = "Type";
 "Search" = "Search";
 "Unpin Entry" = "Unpin Entry";
+"Updates" = "Updates";
 "Version" = "Version";
 "GitHub Repository" = "GitHub Repository";
 "Words" = "Words";

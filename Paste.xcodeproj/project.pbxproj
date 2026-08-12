@@ -42,6 +42,8 @@
 		A63F872BC0264BB99231BC52 /* MarkdownPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F94E5C69B11642BE89C7B40A /* MarkdownPreview.swift */; };
 		9D0896797DC58B6F1EFD765F /* NotificationToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = F56E6A15E84064E62E40BD93 /* NotificationToken.swift */; };
 		A9BFCCAECCC68D9444932887 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A08EBA3DF42E6A3D8518C909 /* ClipboardManager.swift */; };
+		AA1000000000000000000001 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000002 /* UpdateService.swift */; };
+		AA1000000000000000000003 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = AA1000000000000000000004 /* Sparkle */; };
 		B9424F6046260D72728A48DD /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC1779D1C157B1B6F9C37365 /* GeneralSettingsView.swift */; };
 		C149825C332C2AE4CE7AFE86 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DD90436D7A4A7E354F421DD /* SettingsComponents.swift */; };
 		C4F6DA55540713BDACAC260D /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = F7DB5B5DB847C967C5B56092 /* Localizable.strings */; };
@@ -96,6 +98,7 @@
 		A08EBA3DF42E6A3D8518C909 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		A490C2CECA4C191B712DB9F2 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 		A5FB3EB883C67D7DA6D8FEAF /* ClipboardCapturePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardCapturePipeline.swift; sourceTree = "<group>"; };
+		AA1000000000000000000002 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		AF2FD6AB5017BBFF5EE420A4 /* ImageThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageThumbnail.swift; sourceTree = "<group>"; };
 		B42062A9B167BB7DCD3E7129 /* ClipboardSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardSettingsView.swift; sourceTree = "<group>"; };
 		B83EBAE1FB329C0318507DFB /* PasteTransaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteTransaction.swift; sourceTree = "<group>"; };
@@ -124,6 +127,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA1000000000000000000003 /* Sparkle in Frameworks */,
 				CE1562B33E657CF448D04DDC /* KeyboardShortcuts in Frameworks */,
 				D1F4A37B85934AE6A943621C /* Markdown in Frameworks */,
 				E640C47775B8E5E915E0166A /* MacAppSettingsUI in Frameworks */,
@@ -166,6 +170,7 @@
 				6E6A45E86D836A21D700DE27 /* RightClick.swift */,
 				1F3166EA8852EDBCC9A0D3DF /* ScrollIntent.swift */,
 				7B34CA7CF3889D8A18413F77 /* SystemClipboardHistory.swift */,
+				AA1000000000000000000002 /* UpdateService.swift */,
 				E803D4959D800FE82F1EC0EA /* Theme.swift */,
 				27D1C525A6F1C83A87346D62 /* ThinScrollbar.swift */,
 				5EC0E3B9B5C98ACD47608094 /* VisualEffectView.swift */,
@@ -300,6 +305,7 @@
 				40E3D8D2C77ADCC20CD390CC /* KeyboardShortcuts */,
 				36DB9A864D8D41DDA74C4DC7 /* Markdown */,
 				18A3FC690CC58367A65F87C9 /* MacAppSettingsUI */,
+				AA1000000000000000000004 /* Sparkle */,
 			);
 			productName = Paste;
 			productReference = E1C61CC3EAF30E7A03C2A141 /* Paste.app */;
@@ -334,6 +340,7 @@
 				AED5A052BAF777F41B977401 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 				47E46AA7DFF60D976E7755A3 /* XCRemoteSwiftPackageReference "MacAppSettingsUI" */,
 				5C53B13C04F14755AD768A82 /* XCRemoteSwiftPackageReference "swift-markdown" */,
+				AA1000000000000000000005 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B768B677384035BB57EEA712 /* Products */;
@@ -407,6 +414,7 @@
 				4D294A32FFE66B9E795811C7 /* SettingsRootView.swift in Sources */,
 				3119CFF1D7E49ACADC6267D9 /* ShortcutRecorder.swift in Sources */,
 				DE8C16A33B168FD7F3AC2C5B /* SystemClipboardHistory.swift in Sources */,
+				AA1000000000000000000001 /* UpdateService.swift in Sources */,
 				6B1C7B8816B750407EFCB52C /* Theme.swift in Sources */,
 				4176341D42A93B3915ADC2AC /* ThinScrollbar.swift in Sources */,
 				8D646A86A4AD889296D77961 /* VisualEffectView.swift in Sources */,
@@ -651,6 +659,14 @@
 				version = 0.8.0;
 			};
 		};
+		AA1000000000000000000005 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.9.5;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -668,6 +684,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5C53B13C04F14755AD768A82 /* XCRemoteSwiftPackageReference "swift-markdown" */;
 			productName = Markdown;
+		};
+		AA1000000000000000000004 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA1000000000000000000005 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

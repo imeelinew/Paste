@@ -7,6 +7,7 @@ final class AppCore: ObservableObject {
     static let shared = AppCore()
 
     let settings = AppSettings()
+    let updateService = UpdateService()
     let clipboardStore = ClipboardStore()
     let clipboardManager: ClipboardManager
     lazy var palette = PaletteViewModel(core: self)
@@ -30,6 +31,7 @@ final class AppCore: ObservableObject {
         NerdSymbolsFont.register()
         activationPolicy.reset()
         settings.appearance.apply()
+        updateService.start()
 
         clipboardStore.maxAge = settings.clipboardRetention.maxAge
         clipboardStore.load()
@@ -79,6 +81,10 @@ final class AppCore: ObservableObject {
 
     func showAbout() {
         showSettings(tab: .about)
+    }
+
+    func checkForUpdates() {
+        updateService.checkForUpdates()
     }
 
     func requestQuit() {

@@ -5,12 +5,14 @@
 "Add" = "添加";
 "App Language" = "应用语言";
 "Appearance" = "外观";
+"Automatically Check for Updates" = "自动检查更新";
 "Cancel" = "取消";
 "Characters" = "字符数";
 "Clear" = "清空";
 "Clear clipboard history?" = "要清空剪贴板历史吗？";
 "Clear history" = "清空历史";
 "Clear History" = "清空历史";
+"Check for Updates…" = "检查更新…";
 "Clipboard" = "剪贴板";
 "Show Paste" = "打开 Paste";
 "Code" = "代码";
@@ -77,6 +79,7 @@
 "Type" = "类型";
 "Search" = "搜索";
 "Unpin Entry" = "取消固定";
+"Updates" = "更新";
 "Version" = "版本";
 "GitHub Repository" = "GitHub 仓库";
 "Words" = "词数";

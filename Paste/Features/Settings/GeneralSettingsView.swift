@@ -4,6 +4,7 @@ import SwiftUI
 struct GeneralSettingsView: View {
     @ObservedObject private var settings = AppCore.shared.settings
     @ObservedObject private var systemClipboardHistory = AppCore.shared.systemClipboardHistory
+    @ObservedObject private var updateService = AppCore.shared.updateService
 
     var body: some View {
         PreferencesForm {
@@ -33,6 +34,17 @@ struct GeneralSettingsView: View {
             PreferencesRow(label: "Content Preview", alignment: .firstTextBaseline) {
                 Toggle("Render Markdown", isOn: $settings.renderMarkdown)
                     .toggleStyle(.checkbox)
+            }
+
+            PreferencesRow(label: "Updates", alignment: .firstTextBaseline) {
+                Toggle(
+                    "Automatically Check for Updates",
+                    isOn: Binding(
+                        get: { updateService.automaticallyChecksForUpdates },
+                        set: { updateService.setAutomaticallyChecksForUpdates($0) }
+                    )
+                )
+                .toggleStyle(.checkbox)
             }
 
             PreferencesRow(label: "System Clipboard", alignment: .firstTextBaseline) {
@@ -88,6 +100,10 @@ struct AboutSettingsView: View {
         (
             "MacAppSettingsUI",
             URL(string: "https://github.com/usagimaru/MacAppSettingsUI")!
+        ),
+        (
+            "Sparkle",
+            URL(string: "https://github.com/sparkle-project/Sparkle")!
         ),
     ]
 
