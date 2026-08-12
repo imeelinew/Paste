@@ -1,0 +1,112 @@
+name: Publish Sparkle Appcast
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: GitHub Release tag to publish
+        required: true
+        type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sparkle-appcast
+  cancel-in-progress: false
+
+jobs:
+  publish-appcast:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Download release ZIP
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/updates"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/updates" \
+            --pattern '*.zip'
+
+          ZIP_COUNT=$(find "$RUNNER_TEMP/updates" -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')
+          if [ "$ZIP_COUNT" != 1 ]; then
+            echo "Expected exactly one ZIP release asset; found $ZIP_COUNT" >&2
+            exit 1
+          fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download verified Sparkle tools
+        id: sparkle
+        run: |
+          set -euo pipefail
+          SPARKLE_VERSION=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          resolved = json.loads(Path("Paste.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved").read_text())
+          for pin in resolved["pins"]:
+              if pin["identity"].lower() == "sparkle":
+                  print(pin["state"]["version"])
+                  break
+          else:
+              raise SystemExit("Sparkle is not pinned in Package.resolved")
+          PY
+          )
+
+          MANIFEST_URL="https://raw.githubusercontent.com/sparkle-project/Sparkle/$SPARKLE_VERSION/Package.swift"
+          ARCHIVE_URL="https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-for-Swift-Package-Manager.zip"
+          EXPECTED_SHA=$(curl -fsSL "$MANIFEST_URL" | sed -nE 's/let checksum = "([0-9a-f]+)"/\1/p')
+          [ -n "$EXPECTED_SHA" ] || { echo "Could not read Sparkle checksum" >&2; exit 1; }
+
+          ARCHIVE="$RUNNER_TEMP/Sparkle.zip"
+          TOOLS_DIR="$RUNNER_TEMP/Sparkle"
+          curl -fsSL -o "$ARCHIVE" "$ARCHIVE_URL"
+          printf '%s  %s\n' "$EXPECTED_SHA" "$ARCHIVE" | shasum -a 256 -c -
+          ditto -x -k "$ARCHIVE" "$TOOLS_DIR"
+          echo "bin=$TOOLS_DIR/bin" >> "$GITHUB_OUTPUT"
+
+      - name: Sign update and generate appcast
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          SPARKLE_BIN: ${{ steps.sparkle.outputs.bin }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "${SPARKLE_PRIVATE_KEY:-}" ] || { echo "Missing SPARKLE_PRIVATE_KEY secret" >&2; exit 1; }
+
+          cp docs/appcast.xml "$RUNNER_TEMP/updates/appcast.xml"
+          printf '%s\n' "$SPARKLE_PRIVATE_KEY" | "$SPARKLE_BIN/generate_appcast" \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/" \
+            --link "https://github.com/$GITHUB_REPOSITORY" \
+            --maximum-versions 10 \
+            --maximum-deltas 0 \
+            -o appcast.xml \
+            "$RUNNER_TEMP/updates"
+
+          grep -q 'sparkle:edSignature=' "$RUNNER_TEMP/updates/appcast.xml"
+          cp "$RUNNER_TEMP/updates/appcast.xml" docs/appcast.xml
+
+      - name: Commit appcast
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/appcast.xml
+          git diff --cached --quiet && exit 0
+          git commit -m "Update Sparkle appcast for $RELEASE_TAG"
+          git push origin HEAD:main

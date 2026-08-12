@@ -29,7 +29,7 @@
 	<key>NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://github.com/imeelinew/Paste/releases/latest/download/appcast.xml</string>
+	<string>https://imeelinew.github.io/Paste/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>4r6yMauRlw+aLLxSMfyZqTLD4OTPOizEzu1hKRf9wUI=</string>
 	<key>SUScheduledCheckInterval</key>
