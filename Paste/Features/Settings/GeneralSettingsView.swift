@@ -30,11 +30,6 @@ struct GeneralSettingsView: View {
                 .toggleStyle(.checkbox)
             }
 
-            PreferencesRow(label: "Shortcut") {
-                ShortcutRecorder()
-                    .accessibilityLabel("Show Paste")
-            }
-
             PreferencesRow(label: "System Clipboard", alignment: .firstTextBaseline) {
                 Toggle(
                     "Disable System Clipboard",

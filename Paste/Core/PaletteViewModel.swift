@@ -29,7 +29,9 @@ enum PaletteCommand: Equatable {
     case copy
     case cancel
     case toggleActions
+    case pinImageToScreen
     case togglePin
+    case revealInFinder
     case toggleQuickLook
     case clearQuery
     case settings
@@ -213,10 +215,18 @@ final class PaletteViewModel: ObservableObject {
             guard searchReady, let id = selectedID else { return true }
             overlay = overlay == .actions(id) ? .none : .actions(id)
             menuSelection = 0
+        case .pinImageToScreen:
+            guard searchReady, let item = actionTarget, item.kind == .image else { return true }
+            overlay = .none
+            core.pinImageToScreen(item)
         case .togglePin:
             guard searchReady, let item = actionTarget else { return true }
             overlay = .none
             togglePin(item)
+        case .revealInFinder:
+            guard searchReady, let item = actionTarget, item.kind == .image else { return true }
+            overlay = .none
+            core.revealClipboardImage(item)
         case .toggleQuickLook:
             guard canToggleQuickLook else { return menuOpen }
             imageQuickLookOpen.toggle()

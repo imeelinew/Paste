@@ -109,6 +109,8 @@ final class PasteSettingsWindowController {
                 switch tab {
                 case .general:
                     GeneralSettingsView()
+                case .shortcuts:
+                    ShortcutsSettingsView()
                 case .appearance:
                     AppearanceSettingsView()
                 case .history:

@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import KeyboardShortcuts
 import SwiftUI
 
 /// The sole keyboard gateway for the palette window. It receives key events before the current
@@ -26,6 +27,7 @@ final class PalettePanel: NSPanel {
         guard let paletteViewModel else { return false }
         let keyCode = Int(event.keyCode)
         let modifiers = event.modifierFlags.intersection(Self.relevantModifiers)
+        let shortcut = KeyboardShortcuts.Shortcut(event: event)
 
         if modifiers == .command {
             switch keyCode {
@@ -35,12 +37,29 @@ final class PalettePanel: NSPanel {
                 return handleOnce(.quit, event: event)
             case kVK_Delete:
                 return paletteViewModel.handle(.clearQuery)
-            case kVK_ANSI_K:
-                return handleOnce(.toggleActions, event: event)
-            case kVK_ANSI_P:
-                return handleOnce(.togglePin, event: event)
-            case kVK_Return, kVK_ANSI_KeypadEnter:
-                return handleOnce(.copy, event: event)
+            default:
+                break
+            }
+        }
+
+        if PaletteShortcut.actions.matches(shortcut) {
+            return handleOnce(.toggleActions, event: event)
+        }
+        if PaletteShortcut.copyToClipboard.matches(shortcut) {
+            return handleOnce(.copy, event: event)
+        }
+        if PaletteShortcut.pinToScreen.matches(shortcut) {
+            return handleOnce(.pinImageToScreen, event: event)
+        }
+        if PaletteShortcut.togglePin.matches(shortcut) {
+            return handleOnce(.togglePin, event: event)
+        }
+        if PaletteShortcut.showInFinder.matches(shortcut) {
+            return handleOnce(.revealInFinder, event: event)
+        }
+
+        if modifiers == .command {
+            switch keyCode {
             case kVK_ANSI_C, kVK_ANSI_X, kVK_ANSI_V, kVK_ANSI_A:
                 if handleEditingShortcut(keyCode) { return true }
             default:

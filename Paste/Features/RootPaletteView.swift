@@ -18,6 +18,7 @@ struct RootPaletteView: View {
 
     private var showAppMenu: Bool { vm.overlay == .appMenu }
 
+    @MainActor
     private var menuItems: [PopoverMenuItem] {
         vm.menuActions.map { PopoverMenuItem(action: $0, target: vm.pasteTarget) }
     }
@@ -136,6 +137,7 @@ struct RootPaletteView: View {
         .frame(maxWidth: .infinity)
     }
 
+    @MainActor
     private var actionGroup: some View {
         HStack(spacing: 2) {
             BarButton(action: { vm.handle(.activate) }) {
@@ -159,9 +161,12 @@ struct RootPaletteView: View {
                     Text("Actions")
                         .font(Theme.Typography.bar)
                         .foregroundStyle(Theme.Colors.textSecondary)
-                    HStack(spacing: Theme.Spacing.xxs) {
-                        KeyCapChip(text: "⌘", style: .outline)
-                        KeyCapChip(text: "K", style: .outline)
+                    if let shortcut = PaletteShortcut.actions.displayString {
+                        HStack(spacing: Theme.Spacing.xxs) {
+                            ForEach(Array(shortcut.enumerated()), id: \.offset) { _, glyph in
+                                KeyCapChip(text: String(glyph), style: .outline)
+                            }
+                        }
                     }
                 }
             }

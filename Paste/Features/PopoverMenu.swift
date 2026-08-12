@@ -19,6 +19,7 @@ struct PopoverMenuItem {
     var shortcut: String? = nil
     var isDestructive: Bool = false
 
+    @MainActor
     init(action: PaletteMenuAction, target: PasteTarget?) {
         switch action {
         case .about:
@@ -43,17 +44,19 @@ struct PopoverMenuItem {
         case .copy:
             title = "Copy to Clipboard"
             icon = nil
-            shortcut = "⌘↵"
+            shortcut = PaletteShortcut.copyToClipboard.displayString
         case .pinImageToScreen:
             title = "Pin to Screen"
             icon = nil
+            shortcut = PaletteShortcut.pinToScreen.displayString
         case .togglePin(let item):
             title = item.isPinned ? "Unpin Entry" : "Pin Entry"
             icon = .symbol(item.isPinned ? "pin.slash" : "pin")
-            shortcut = "⌘P"
+            shortcut = PaletteShortcut.togglePin.displayString
         case .revealInFinder:
             title = "Show in Finder"
             icon = nil
+            shortcut = PaletteShortcut.showInFinder.displayString
         case .delete:
             title = "Delete Entry"
             icon = .symbol("trash")
