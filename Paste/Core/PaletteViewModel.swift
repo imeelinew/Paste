@@ -98,8 +98,7 @@ final class PaletteViewModel: ObservableObject {
 
     var menuOpen: Bool { overlay.isOpen }
 
-    /// Space belongs to Quick Look only in this state. Otherwise it remains a normal search-field
-    /// input event (or is swallowed by the modal-menu rule in `PalettePanel`).
+    /// Space opens Quick Look for a selected image while the palette is not searching.
     var canToggleQuickLook: Bool {
         !menuOpen && queryIsEmpty && selectedItem?.kind == .image
     }
@@ -244,7 +243,7 @@ final class PaletteViewModel: ObservableObject {
         return true
     }
 
-    private var queryIsEmpty: Bool {
+    var queryIsEmpty: Bool {
         query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 

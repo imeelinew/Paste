@@ -81,6 +81,9 @@ final class PalettePanel: NSPanel {
                 if paletteViewModel.canToggleQuickLook {
                     return handleOnce(.toggleQuickLook, event: event)
                 }
+                // At an empty query, Space is a Quick Look gesture even when the selected item
+                // cannot be previewed. Swallow it instead of starting a useless blank search.
+                if paletteViewModel.queryIsEmpty { return true }
             default:
                 break
             }
