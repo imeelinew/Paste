@@ -8,7 +8,7 @@ struct EdgeDissolveScrollState: Equatable {
 
 /// Scroll-driven edge dissolve for a scroll view underlapping the palette's floating bars, a port of Raycast's scroll-area mask (see `docs/ui.md` → The edge dissolve).
 struct EdgeDissolveMask: ViewModifier {
-    var externalState: EdgeDissolveScrollState? = nil
+    var externalState: EdgeDissolveScrollState
 
     /// Band lengths: the bar's occupied height plus Raycast's overshoot into the list (32px below the header, 28px above the footer).
     var topFade: CGFloat = Theme.Size.headerHeight + Theme.Size.headerPadding + 32
@@ -21,30 +21,12 @@ struct EdgeDissolveMask: ViewModifier {
     @State private var bottomDistance: CGFloat = 0
     @State private var canScroll = false
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if let externalState {
-            masked(
-                content
-                    .onAppear { apply(externalState) }
-                    .onChange(of: externalState) { _, new in apply(new) }
-            )
-        } else {
-            masked(
-                content
-                    .onScrollGeometryChange(for: EdgeDissolveScrollState.self) { geo in
-                        let visible =
-                            geo.containerSize.height - geo.contentInsets.top
-                            - geo.contentInsets.bottom
-                        return EdgeDissolveScrollState(
-                            top: geo.contentOffset.y + geo.contentInsets.top,
-                            bottom: geo.contentSize.height + geo.contentInsets.bottom
-                                - geo.containerSize.height - geo.contentOffset.y,
-                            canScroll: geo.contentSize.height > visible
-                        )
-                    } action: { _, new in apply(new) }
-            )
-        }
+        masked(
+            content
+                .onAppear { apply(externalState) }
+                .onChange(of: externalState) { _, new in apply(new) }
+        )
     }
 
     private func masked<Content: View>(_ content: Content) -> some View {
@@ -83,11 +65,6 @@ struct EdgeDissolveMask: ViewModifier {
 }
 
 extension View {
-    /// Attach to a `ScrollView` that underlaps the palette's floating bars (before `thinScrollbar`, so the scrollbar overlay stays unmasked).
-    func edgeDissolve() -> some View {
-        modifier(EdgeDissolveMask())
-    }
-
     /// AppKit scroll views report geometry through their representable coordinator.
     func edgeDissolve(state: EdgeDissolveScrollState) -> some View {
         modifier(EdgeDissolveMask(externalState: state))

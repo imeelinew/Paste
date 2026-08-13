@@ -19,10 +19,17 @@ enum IconCache {
 
     static func loadAsync(forFile path: String) async -> NSImage? {
         if let cached = cached(forFile: path) { return cached }
-        return await Task.detached(priority: .userInitiated) { () -> Decoded in
+        let task = Task.detached(priority: .userInitiated) { () -> Decoded in
+            guard !Task.isCancelled else { return Decoded(image: nil) }
             guard FileManager.default.fileExists(atPath: path) else { return Decoded(image: nil) }
             return Decoded(image: icon(forFile: path))
-        }.value.image
+        }
+        let decoded = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        return Task.isCancelled ? nil : decoded.image
     }
 
     static func icon(forFile path: String) -> NSImage {

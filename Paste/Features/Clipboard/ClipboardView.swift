@@ -780,7 +780,9 @@ private struct AsyncThumbnail<Content: View, Placeholder: View>: View {
                 return
             }
             image = nil  // show the placeholder while a new image decodes
-            image = await ImageThumbnail.loadAsync(url, maxPixel: maxPixel)
+            let loaded = await ImageThumbnail.loadAsync(url, maxPixel: maxPixel)
+            guard !Task.isCancelled else { return }
+            image = loaded
         }
     }
 }
@@ -982,7 +984,7 @@ private struct ClipboardInfoSection: View {
     private func loadDetails() async {
         let text = item.text
         let url = imageURL
-        details = await Task.detached(priority: .userInitiated) {
+        let loaded = await Task.detached(priority: .userInitiated) {
             var details = Details()
             if let text {
                 details.characters = text.count
@@ -997,6 +999,8 @@ private struct ClipboardInfoSection: View {
             }
             return details
         }.value
+        guard !Task.isCancelled else { return }
+        details = loaded
     }
 
     /// Single pass over scalars — `split(whereSeparator:)` would allocate a substring per word, which matters for a multi-MB copy.

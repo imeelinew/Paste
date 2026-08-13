@@ -12,8 +12,8 @@ struct ThinScrollbarMetrics: Equatable {
 
 /// A thin auto-hiding SwiftUI overlay scrollbar (hairline thumb while scrolling plus a hover-reveal rail), with all pointer handling isolated in the AppKit `ScrollbarInteraction` view to sidestep SwiftUI/AppKit event-routing gaps.
 struct ThinScrollbar: ViewModifier {
-    var externalMetrics: ThinScrollbarMetrics? = nil
-    var externalScrollToken: UUID? = nil
+    var externalMetrics: ThinScrollbarMetrics
+    var externalScrollToken: UUID
 
     // Interaction signals — kept separate so each source of "show the bar" is independent.
     @State private var isScrolling = false
@@ -42,7 +42,13 @@ struct ThinScrollbar: ViewModifier {
     private var expanded: Bool { isHoveringTrack || isDragging }
 
     func body(content: Content) -> some View {
-        tracked(content.scrollIndicators(.hidden))  // drop the native scroller (and its flash) entirely
+        content.scrollIndicators(.hidden)
+            .onAppear { metrics = externalMetrics }
+            .onChange(of: externalMetrics) { _, new in metrics = new }
+            .onChange(of: externalScrollToken) {
+                beganScrolling()
+                scheduleScrollStop()
+            }
             .overlay(alignment: .topTrailing) { bar }
             // One tracking view over the whole trailing strip owns all pointer handling: transparent except over the thumb, where it takes the drag and forwards wheel events, and never flickers the rail the way a content-level hover did.
             .overlay {
@@ -57,37 +63,6 @@ struct ThinScrollbar: ViewModifier {
                     onDragChange: dragChanged
                 )
             }
-    }
-
-    @ViewBuilder
-    private func tracked<Tracked: View>(_ content: Tracked) -> some View {
-        if let externalMetrics {
-            content
-                .onAppear { metrics = externalMetrics }
-                .onChange(of: externalMetrics) { _, new in metrics = new }
-                .onChange(of: externalScrollToken) {
-                    beganScrolling()
-                    scheduleScrollStop()
-                }
-        } else {
-            content
-            // Geometry drives the thumb's size/position, never its visibility.
-            .onScrollGeometryChange(for: ThinScrollbarMetrics.self) { geo in
-                ThinScrollbarMetrics(
-                    offset: geo.contentOffset.y,
-                    insetTop: geo.contentInsets.top,
-                    content: geo.contentSize.height,
-                    viewport: geo.containerSize.height
-                )
-            } action: { _, new in
-                metrics = new
-            }
-            // Scrolling reveals the thumb (not the rail) and re-hides a beat after it stops; a thumb drag has no scroll phase, so its own handlers own visibility.
-            .onScrollPhaseChange { _, phase in
-                guard !isDragging else { return }
-                phase == .idle ? scheduleScrollStop() : beganScrolling()
-            }
-        }
     }
 
     @ViewBuilder private var bar: some View {
@@ -186,84 +161,9 @@ struct ThinScrollbar: ViewModifier {
 }
 
 extension View {
-    /// Attach to a `ScrollView` for a thin SwiftUI scrollbar that appears only while scrolling.
-    func thinScrollbar() -> some View {
-        modifier(ThinScrollbar())
-    }
-
     /// AppKit scroll views report geometry and activity through their representable coordinator.
     func thinScrollbar(metrics: ThinScrollbarMetrics, scrollToken: UUID) -> some View {
         modifier(ThinScrollbar(externalMetrics: metrics, externalScrollToken: scrollToken))
-    }
-
-    /// Attach *inside* a `ScrollView` (on its content) to remove the native scrollers so only our `thinScrollbar` shows.
-    func hideNativeScrollers() -> some View {
-        background(NativeScrollerHider().frame(width: 0, height: 0))
-    }
-}
-
-/// Forces the backing `NSScrollView` to a hidden `.overlay` scroller (removing the always-on legacy widget and its reserved gutter), re-asserting it on `preferredScrollerStyleDidChangeNotification` since macOS otherwise resets it.
-private struct NativeScrollerHider: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { HiderView() }
-    func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? HiderView)?.applyOverlayStyle()
-    }
-
-    private final class HiderView: NSView {
-        private var retriesLeft = 10
-        private var styleChangeObserver: NotificationToken?
-
-        @available(*, unavailable)
-        required init?(coder: NSCoder) { fatalError() }
-        override init(frame: NSRect) { super.init(frame: frame) }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if window == nil {
-                stopObservingStyleChanges()
-                return
-            }
-            startObservingStyleChanges()
-            retriesLeft = 10  // fresh hierarchy on (re)attach — allow the splice a few ticks again
-            applyOverlayStyle()
-        }
-
-        private func startObservingStyleChanges() {
-            guard styleChangeObserver == nil else { return }
-            let token = NotificationCenter.default.addObserver(
-                forName: NSScroller.preferredScrollerStyleDidChangeNotification,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                // Re-assert on the next tick, after AppKit's own handler has reset the style.
-                DispatchQueue.main.async { self?.applyOverlayStyle() }
-            }
-            styleChangeObserver = NotificationToken(token, center: .default)
-        }
-
-        private func stopObservingStyleChanges() {
-            styleChangeObserver = nil
-        }
-
-        func applyOverlayStyle() {
-            guard let scrollView = enclosingScrollView else {
-                // Not yet spliced into the scroll view's hierarchy; retry next tick, bounded so a view that never lands in one can't busy-loop the main thread.
-                guard retriesLeft > 0 else { return }
-                retriesLeft -= 1
-                DispatchQueue.main.async { [weak self] in self?.applyOverlayStyle() }
-                return
-            }
-            // Idempotent: bail once already in the target state so re-runs don't churn layout.
-            guard
-                scrollView.scrollerStyle != .overlay
-                    || scrollView.hasVerticalScroller
-                    || scrollView.hasHorizontalScroller
-            else { return }
-            scrollView.scrollerStyle = .overlay  // float over content — reserves no layout width
-            scrollView.hasVerticalScroller = false
-            scrollView.hasHorizontalScroller = false
-            // Reclaim the trailing gutter a legacy scroller was reserving, on this same layout pass.
-            scrollView.tile()
-        }
     }
 }
 

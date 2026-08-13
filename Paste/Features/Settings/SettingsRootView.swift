@@ -1,9 +1,5 @@
 import SwiftUI
 
-extension Notification.Name {
-    static let pasteSelectSettingsTab = Notification.Name("PasteSelectSettingsTab")
-}
-
 enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
     case general, shortcuts, appearance, history, about
 

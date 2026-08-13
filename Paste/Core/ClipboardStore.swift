@@ -337,19 +337,22 @@ final class ClipboardStore: ObservableObject {
     private var staleImagesStmt: OpaquePointer?
     private var deleteStaleStmt: OpaquePointer?
     private var imageByFingerprintStmt: OpaquePointer?
+    private var pendingSearchMetadata: [SearchMetadataUpdate] = []
     private var searchMetadataTask: Task<Void, Never>?
+
+    private struct SearchMetadataUpdate: Sendable {
+        let id: String
+        let text: String
+        var retryCount = 0
+    }
 
     /// Tests pass a throwaway directory so a harness run can never reach real history.
     init(directory: URL? = nil) {
         let base = directory ?? Self.defaultDirectory
         imagesDir = base.appendingPathComponent("images", isDirectory: true)
         dbURL = base.appendingPathComponent("clipboard.sqlite3")
-        do {
-            try FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
-        } catch {
-            preconditionFailure("Could not create clipboard storage at \(base.path): \(error)")
-        }
-        precondition(openDatabase(), "Could not initialize clipboard database: \(databaseMessage)")
+        try? FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
+        _ = openDatabase()
     }
 
     private static var defaultDirectory: URL {
@@ -367,7 +370,7 @@ final class ClipboardStore: ObservableObject {
     }
 
     func load() {
-        guard let stmt = loadStmt else { preconditionFailure("Clipboard database is closed") }
+        guard let stmt = loadStmt else { return }
         sqlite3_bind_int64(stmt, 1, windowFloor())
         var loaded: [ClipboardItem] = []
         var status = sqlite3_step(stmt)
@@ -377,7 +380,7 @@ final class ClipboardStore: ObservableObject {
         }
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
-        precondition(status == SQLITE_DONE, "Could not load clipboard history: \(databaseMessage)")
+        guard status == SQLITE_DONE else { return }
         items = loaded
         // Age passes while the app isn't running; insert-time pruning alone can't catch that.
         enforceLimits()
@@ -411,11 +414,11 @@ final class ClipboardStore: ObservableObject {
         _ data: Data, sourceBundleID: String?, expectedGeneration: UInt64? = nil
     ) async {
         let generation = expectedGeneration ?? captureGeneration
-        guard generation == captureGeneration else { return }
+        guard !Task.isCancelled, generation == captureGeneration else { return }
         let fingerprint = await Task.detached(priority: .utility) {
             ImageFingerprint.digest(data: data)
         }.value
-        guard generation == captureGeneration else { return }
+        guard !Task.isCancelled, generation == captureGeneration else { return }
         if let existing = image(matching: fingerprint) {
             reinsert(existing.refreshed(sourceBundleID: sourceBundleID))
             return
@@ -428,11 +431,14 @@ final class ClipboardStore: ObservableObject {
             (try? data.write(to: url, options: .atomic)) != nil
         }.value
         guard wrote else { return }
-        guard generation == captureGeneration else {
+        guard !Task.isCancelled, generation == captureGeneration else {
             try? FileManager.default.removeItem(at: url)
             return
         }
-        insert(item)
+        guard insert(item) else {
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
     }
 
     /// Move an item to the top of history after it is used.
@@ -447,30 +453,26 @@ final class ClipboardStore: ObservableObject {
     }
 
     func remove(_ item: ClipboardItem) {
-        guard let stmt = deleteByIDStmt else { preconditionFailure("Clipboard database is closed") }
+        guard let stmt = deleteByIDStmt else { return }
         sqlite3_bind_text(stmt, 1, item.id.uuidString, -1, SQLITE_TRANSIENT)
-        stepAndReset(stmt, operation: "delete clipboard entry")
+        guard stepAndReset(stmt) else { return }
         items.removeAll { $0.id == item.id }
         deleteBlob(item)
     }
 
     func clearAll() {
         captureGeneration &+= 1
-        precondition(
-            sqlite3_exec(db, "DELETE FROM items", nil, nil, nil) == SQLITE_OK,
-            "Could not clear clipboard history: \(databaseMessage)")
-        try? FileManager.default.removeItem(at: imagesDir)
-        do {
-            try FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
-        } catch {
-            preconditionFailure("Could not recreate clipboard image storage: \(error)")
-        }
+        searchMetadataTask?.cancel()
+        pendingSearchMetadata.removeAll()
+        guard sqlite3_exec(db, "DELETE FROM items", nil, nil, nil) == SQLITE_OK else { return }
         items = []
+        try? FileManager.default.removeItem(at: imagesDir)
+        try? FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
     }
 
     func imageURL(for item: ClipboardItem) -> URL? {
         guard let path = item.imagePath else { return nil }
-        return URL(fileURLWithPath: path)
+        return managedBlobURL(for: path)
     }
 
     var displayItems: [ClipboardItem] { orderedItems }
@@ -487,49 +489,43 @@ final class ClipboardStore: ObservableObject {
         let databaseTask = Task.detached(priority: .userInitiated) {
             () -> [ClipboardItem] in
             guard !Task.isCancelled else { return [] }
-            return Self.queryDatabase(path: path, query: q)
+            return Self.queryDatabase(path: path, query: q) ?? []
         }
-        let databaseMatches = await withTaskCancellationHandler {
-            await databaseTask.value
-        } onCancel: {
-            databaseTask.cancel()
-        }
-        guard !Task.isCancelled else { return [] }
-
         let residentTask = Task.detached(priority: .userInitiated) {
             () -> [ClipboardItem] in
             guard !Task.isCancelled else { return [] }
             return resident.filter { $0.matches(q) }
         }
-        let residentMatches = await withTaskCancellationHandler {
-            await residentTask.value
+        let (databaseResult, residentResult) = await withTaskCancellationHandler {
+            await (databaseTask.value, residentTask.value)
         } onCancel: {
+            databaseTask.cancel()
             residentTask.cancel()
         }
         guard !Task.isCancelled else { return [] }
 
-        let residentIDs = Set(residentMatches.map(\.id))
+        let residentIDs = Set(residentResult.map(\.id))
         let pinnedMatches = pinned.filter { residentIDs.contains($0.id) }
         var seen = Set(pinnedMatches.map(\.id))
         var unpinned: [ClipboardItem] = []
-        for item in databaseMatches where !item.isPinned && seen.insert(item.id).inserted {
+        for item in databaseResult where !item.isPinned && seen.insert(item.id).inserted {
             unpinned.append(item)
         }
         // Newly captured rows may still be waiting for their persistent pinyin metadata; merge the
         // resident window so they remain searchable immediately.
-        for item in residentMatches where !item.isPinned && seen.insert(item.id).inserted {
+        for item in residentResult where !item.isPinned && seen.insert(item.id).inserted {
             unpinned.append(item)
         }
         return Self.displayOrder(pinnedMatches + unpinned)
     }
 
-    private nonisolated static func queryDatabase(path: String, query: String) -> [ClipboardItem] {
+    private nonisolated static func queryDatabase(path: String, query: String) -> [ClipboardItem]? {
         var connection: OpaquePointer?
         guard sqlite3_open_v2(path, &connection, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
             let connection
         else {
             sqlite3_close_v2(connection)
-            preconditionFailure("Could not open clipboard database for search")
+            return nil
         }
         defer { sqlite3_close_v2(connection) }
         sqlite3_busy_timeout(connection, 500)
@@ -556,7 +552,7 @@ final class ClipboardStore: ObservableObject {
             let statement
         else {
             sqlite3_finalize(statement)
-            preconditionFailure("Could not prepare clipboard search")
+            return nil
         }
         defer { sqlite3_finalize(statement) }
 
@@ -577,21 +573,11 @@ final class ClipboardStore: ObservableObject {
         var results: [ClipboardItem] = []
         var status = sqlite3_step(statement)
         while status == SQLITE_ROW {
-            if Task.isCancelled { return [] }
+            if Task.isCancelled { return nil }
             if let item = row(statement) { results.append(item) }
             status = sqlite3_step(statement)
         }
-        precondition(status == SQLITE_DONE, "Clipboard search failed")
-        return results
-    }
-
-    private func refreshSearchMetadata(for item: ClipboardItem) async {
-        guard let text = item.text, Pinyin.containsHan(text) else { return }
-        let path = dbURL.path
-        await Task.detached(priority: .utility) {
-            Self.updateSearchMetadata(path: path, id: item.id.uuidString, text: text)
-        }.value
-        revision &+= 1
+        return status == SQLITE_DONE ? results : nil
     }
 
     func waitForSearchMetadata() async {
@@ -600,22 +586,56 @@ final class ClipboardStore: ObservableObject {
 
     private func scheduleSearchMetadataUpdate(for item: ClipboardItem) {
         guard let text = item.text, Pinyin.containsHan(text) else { return }
-        let previous = searchMetadataTask
+        pendingSearchMetadata.append(
+            SearchMetadataUpdate(id: item.id.uuidString, text: text))
+        startSearchMetadataWorkerIfNeeded()
+    }
+
+    private func startSearchMetadataWorkerIfNeeded() {
+        guard searchMetadataTask == nil, !pendingSearchMetadata.isEmpty else { return }
         searchMetadataTask = Task { [weak self] in
-            await previous?.value
-            guard !Task.isCancelled else { return }
-            await self?.refreshSearchMetadata(for: item)
+            await self?.drainSearchMetadataQueue()
         }
     }
 
-    private nonisolated static func updateSearchMetadata(path: String, id: String, text: String) {
+    private func drainSearchMetadataQueue() async {
+        defer {
+            searchMetadataTask = nil
+            startSearchMetadataWorkerIfNeeded()
+        }
+        while !Task.isCancelled, !pendingSearchMetadata.isEmpty {
+            let batch = pendingSearchMetadata
+            pendingSearchMetadata.removeAll(keepingCapacity: true)
+            let path = dbURL.path
+            let updated = await Task.detached(priority: .utility) {
+                Self.updateSearchMetadata(path: path, batch: batch)
+            }.value
+            guard !Task.isCancelled else { return }
+            if updated {
+                revision &+= 1
+            } else {
+                let retry = batch.compactMap { entry -> SearchMetadataUpdate? in
+                    guard entry.retryCount == 0 else { return nil }
+                    var entry = entry
+                    entry.retryCount += 1
+                    return entry
+                }
+                pendingSearchMetadata.insert(contentsOf: retry, at: 0)
+                if !retry.isEmpty { try? await Task.sleep(for: .milliseconds(100)) }
+            }
+        }
+    }
+
+    private nonisolated static func updateSearchMetadata(
+        path: String, batch: [SearchMetadataUpdate]
+    ) -> Bool {
         var connection: OpaquePointer?
         guard
             sqlite3_open_v2(path, &connection, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
             let connection
         else {
             sqlite3_close_v2(connection)
-            preconditionFailure("Could not open clipboard database for metadata update")
+            return false
         }
         defer { sqlite3_close_v2(connection) }
         sqlite3_busy_timeout(connection, 1000)
@@ -628,14 +648,29 @@ final class ClipboardStore: ObservableObject {
             let update
         else {
             sqlite3_finalize(update)
-            preconditionFailure("Could not prepare clipboard metadata update")
+            return false
         }
         defer { sqlite3_finalize(update) }
-        let forms = Pinyin.searchForms(for: text)
-        sqlite3_bind_text(update, 1, forms.full, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(update, 2, forms.initials, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(update, 3, id, -1, SQLITE_TRANSIENT)
-        precondition(sqlite3_step(update) == SQLITE_DONE, "Could not update pinyin search metadata")
+        guard sqlite3_exec(connection, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK else {
+            return false
+        }
+        var committed = false
+        defer {
+            if !committed { sqlite3_exec(connection, "ROLLBACK", nil, nil, nil) }
+        }
+        for entry in batch {
+            guard !Task.isCancelled else { return false }
+            let forms = Pinyin.searchForms(for: entry.text)
+            sqlite3_bind_text(update, 1, forms.full, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(update, 2, forms.initials, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(update, 3, entry.id, -1, SQLITE_TRANSIENT)
+            let status = sqlite3_step(update)
+            sqlite3_reset(update)
+            sqlite3_clear_bindings(update)
+            guard status == SQLITE_DONE else { return false }
+        }
+        committed = sqlite3_exec(connection, "COMMIT", nil, nil, nil) == SQLITE_OK
+        return committed
     }
 
     // MARK: - Private
@@ -672,10 +707,10 @@ final class ClipboardStore: ObservableObject {
     private func pin(_ item: ClipboardItem) {
         let stamp = Date()
         let pinned = item.with(pinnedAt: stamp)
-        guard let stmt = pinStmt else { preconditionFailure("Clipboard database is closed") }
+        guard let stmt = pinStmt else { return }
         sqlite3_bind_double(stmt, 1, stamp.timeIntervalSince1970)
         sqlite3_bind_text(stmt, 2, item.id.uuidString, -1, SQLITE_TRANSIENT)
-        stepAndReset(stmt, operation: "pin clipboard entry")
+        guard stepAndReset(stmt) else { return }
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             items[index] = pinned
         } else {
@@ -692,18 +727,16 @@ final class ClipboardStore: ObservableObject {
 
     /// Rewrite a row under the same id so it leads the history: stored order is rowid, so this is a delete + re-insert, and the fresh `createdAt` keeps the date buckets descending. The image blob is never touched.
     private func reinsert(_ updated: ClipboardItem) {
-        guard let deleteStmt = deleteByIDStmt, let insertStmt else {
-            preconditionFailure("Clipboard database is closed")
+        guard let deleteStmt = deleteByIDStmt, let insertStmt else { return }
+        guard sqlite3_exec(db, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK else { return }
+        var committed = false
+        defer {
+            if !committed { sqlite3_exec(db, "ROLLBACK", nil, nil, nil) }
         }
-        precondition(
-            sqlite3_exec(db, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK,
-            "Could not begin clipboard promotion: \(databaseMessage)")
         sqlite3_bind_text(deleteStmt, 1, updated.id.uuidString, -1, SQLITE_TRANSIENT)
-        stepAndReset(deleteStmt, operation: "promote clipboard entry")
-        bindAndInsert(insertStmt, updated)
-        precondition(
-            sqlite3_exec(db, "COMMIT", nil, nil, nil) == SQLITE_OK,
-            "Could not commit clipboard promotion: \(databaseMessage)")
+        guard stepAndReset(deleteStmt), bindAndInsert(insertStmt, updated) else { return }
+        committed = sqlite3_exec(db, "COMMIT", nil, nil, nil) == SQLITE_OK
+        guard committed else { return }
         // Array ops also cover items surfaced by FTS from beyond the in-memory window.
         items.removeAll { $0.id == updated.id }
         items.insert(updated, at: 0)
@@ -718,16 +751,18 @@ final class ClipboardStore: ObservableObject {
         items.remove(at: index)
     }
 
-    private func insert(_ item: ClipboardItem) {
-        guard let stmt = insertStmt else { preconditionFailure("Clipboard database is closed") }
-        bindAndInsert(stmt, item)
+    @discardableResult
+    private func insert(_ item: ClipboardItem) -> Bool {
+        guard let stmt = insertStmt, bindAndInsert(stmt, item) else { return false }
         items.insert(item, at: 0)
         trimWindow()
         prune()
         scheduleSearchMetadataUpdate(for: item)
+        return true
     }
 
-    private func bindAndInsert(_ stmt: OpaquePointer, _ item: ClipboardItem) {
+    @discardableResult
+    private func bindAndInsert(_ stmt: OpaquePointer, _ item: ClipboardItem) -> Bool {
         sqlite3_bind_text(stmt, 1, item.id.uuidString, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(stmt, 2, item.kind.rawValue, -1, SQLITE_TRANSIENT)
         if let text = item.text {
@@ -756,29 +791,22 @@ final class ClipboardStore: ObservableObject {
         } else {
             sqlite3_bind_null(stmt, 8)
         }
-        stepAndReset(stmt, operation: "save clipboard entry")
+        return stepAndReset(stmt)
     }
 
     private func image(matching fingerprint: String) -> ClipboardItem? {
-        guard let stmt = imageByFingerprintStmt else {
-            preconditionFailure("Clipboard database is closed")
-        }
+        guard let stmt = imageByFingerprintStmt else { return nil }
         sqlite3_bind_text(stmt, 1, fingerprint, -1, SQLITE_TRANSIENT)
         let status = sqlite3_step(stmt)
         let item = status == SQLITE_ROW ? Self.row(stmt) : nil
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
-        precondition(
-            status == SQLITE_ROW || status == SQLITE_DONE,
-            "Could not find duplicate clipboard image: \(databaseMessage)")
-        return item
+        return status == SQLITE_ROW || status == SQLITE_DONE ? item : nil
     }
 
     private func prune() {
         let cutoff = Date().addingTimeInterval(-maxAge)
-        guard let imagesStmt = staleImagesStmt, let deleteStmt = deleteStaleStmt else {
-            preconditionFailure("Clipboard database is closed")
-        }
+        guard let imagesStmt = staleImagesStmt, let deleteStmt = deleteStaleStmt else { return }
         sqlite3_bind_double(imagesStmt, 1, cutoff.timeIntervalSince1970)
         var stalePaths: [String] = []
         var status = sqlite3_step(imagesStmt)
@@ -788,14 +816,15 @@ final class ClipboardStore: ObservableObject {
         }
         sqlite3_reset(imagesStmt)
         sqlite3_clear_bindings(imagesStmt)
-        precondition(status == SQLITE_DONE, "Could not scan stale clipboard images")
+        guard status == SQLITE_DONE else { return }
         sqlite3_bind_double(deleteStmt, 1, cutoff.timeIntervalSince1970)
-        stepAndReset(deleteStmt, operation: "prune clipboard history")
+        guard stepAndReset(deleteStmt) else { return }
         // A retention cut can strand hundreds of files; delete them off the main actor so capture-time prune doesn't hitch.
-        if !stalePaths.isEmpty {
+        let staleURLs = stalePaths.compactMap(managedBlobURL(for:))
+        if !staleURLs.isEmpty {
             Task.detached(priority: .utility) {
-                for path in stalePaths {
-                    try? FileManager.default.removeItem(atPath: path)
+                for url in staleURLs {
+                    try? FileManager.default.removeItem(at: url)
                 }
             }
         }
@@ -806,8 +835,26 @@ final class ClipboardStore: ObservableObject {
     }
 
     private func deleteBlob(_ item: ClipboardItem) {
-        guard let path = item.imagePath else { return }
-        try? FileManager.default.removeItem(atPath: path)
+        guard let path = item.imagePath, let url = managedBlobURL(for: path) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Accept only regular PNG files directly owned by this store. Database paths are data, not
+    /// authority to delete arbitrary files.
+    private func managedBlobURL(for path: String) -> URL? {
+        let candidate = URL(fileURLWithPath: path).standardizedFileURL
+        let directory = imagesDir.standardizedFileURL
+        guard candidate.pathExtension.lowercased() == "png",
+            candidate.deletingLastPathComponent() == directory,
+            candidate.resolvingSymlinksInPath().deletingLastPathComponent()
+                == directory.resolvingSymlinksInPath()
+        else { return nil }
+        if let values = try? candidate.resourceValues(
+            forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        {
+            guard values.isRegularFile == true, values.isSymbolicLink != true else { return nil }
+        }
+        return candidate
     }
 
     private func openDatabase() -> Bool {
@@ -865,16 +912,12 @@ final class ClipboardStore: ObservableObject {
         return stmt
     }
 
-    private var databaseMessage: String {
-        guard let db, let message = sqlite3_errmsg(db) else { return "unknown SQLite error" }
-        return String(cString: message)
-    }
-
-    private func stepAndReset(_ stmt: OpaquePointer, operation: String) {
+    @discardableResult
+    private func stepAndReset(_ stmt: OpaquePointer) -> Bool {
         let status = sqlite3_step(stmt)
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
-        precondition(status == SQLITE_DONE, "Could not \(operation): \(databaseMessage)")
+        return status == SQLITE_DONE
     }
 
     private func closeDatabase() {

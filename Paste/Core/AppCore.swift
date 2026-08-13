@@ -15,7 +15,6 @@ final class AppCore: ObservableObject {
 
     private lazy var windowController = PaletteWindowController(core: self)
     private let activationPolicy = ActivationPolicyCoordinator()
-    private lazy var auxWindows = AuxWindowController(activationPolicy: activationPolicy)
     private lazy var pinnedImageWindows = PinnedImageWindowController()
     private lazy var settingsWindowController = PasteSettingsWindowController(
         activationPolicy: activationPolicy
@@ -71,7 +70,6 @@ final class AppCore: ObservableObject {
             settingsWindowController.focus()
             return
         }
-        if auxWindows.focusExisting() { return }
         showPalette()
     }
 
@@ -107,25 +105,9 @@ final class AppCore: ObservableObject {
 
     func paste(_ item: ClipboardItem) {
         let previous = windowController.previousApp
-        startTransfer { [weak self] generation in
-            guard let self else { return }
-            var hidden = false
-            let succeeded = await Paster.paste(
-                item, store: self.clipboardStore, previousApp: previous
-            ) {
-                hidden = true
-                self.hidePalette(restoreFocus: false, cancelTransfer: false)
-            }
-            guard !Task.isCancelled else {
-                if hidden { self.windowController.show() }
-                return
-            }
-            if succeeded {
-                self.palette.select(item.id)
-            } else if hidden {
-                self.windowController.show()
-            }
-            self.finishTransfer(generation)
+        startHidingTransfer(item) { [clipboardStore] willDeliver in
+            await Paster.paste(
+                item, store: clipboardStore, previousApp: previous, willDeliver: willDeliver)
         }
     }
 
@@ -141,10 +123,19 @@ final class AppCore: ObservableObject {
     }
 
     func copyToClipboard(_ item: ClipboardItem) {
+        startHidingTransfer(item) { [clipboardStore] willWrite in
+            await Paster.copy(item, store: clipboardStore, willWrite: willWrite)
+        }
+    }
+
+    private func startHidingTransfer(
+        _ item: ClipboardItem,
+        operation: @escaping @MainActor (_ willHide: () -> Void) async -> Bool
+    ) {
         startTransfer { [weak self] generation in
             guard let self else { return }
             var hidden = false
-            let succeeded = await Paster.copy(item, store: self.clipboardStore) {
+            let succeeded = await operation {
                 hidden = true
                 self.hidePalette(restoreFocus: false, cancelTransfer: false)
             }

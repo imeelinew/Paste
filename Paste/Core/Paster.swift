@@ -104,12 +104,18 @@ enum Paster {
     }
 
     private static func imagePayload(at url: URL) async -> Payload? {
-        await Task.detached(priority: .userInitiated) {
+        let task = Task.detached(priority: .userInitiated) { () -> Payload? in
             guard !Task.isCancelled,
                 let data = try? Data(contentsOf: url, options: [.mappedIfSafe])
             else { return nil }
             return Payload.image(data)
-        }.value
+        }
+        let payload = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        return Task.isCancelled ? nil : payload
     }
 
     /// Wait for the target's actual activation state instead of guessing with a fixed delay.

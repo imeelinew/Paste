@@ -178,7 +178,9 @@ struct MenuFileIcon: View {
                 return
             }
             image = nil
-            image = await IconCache.loadAsync(forFile: path)
+            let loaded = await IconCache.loadAsync(forFile: path)
+            guard !Task.isCancelled else { return }
+            image = loaded
         }
     }
 }

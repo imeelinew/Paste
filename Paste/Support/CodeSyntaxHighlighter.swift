@@ -47,6 +47,7 @@ enum CodeSyntaxHighlighter {
 
         var tokens: [Token] = []
         for (priority, rule) in rules.enumerated() {
+            guard !Task.isCancelled else { return output }
             for match in rule.expression.matches(in: source, range: fullRange) {
                 tokens.append(Token(range: match.range, color: rule.color, priority: priority))
             }
@@ -58,6 +59,7 @@ enum CodeSyntaxHighlighter {
 
         var consumedThrough = 0
         for token in tokens {
+            guard !Task.isCancelled else { return output }
             let tokenRange = token.range
             guard tokenRange.location >= consumedThrough else { continue }
             guard let stringRange = Range(tokenRange, in: source),
@@ -76,12 +78,31 @@ struct CodePreview: View {
     var query: String = ""
     @State private var highlighted: AttributedString?
 
+    private struct RenderID: Hashable {
+        let code: String
+        let query: String
+    }
+
+    private struct Rendered: @unchecked Sendable {
+        let value: AttributedString
+    }
+
     var body: some View {
         SelectableAttributedText(attributed: highlighted ?? AttributedString(code))
-        .task(id: code + "\u{0}" + query) {
-            var attributed = CodeSyntaxHighlighter.highlight(code)
-            SearchHighlight.apply(to: &attributed, source: code, query: query)
-            highlighted = attributed
+        .task(id: RenderID(code: code, query: query)) {
+            highlighted = nil
+            let task = Task.detached(priority: .userInitiated) {
+                var attributed = CodeSyntaxHighlighter.highlight(code)
+                SearchHighlight.apply(to: &attributed, source: code, query: query)
+                return Rendered(value: attributed)
+            }
+            let rendered = await withTaskCancellationHandler {
+                await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            guard !Task.isCancelled else { return }
+            highlighted = rendered.value
         }
     }
 }

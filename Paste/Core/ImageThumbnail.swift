@@ -39,6 +39,24 @@ enum ImageThumbnail {
         "\(url.path)#\(Int(maxPixel))" as NSString
     }
 
+    private actor DecodeCoordinator {
+        private var inFlight: [String: Task<Decoded, Never>] = [:]
+
+        func decode(_ url: URL, maxPixel: CGFloat) async -> Decoded {
+            let key = "\(url.path)#\(Int(maxPixel))"
+            if let task = inFlight[key] { return await task.value }
+            let task = Task.detached(priority: .userInitiated) {
+                Decoded(image: ImageThumbnail.load(url, maxPixel: maxPixel))
+            }
+            inFlight[key] = task
+            let result = await task.value
+            inFlight[key] = nil
+            return result
+        }
+    }
+
+    private static let decodeCoordinator = DecodeCoordinator()
+
     /// Frees the large preview bitmaps on palette dismiss; row thumbnails stay warm for an instant re-open.
     static func purgePreviews() {
         previewCache.removeAllObjects()
@@ -55,9 +73,10 @@ enum ImageThumbnail {
     /// Decodes off the main thread and returns the decode directly, not a cache re-read — a purge or eviction mid-decode must not strand a thumbnail on its placeholder.
     static func loadAsync(_ url: URL, maxPixel: CGFloat) async -> NSImage? {
         if let cached = cached(url, maxPixel: maxPixel) { return cached }
-        return await Task.detached(priority: .userInitiated) {
-            Decoded(image: load(url, maxPixel: maxPixel))
-        }.value.image
+        guard !Task.isCancelled else { return nil }
+        let decoded = await decodeCoordinator.decode(url, maxPixel: maxPixel)
+        guard !Task.isCancelled else { return nil }
+        return decoded.image
     }
 
     /// A thumbnail no larger than `maxPixel` on its longest edge, cached per (path, size); decodes synchronously, so call off the main thread for anything user-facing.

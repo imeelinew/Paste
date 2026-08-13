@@ -22,21 +22,15 @@ enum SearchHighlight {
             string: string,
             attributes: [.font: font, .foregroundColor: foreground]
         )
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty, !string.isEmpty else {
+        let ranges = matchingRanges(source: string, query: query)
+        guard !ranges.isEmpty else {
             NerdSymbolsFont.applyFallback(to: output, baseFont: font)
             return output
         }
 
         let color = NSColor.controlAccentColor.withAlphaComponent(0.32)
-        for range in literalRanges(source: string, query: needle) {
+        for range in ranges {
             output.addAttribute(.backgroundColor, value: color, range: NSRange(range, in: string))
-        }
-        if Pinyin.queryLooksLatin(needle) {
-            for range in Pinyin.matchingSourceRanges(query: needle, text: string) {
-                output.addAttribute(
-                    .backgroundColor, value: color, range: NSRange(range, in: string))
-            }
         }
         NerdSymbolsFont.applyFallback(to: output, baseFont: font)
         return output
@@ -44,17 +38,8 @@ enum SearchHighlight {
 
     /// Layers a blue background onto existing attributes (e.g. syntax-colored code) without clearing them.
     static func apply(to output: inout AttributedString, source: String, query: String) {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty, !source.isEmpty else { return }
-
-        for range in literalRanges(source: source, query: needle) {
+        for range in matchingRanges(source: source, query: query) {
             paint(range, in: source, onto: &output)
-        }
-
-        if Pinyin.queryLooksLatin(needle) {
-            for range in Pinyin.matchingSourceRanges(query: needle, text: source) {
-                paint(range, in: source, onto: &output)
-            }
         }
     }
 
@@ -63,20 +48,26 @@ enum SearchHighlight {
     static func applying(to attributed: NSAttributedString, query: String) -> NSAttributedString {
         let output = NSMutableAttributedString(attributedString: attributed)
         let source = output.string
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty, !source.isEmpty else { return output }
+        let ranges = matchingRanges(source: source, query: query)
+        guard !ranges.isEmpty else { return output }
 
         let color = NSColor.controlAccentColor.withAlphaComponent(0.32)
-        for range in literalRanges(source: source, query: needle) {
+        for range in ranges {
             output.addAttribute(.backgroundColor, value: color, range: NSRange(range, in: source))
         }
-        if Pinyin.queryLooksLatin(needle) {
-            for range in Pinyin.matchingSourceRanges(query: needle, text: source) {
-                output.addAttribute(
-                    .backgroundColor, value: color, range: NSRange(range, in: source))
-            }
-        }
         return output
+    }
+
+    private static func matchingRanges(
+        source: String, query: String
+    ) -> [Range<String.Index>] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty, !source.isEmpty else { return [] }
+        var ranges = literalRanges(source: source, query: needle)
+        if Pinyin.queryLooksLatin(needle) {
+            ranges.append(contentsOf: Pinyin.matchingSourceRanges(query: needle, text: source))
+        }
+        return ranges
     }
 
     private static func literalRanges(source: String, query: String) -> [Range<String.Index>] {
