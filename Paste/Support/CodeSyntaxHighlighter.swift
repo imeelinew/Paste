@@ -134,6 +134,7 @@ enum CodeSyntaxHighlighter {
 struct CodePreview: View {
     let code: String
     var query: String = ""
+    var fontSize: CGFloat? = nil
     @State private var highlighted: AttributedString?
 
     private struct RenderID: Hashable {
@@ -146,7 +147,9 @@ struct CodePreview: View {
     }
 
     var body: some View {
-        SelectableAttributedText(attributed: highlighted ?? AttributedString(code))
+        SelectableAttributedText(
+            attributed: highlighted ?? AttributedString(code),
+            fontSize: fontSize)
         .task(id: RenderID(code: code, query: query)) {
             highlighted = nil
             let task = Task.detached(priority: .userInitiated) {

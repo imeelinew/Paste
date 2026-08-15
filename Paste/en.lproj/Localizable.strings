@@ -58,6 +58,7 @@
 "Pinned Code" = "Pinned Code";
 "Pinned Image" = "Pinned Image";
 "Pinned Image Size" = "Pinned Image Size";
+"Pinned Text Size" = "Pinned Text Size";
 "Pinned Items" = "Pinned Items";
 "Pinned Markdown" = "Pinned Markdown";
 "Regular Items" = "Regular Items";
@@ -66,6 +67,8 @@
 "Large" = "Large";
 "Close Pinned Image" = "Close Pinned Image";
 "Close Pinned Item" = "Close Pinned Item";
+"Decrease Pinned Text Size" = "Decrease Pinned Text Size";
+"Increase Pinned Text Size" = "Increase Pinned Text Size";
 "Close All Pinned Images" = "Close All Pinned Images";
 "Dismiss Pinned Image" = "Dismiss Pinned Image";
 "Copy Pinned Image" = "Copy Pinned Image";

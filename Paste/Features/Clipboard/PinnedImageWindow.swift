@@ -661,17 +661,11 @@ private struct PinnedImageContent: View {
             PinnedImageDragSurface()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .frosted(in: Circle())
-            .accessibilityLabel(Text("Close Pinned Image"))
-            .help(Text("Close Pinned Image"))
+            PinnedCardButton(
+                systemName: "xmark",
+                label: "Close Pinned Image",
+                action: onClose
+            )
             .padding(10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -691,6 +685,8 @@ private struct PinnedTextContent: View {
     let style: PinnedTextStyle
     let onClose: () -> Void
 
+    @ObservedObject private var settings = AppCore.shared.settings
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color(nsColor: .windowBackgroundColor)
@@ -698,9 +694,9 @@ private struct PinnedTextContent: View {
             Group {
                 switch style {
                 case .markdown:
-                    MarkdownPreview(source: text)
+                    MarkdownPreview(source: text, fontSize: settings.pinnedTextSize)
                 case .code:
-                    CodePreview(code: text)
+                    CodePreview(code: text, fontSize: settings.pinnedTextSize)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -712,23 +708,61 @@ private struct PinnedTextContent: View {
                 .frame(height: 44)
                 .frame(maxWidth: .infinity, alignment: .top)
 
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Circle())
+            PinnedCardButton(
+                systemName: "xmark",
+                label: "Close Pinned Item",
+                action: onClose
+            )
+            .padding(10)
+
+            HStack(spacing: 8) {
+                PinnedCardButton(
+                    systemName: "minus",
+                    label: "Decrease Pinned Text Size"
+                ) {
+                    changeTextSize(by: -PinnedTextSize.step)
+                }
+                .disabled(settings.pinnedTextSize <= PinnedTextSize.minimum)
+
+                PinnedCardButton(
+                    systemName: "plus",
+                    label: "Increase Pinned Text Size"
+                ) {
+                    changeTextSize(by: PinnedTextSize.step)
+                }
+                .disabled(settings.pinnedTextSize >= PinnedTextSize.maximum)
             }
-            .buttonStyle(.plain)
-            .frosted(in: Circle())
-            .accessibilityLabel(Text("Close Pinned Item"))
-            .help(Text("Close Pinned Item"))
+            .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
         .ignoresSafeArea()
+    }
+
+    private func changeTextSize(by amount: CGFloat) {
+        settings.pinnedTextSize = PinnedTextSize.clamped(settings.pinnedTextSize + amount)
+    }
+}
+
+private struct PinnedCardButton: View {
+    let systemName: String
+    let label: LocalizedStringKey
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 28, height: 28)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .frosted(in: Circle())
+        .accessibilityLabel(Text(label))
+        .help(Text(label))
     }
 }
 

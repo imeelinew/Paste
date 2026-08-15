@@ -10,13 +10,16 @@ struct SelectableAttributedText: NSViewRepresentable {
     }
 
     private let storage: Storage
+    private let fontSize: CGFloat?
 
-    init(attributed: AttributedString) {
+    init(attributed: AttributedString, fontSize: CGFloat? = nil) {
         storage = .swiftUI(attributed)
+        self.fontSize = fontSize
     }
 
-    init(nsAttributed: NSAttributedString) {
+    init(nsAttributed: NSAttributedString, fontSize: CGFloat? = nil) {
         storage = .appKit(nsAttributed)
+        self.fontSize = fontSize
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -35,16 +38,24 @@ struct SelectableAttributedText: NSViewRepresentable {
         let ns: NSAttributedString
         switch storage {
         case .swiftUI(let attributed):
-            ns = Self.nsAttributed(from: attributed, environment: context.environment)
+            ns = Self.nsAttributed(
+                from: attributed,
+                environment: context.environment,
+                fontSize: fontSize)
         case .appKit(let attributed):
-            ns = Self.nsAttributed(from: attributed)
+            ns = Self.nsAttributed(from: attributed, fontSize: fontSize)
         }
         let plain = ns.string
         if textView.string != plain {
             textView.textStorage?.setAttributedString(ns)
             textView.invalidateIntrinsicContentSize()
-        } else if textView.selectedRange().length == 0, textView.currentAttributedString() != ns {
+        } else if textView.currentAttributedString() != ns {
+            let selection = textView.selectedRange()
             textView.textStorage?.setAttributedString(ns)
+            if NSMaxRange(selection) <= ns.length {
+                textView.setSelectedRange(selection)
+            }
+            textView.invalidateIntrinsicContentSize()
         }
         scrollView.updateDocumentGeometry()
     }
@@ -53,9 +64,11 @@ struct SelectableAttributedText: NSViewRepresentable {
     /// Foundation bridge does not turn those values into the `NSColor` attributes TextKit draws,
     /// so copy them explicitly while preserving every Foundation/AppKit attribute it can bridge.
     private static func nsAttributed(
-        from attributed: AttributedString, environment: EnvironmentValues
+        from attributed: AttributedString,
+        environment: EnvironmentValues,
+        fontSize: CGFloat?
     ) -> NSAttributedString {
-        let size = NSFont.preferredFont(forTextStyle: .subheadline).pointSize
+        let size = fontSize ?? NSFont.preferredFont(forTextStyle: .subheadline).pointSize
         let font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
         let mutable = NSMutableAttributedString(attributedString: NSAttributedString(attributed))
         let full = NSRange(location: 0, length: mutable.length)
@@ -99,12 +112,16 @@ struct SelectableAttributedText: NSViewRepresentable {
 
     /// Fully styled AppKit previews already contain their fonts and paragraph geometry. Fill only
     /// missing baseline attributes, preserving the renderer's layout verbatim.
-    private static func nsAttributed(from attributed: NSAttributedString) -> NSAttributedString {
+    private static func nsAttributed(
+        from attributed: NSAttributedString,
+        fontSize: CGFloat?
+    ) -> NSAttributedString {
         let mutable = NSMutableAttributedString(attributedString: attributed)
         let full = NSRange(location: 0, length: mutable.length)
         guard full.length > 0 else { return mutable }
 
-        let font = NSFont.preferredFont(forTextStyle: .subheadline)
+        let font = fontSize.map { NSFont.systemFont(ofSize: $0) }
+            ?? NSFont.preferredFont(forTextStyle: .subheadline)
         mutable.enumerateAttribute(.font, in: full) { value, range, _ in
             if value == nil { mutable.addAttribute(.font, value: font, range: range) }
         }

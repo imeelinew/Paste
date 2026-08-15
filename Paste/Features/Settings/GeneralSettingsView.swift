@@ -108,6 +108,20 @@ struct AppearanceSettingsView: View {
                 .labelsHidden()
                 .fixedSize()
             }
+
+            PreferencesRow(label: "Pinned Text Size") {
+                Stepper(
+                    value: $settings.pinnedTextSize,
+                    in: PinnedTextSize.minimum...PinnedTextSize.maximum,
+                    step: PinnedTextSize.step
+                ) {
+                    Text(verbatim: "\(Int(settings.pinnedTextSize)) pt")
+                        .monospacedDigit()
+                        .frame(minWidth: 36, alignment: .trailing)
+                }
+                .fixedSize()
+                .accessibilityLabel(Text("Pinned Text Size"))
+            }
         }
     }
 }

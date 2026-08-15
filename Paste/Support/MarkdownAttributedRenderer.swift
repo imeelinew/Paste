@@ -8,10 +8,15 @@ enum MarkdownAttributedRenderer {
     /// half-megabyte document is already far beyond a useful palette preview.
     private static let maximumRenderedBytes = 512 * 1024
 
-    nonisolated static func render(_ source: String) -> NSAttributedString? {
+    nonisolated static func render(
+        _ source: String,
+        basePointSize: CGFloat? = nil
+    ) -> NSAttributedString? {
         guard let document = markdownDocument(for: source) else { return nil }
 
-        var renderer = Renderer()
+        var renderer = Renderer(
+            basePointSize: basePointSize
+                ?? NSFont.preferredFont(forTextStyle: .subheadline).pointSize)
         renderer.renderDocument(document)
         return NSAttributedString(attributedString: renderer.output)
     }
@@ -51,8 +56,12 @@ enum MarkdownAttributedRenderer {
     private struct Renderer {
         let output = NSMutableAttributedString(string: "")
 
-        private let basePointSize = NSFont.preferredFont(forTextStyle: .subheadline).pointSize
+        private let basePointSize: CGFloat
         private let listStep: CGFloat = 18
+
+        init(basePointSize: CGFloat) {
+            self.basePointSize = basePointSize
+        }
 
         mutating func renderDocument(_ document: Document) {
             for child in document.children {

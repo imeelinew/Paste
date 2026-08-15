@@ -3,12 +3,34 @@ import SwiftUI
 
 /// Lives outside `MarkdownPreview` so the byte-bounded parse cache is not MainActor-isolated.
 private enum MarkdownPreviewCache {
+    final class Key: NSObject {
+        let source: String
+        let fontSize: CGFloat?
+
+        init(source: String, fontSize: CGFloat?) {
+            self.source = source
+            self.fontSize = fontSize
+        }
+
+        override var hash: Int {
+            var hasher = Hasher()
+            hasher.combine(source)
+            hasher.combine(fontSize)
+            return hasher.finalize()
+        }
+
+        override func isEqual(_ object: Any?) -> Bool {
+            guard let other = object as? Key else { return false }
+            return source == other.source && fontSize == other.fontSize
+        }
+    }
+
     final class Entry: NSObject {
         let markdown: NSAttributedString?
         init(markdown: NSAttributedString?) { self.markdown = markdown }
     }
 
-    final class Store: NSCache<NSString, Entry>, @unchecked Sendable {}
+    final class Store: NSCache<Key, Entry>, @unchecked Sendable {}
 
     static let shared: Store = {
         let cache = Store()
@@ -23,6 +45,7 @@ private enum MarkdownPreviewCache {
 struct MarkdownPreview: View {
     let source: String
     var query: String = ""
+    var fontSize: CGFloat? = nil
 
     @State private var rendered: Rendered?
 
@@ -34,15 +57,20 @@ struct MarkdownPreview: View {
     private struct RenderID: Hashable {
         let source: String
         let query: String
+        let fontSize: CGFloat?
     }
 
-    private nonisolated static func render(_ source: String, query: String) -> Rendered {
-        let key = source as NSString
+    private nonisolated static func render(
+        _ source: String,
+        query: String,
+        fontSize: CGFloat?
+    ) -> Rendered {
+        let key = MarkdownPreviewCache.Key(source: source, fontSize: fontSize)
         let markdown: NSAttributedString?
         if let cached = MarkdownPreviewCache.shared.object(forKey: key) {
             markdown = cached.markdown
         } else {
-            markdown = MarkdownAttributedRenderer.render(source)
+            markdown = MarkdownAttributedRenderer.render(source, basePointSize: fontSize)
             MarkdownPreviewCache.shared.setObject(
                 MarkdownPreviewCache.Entry(markdown: markdown), forKey: key,
                 cost: max(source.utf8.count, markdown?.length ?? 0))
@@ -57,17 +85,17 @@ struct MarkdownPreview: View {
         Group {
             switch rendered {
             case .appKit(let value):
-                SelectableAttributedText(nsAttributed: value)
+                SelectableAttributedText(nsAttributed: value, fontSize: fontSize)
             case .swiftUI(let value):
-                SelectableAttributedText(attributed: value)
+                SelectableAttributedText(attributed: value, fontSize: fontSize)
             case nil:
-                SelectableAttributedText(attributed: AttributedString(source))
+                SelectableAttributedText(attributed: AttributedString(source), fontSize: fontSize)
             }
         }
-        .task(id: RenderID(source: source, query: query)) {
+        .task(id: RenderID(source: source, query: query, fontSize: fontSize)) {
             rendered = nil
             let task = Task.detached(priority: .userInitiated) {
-                Self.render(source, query: query)
+                Self.render(source, query: query, fontSize: fontSize)
             }
             let result = await withTaskCancellationHandler {
                 await task.value

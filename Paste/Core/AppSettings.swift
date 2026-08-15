@@ -88,6 +88,17 @@ enum PinnedImageSize: String, CaseIterable, Identifiable {
     }
 }
 
+enum PinnedTextSize {
+    static let minimum: CGFloat = 9
+    static let maximum: CGFloat = 24
+    static let step: CGFloat = 1
+    static let defaultValue: CGFloat = 13
+
+    static func clamped(_ value: CGFloat) -> CGFloat {
+        min(max(value, minimum), maximum)
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
@@ -103,6 +114,7 @@ final class AppSettings: ObservableObject {
         static let appearance = "appAppearance"
         static let paletteOpenFocus = "paletteOpenFocus"
         static let pinnedImageSize = "pinnedImageSize"
+        static let pinnedTextSize = "pinnedTextSize"
     }
 
     @Published var clipboardRetention: ClipboardRetention {
@@ -155,6 +167,11 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(pinnedImageSize.rawValue, forKey: Key.pinnedImageSize) }
     }
 
+    /// Shared by every pinned Markdown and code card and persisted as the next card's default.
+    @Published var pinnedTextSize: CGFloat {
+        didSet { defaults.set(Double(pinnedTextSize), forKey: Key.pinnedTextSize) }
+    }
+
     init() {
         clipboardRetention =
             ClipboardRetention(rawValue: defaults.integer(forKey: Key.clipboardRetention))
@@ -176,5 +193,10 @@ final class AppSettings: ObservableObject {
         pinnedImageSize =
             defaults.string(forKey: Key.pinnedImageSize).flatMap(PinnedImageSize.init(rawValue:))
             ?? .medium
+        pinnedTextSize = PinnedTextSize.clamped(
+            defaults.object(forKey: Key.pinnedTextSize) == nil
+                ? PinnedTextSize.defaultValue
+                : CGFloat(defaults.double(forKey: Key.pinnedTextSize))
+        )
     }
 }

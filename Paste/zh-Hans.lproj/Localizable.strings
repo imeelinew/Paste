@@ -58,6 +58,7 @@
 "Pinned Code" = "钉选代码";
 "Pinned Image" = "钉选图片";
 "Pinned Image Size" = "钉选图片大小";
+"Pinned Text Size" = "钉选文字大小";
 "Pinned Items" = "固定项";
 "Pinned Markdown" = "钉选 Markdown";
 "Regular Items" = "普通项";
@@ -66,6 +67,8 @@
 "Large" = "大";
 "Close Pinned Image" = "关闭钉选图片";
 "Close Pinned Item" = "关闭钉选内容";
+"Decrease Pinned Text Size" = "减小钉选文字";
+"Increase Pinned Text Size" = "增大钉选文字";
 "Close All Pinned Images" = "关闭所有钉选图片";
 "Dismiss Pinned Image" = "退出钉选图片";
 "Copy Pinned Image" = "复制钉选图片";
