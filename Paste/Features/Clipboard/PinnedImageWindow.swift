@@ -16,8 +16,18 @@ private enum PinnedImageCommand {
     }
 }
 
-/// Owns transient image panels independently from the clipboard palette. Each clipboard image
-/// gets at most one panel; pinning it again brings the existing panel forward.
+enum PinnedTextStyle {
+    case markdown
+    case code
+}
+
+private enum PinnedCommandContext {
+    case image(url: URL, imageSize: CGSize, preferredLongEdge: () -> CGFloat)
+    case text(String, initialSize: CGSize)
+}
+
+/// Owns transient pinned-content panels independently from the clipboard palette. Each clipboard
+/// item gets at most one panel; pinning it again brings the existing panel forward.
 @MainActor
 final class PinnedImageWindowController: NSObject, NSWindowDelegate {
     private var panels: [ClipboardItem.ID: PinnedImagePanel] = [:]
@@ -34,9 +44,7 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let screen = targetScreen()
-        let visibleFrame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame
-            ?? NSRect(x: 0, y: 0, width: 1_280, height: 800)
+        let visibleFrame = targetVisibleFrame()
         let pixelSize = ImageThumbnail.pixelSize(of: url) ?? CGSize(width: 1_200, height: 900)
         let imageSize = NSImage(contentsOf: url)?.size ?? pixelSize
         let initialSize = PinnedImageLayout.initialSize(
@@ -44,37 +52,21 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
             visibleFrame: visibleFrame,
             preferredLongEdge: preferredLongEdge()
         )
-
-        let panel = PinnedImagePanel(
-            contentRect: NSRect(origin: .zero, size: initialSize),
-            styleMask: [.borderless, .resizable],
-            backing: .buffered,
-            defer: false
+        let panel = makePanel(
+            title: title,
+            initialSize: initialSize,
+            aspectRatio: imageSize,
+            minSize: PinnedImageLayout.minimumSize(
+                imageSize: imageSize,
+                visibleFrame: visibleFrame
+            )
         )
-        panel.title = title
-        panel.isFloatingPanel = true
-        panel.level = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.hidesOnDeactivate = false
-        panel.isMovableByWindowBackground = false
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.animationBehavior = .none
-        panel.isReleasedWhenClosed = false
-        panel.contentAspectRatio = imageSize
-        panel.contentMinSize = PinnedImageLayout.minimumSize(
-            imageSize: imageSize,
-            visibleFrame: visibleFrame
-        )
-        panel.delegate = self
         panel.onCommand = { [weak self] command in
             self?.handle(
                 command,
                 itemID: itemID,
-                url: url,
-                imageSize: imageSize,
-                preferredLongEdge: preferredLongEdge
+                context: .image(
+                    url: url, imageSize: imageSize, preferredLongEdge: preferredLongEdge)
             )
         }
 
@@ -85,35 +77,52 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
                     * candidate.backingScaleFactor
             )
         }
-        let hosting = NSHostingView(
-            rootView: PinnedImageContent(
+        install(
+            PinnedImageContent(
                 url: url,
                 decodeMaxPixel: decodeMaxPixel,
                 onClose: { [weak self] in self?.close(itemID) }
-            )
+            ),
+            in: panel
         )
-        hosting.sizingOptions = []
-        hosting.wantsLayer = true
-        hosting.layer?.cornerRadius = Theme.Radius.panel
-        hosting.layer?.cornerCurve = .continuous
-        hosting.layer?.masksToBounds = true
-        panel.contentView = hosting
+        present(panel, size: initialSize, in: visibleFrame, itemID: itemID)
+    }
 
-        let finalFrame = NSRect(
-            x: visibleFrame.midX - initialSize.width / 2,
-            y: visibleFrame.midY - initialSize.height / 2,
-            width: initialSize.width,
-            height: initialSize.height
-        )
-        panel.alphaValue = 0
-        panel.setFrame(Self.scaledFrame(finalFrame, scale: 0.96), display: false)
-        panels[itemID] = panel
-        activate(panel)
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.18
-            panel.animator().alphaValue = 1
-            panel.animator().setFrame(finalFrame, display: true)
+    func showText(
+        itemID: ClipboardItem.ID,
+        text: String,
+        style: PinnedTextStyle,
+        title: String
+    ) {
+        if let panel = panels[itemID] {
+            activate(panel)
+            return
         }
+
+        let visibleFrame = targetVisibleFrame()
+        let initialSize = PinnedTextLayout.initialSize(text: text, visibleFrame: visibleFrame)
+        let panel = makePanel(
+            title: title,
+            initialSize: initialSize,
+            aspectRatio: nil,
+            minSize: PinnedTextLayout.minimumSize
+        )
+        panel.onCommand = { [weak self] command in
+            self?.handle(
+                command,
+                itemID: itemID,
+                context: .text(text, initialSize: initialSize)
+            )
+        }
+        install(
+            PinnedTextContent(
+                text: text,
+                style: style,
+                onClose: { [weak self] in self?.close(itemID) }
+            ),
+            in: panel
+        )
+        present(panel, size: initialSize, in: visibleFrame, itemID: itemID)
     }
 
     private func activate(_ panel: PinnedImagePanel) {
@@ -161,9 +170,7 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
     private func handle(
         _ command: PinnedImageCommand,
         itemID: ClipboardItem.ID,
-        url: URL,
-        imageSize: CGSize,
-        preferredLongEdge: () -> CGFloat
+        context: PinnedCommandContext
     ) {
         guard let panel = panels[itemID] else { return }
 
@@ -175,38 +182,130 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
                 close(id)
             }
         case .copy:
-            Task { _ = await Paster.copyImage(at: url) }
+            copy(from: panel, context: context)
         case .zoomIn:
             panel.resize(by: 1.1)
         case .zoomOut:
             panel.resize(by: 0.9)
         case .resetSize:
-            resetSize(
-                of: panel,
-                imageSize: imageSize,
-                preferredLongEdge: preferredLongEdge()
-            )
+            resetSize(of: panel, context: context)
         }
     }
 
-    private func resetSize(
-        of panel: PinnedImagePanel,
-        imageSize: CGSize,
-        preferredLongEdge: CGFloat
-    ) {
-        let visibleFrame = panel.screen?.visibleFrame ?? targetScreen()?.visibleFrame
-            ?? NSRect(x: 0, y: 0, width: 1_280, height: 800)
-        let size = PinnedImageLayout.initialSize(
-            imageSize: imageSize,
-            visibleFrame: visibleFrame,
-            preferredLongEdge: preferredLongEdge
-        )
+    private func copy(from panel: PinnedImagePanel, context: PinnedCommandContext) {
+        switch context {
+        case .image(let url, _, _):
+            Task { _ = await Paster.copyImage(at: url) }
+        case .text(let text, _):
+            Paster.copyString(selectedText(in: panel) ?? text)
+        }
+    }
+
+    private func selectedText(in panel: NSPanel) -> String? {
+        var responder: NSResponder? = panel.firstResponder
+        while let current = responder {
+            if let textView = current as? NSTextView {
+                let range = textView.selectedRange()
+                guard range.length > 0 else { return nil }
+                return (textView.string as NSString).substring(with: range)
+            }
+            responder = current.nextResponder
+        }
+        return nil
+    }
+
+    private func resetSize(of panel: PinnedImagePanel, context: PinnedCommandContext) {
+        let visibleFrame = panel.screen?.visibleFrame ?? targetVisibleFrame()
+        let size: CGSize
+        switch context {
+        case .image(_, let imageSize, let preferredLongEdge):
+            size = PinnedImageLayout.initialSize(
+                imageSize: imageSize,
+                visibleFrame: visibleFrame,
+                preferredLongEdge: preferredLongEdge()
+            )
+        case .text(_, let initialSize):
+            size = initialSize
+        }
+        resetFrame(of: panel, to: size, in: visibleFrame)
+    }
+
+    private func resetFrame(of panel: PinnedImagePanel, to size: CGSize, in visibleFrame: CGRect) {
         let center = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
         let origin = CGPoint(
             x: min(max(center.x - size.width / 2, visibleFrame.minX), visibleFrame.maxX - size.width),
             y: min(max(center.y - size.height / 2, visibleFrame.minY), visibleFrame.maxY - size.height)
         )
         panel.setFrame(NSRect(origin: origin, size: size), display: true, animate: true)
+    }
+
+    private func makePanel(
+        title: String,
+        initialSize: CGSize,
+        aspectRatio: CGSize?,
+        minSize: CGSize
+    ) -> PinnedImagePanel {
+        let panel = PinnedImagePanel(
+            contentRect: NSRect(origin: .zero, size: initialSize),
+            styleMask: [.borderless, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = title
+        panel.isFloatingPanel = true
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.hidesOnDeactivate = false
+        panel.isMovableByWindowBackground = false
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.animationBehavior = .none
+        panel.isReleasedWhenClosed = false
+        if let aspectRatio {
+            panel.contentAspectRatio = aspectRatio
+        }
+        panel.contentMinSize = minSize
+        panel.delegate = self
+        return panel
+    }
+
+    private func install(_ view: some View, in panel: PinnedImagePanel) {
+        let hosting = NSHostingView(rootView: view)
+        hosting.sizingOptions = []
+        hosting.wantsLayer = true
+        hosting.layer?.cornerRadius = Theme.Radius.panel
+        hosting.layer?.cornerCurve = .continuous
+        hosting.layer?.masksToBounds = true
+        panel.contentView = hosting
+    }
+
+    private func present(
+        _ panel: PinnedImagePanel,
+        size: CGSize,
+        in visibleFrame: CGRect,
+        itemID: ClipboardItem.ID
+    ) {
+        let finalFrame = NSRect(
+            x: visibleFrame.midX - size.width / 2,
+            y: visibleFrame.midY - size.height / 2,
+            width: size.width,
+            height: size.height
+        )
+        panel.alphaValue = 0
+        panel.setFrame(Self.scaledFrame(finalFrame, scale: 0.96), display: false)
+        panels[itemID] = panel
+        activate(panel)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            panel.animator().alphaValue = 1
+            panel.animator().setFrame(finalFrame, display: true)
+        }
+    }
+
+    private func targetVisibleFrame() -> CGRect {
+        targetScreen()?.visibleFrame ?? NSScreen.main?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1_280, height: 800)
     }
 
     private func targetScreen() -> NSScreen? {
@@ -266,6 +365,24 @@ enum PinnedImageLayout {
 
     private static func rounded(_ size: CGSize) -> CGSize {
         CGSize(width: max(size.width.rounded(), 1), height: max(size.height.rounded(), 1))
+    }
+}
+
+enum PinnedTextLayout {
+    static let minimumSize = CGSize(width: 280, height: 160)
+
+    static func initialSize(text: String, visibleFrame: CGRect) -> CGSize {
+        let maxSize = CGSize(
+            width: max(visibleFrame.width - 48, 320),
+            height: max(visibleFrame.height - 48, 200)
+        )
+        var lines = 1
+        for character in text where character.isNewline {
+            lines += 1
+        }
+        let width = min(max(440, maxSize.width * 0.36), 620)
+        let height = min(max(220, 72 + CGFloat(lines) * 18), maxSize.height * 0.72)
+        return CGSize(width: width.rounded(), height: height.rounded())
     }
 }
 
@@ -376,6 +493,67 @@ private struct PinnedImageContent: View {
         .task(id: url) {
             image = await ImageThumbnail.loadAsync(url, maxPixel: decodeMaxPixel)
             loadFailed = image == nil
+        }
+    }
+}
+
+@MainActor
+private struct PinnedTextContent: View {
+    let text: String
+    let style: PinnedTextStyle
+    let onClose: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color(nsColor: .windowBackgroundColor)
+
+            Group {
+                switch style {
+                case .markdown:
+                    MarkdownPreview(source: text)
+                case .code:
+                    CodePreview(code: text)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.horizontal, 16)
+            .padding(.top, 48)
+            .padding(.bottom, 16)
+
+            PinnedImageDragSurface()
+                .frame(height: 44)
+                .frame(maxWidth: .infinity, alignment: .top)
+
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .frosted(in: Circle())
+            .accessibilityLabel(Text("Close Pinned Item"))
+            .help(Text("Close Pinned Item"))
+            .padding(10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
+        .ignoresSafeArea()
+    }
+}
+
+extension ClipboardItem {
+    var canPinToScreen: Bool {
+        switch kind {
+        case .image, .code:
+            return true
+        case .text:
+            guard let text, !text.isEmpty else { return false }
+            return MarkdownAttributedRenderer.isMarkdown(text)
+        case .link:
+            return false
         }
     }
 }

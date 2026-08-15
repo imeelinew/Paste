@@ -29,6 +29,7 @@
 "Disable System Clipboard" = "Disable System Clipboard";
 "Earlier" = "Earlier";
 "English" = "English";
+"Focus on Open" = "Focus on Open";
 "Follow System" = "Follow System";
 "Forever" = "Forever";
 "General" = "General";
@@ -54,12 +55,17 @@
 "Past 7 Days" = "Past 7 Days";
 "Pin Entry" = "Pin Entry";
 "Pin to Screen" = "Pin to Screen";
+"Pinned Code" = "Pinned Code";
 "Pinned Image" = "Pinned Image";
 "Pinned Image Size" = "Pinned Image Size";
+"Pinned Items" = "Pinned Items";
+"Pinned Markdown" = "Pinned Markdown";
+"Regular Items" = "Regular Items";
 "Small" = "Small";
 "Medium" = "Medium";
 "Large" = "Large";
 "Close Pinned Image" = "Close Pinned Image";
+"Close Pinned Item" = "Close Pinned Item";
 "Close All Pinned Images" = "Close All Pinned Images";
 "Dismiss Pinned Image" = "Dismiss Pinned Image";
 "Copy Pinned Image" = "Copy Pinned Image";

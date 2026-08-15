@@ -49,7 +49,7 @@ final class PalettePanel: NSPanel {
             return handleOnce(.copy, event: event)
         }
         if PaletteShortcut.pinToScreen.matches(shortcut) {
-            return handleOnce(.pinImageToScreen, event: event)
+            return handleOnce(.pinToScreen, event: event)
         }
         if PaletteShortcut.togglePin.matches(shortcut) {
             return handleOnce(.togglePin, event: event)

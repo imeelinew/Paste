@@ -158,18 +158,42 @@ final class AppCore: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    func pinImageToScreen(_ item: ClipboardItem) {
-        guard item.kind == .image, let url = clipboardStore.imageURL(for: item) else { return }
-        let title = String(localized: "Pinned Image", locale: settings.language.locale)
-        hidePalette()
-        pinnedImageWindows.show(
-            itemID: item.id,
-            url: url,
-            title: title,
-            preferredLongEdge: { [weak settings] in
-                settings?.pinnedImageSize.longestEdge ?? PinnedImageSize.medium.longestEdge
+    func pinToScreen(_ item: ClipboardItem) {
+        let locale = settings.language.locale
+        switch item.kind {
+        case .image:
+            guard let url = clipboardStore.imageURL(for: item) else { return }
+            hidePalette()
+            pinnedImageWindows.show(
+                itemID: item.id,
+                url: url,
+                title: String(localized: "Pinned Image", locale: locale),
+                preferredLongEdge: { [weak settings] in
+                    settings?.pinnedImageSize.longestEdge ?? PinnedImageSize.medium.longestEdge
+                }
+            )
+        case .text, .code:
+            guard let text = item.text, !text.isEmpty else { return }
+            if ClipboardTextClassifier.isMarkdownArticle(text) {
+                hidePalette()
+                pinnedImageWindows.showText(
+                    itemID: item.id,
+                    text: text,
+                    style: .markdown,
+                    title: String(localized: "Pinned Markdown", locale: locale)
+                )
+            } else if item.kind == .code {
+                hidePalette()
+                pinnedImageWindows.showText(
+                    itemID: item.id,
+                    text: text,
+                    style: .code,
+                    title: String(localized: "Pinned Code", locale: locale)
+                )
             }
-        )
+        case .link:
+            return
+        }
     }
 
     private func startTransfer(

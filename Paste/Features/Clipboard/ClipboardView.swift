@@ -677,6 +677,21 @@ private final class ClipboardThumbnailView: NSView {
             }
         case .code:
             showSymbol("chevron.left.forwardslash.chevron.right")
+            guard let source = item.text, !source.isEmpty else { return }
+            let cacheKey = item.id as NSUUID
+            if let cached = Self.markdownCache.object(forKey: cacheKey) {
+                if cached.boolValue { showMarkdownSymbol() }
+                return
+            }
+            let id = item.id
+            loadTask = Task { @MainActor [weak self] in
+                let isMarkdown = await Task.detached(priority: .utility) {
+                    ClipboardTextClassifier.isMarkdownArticle(source)
+                }.value
+                Self.markdownCache.setObject(NSNumber(value: isMarkdown), forKey: cacheKey)
+                guard !Task.isCancelled, let self, representedID == id else { return }
+                if isMarkdown { showMarkdownSymbol() }
+            }
         case .link:
             showSymbol("link")
         case .image:
@@ -796,6 +811,7 @@ struct ClipboardPreview: View {
     @EnvironmentObject private var store: ClipboardStore
     @EnvironmentObject private var vm: PaletteViewModel
     @ObservedObject private var settings = AppCore.shared.settings
+    @State private var codeRendersAsMarkdown = false
 
     var body: some View {
         if let item {
@@ -805,6 +821,9 @@ struct ClipboardPreview: View {
                 ClipboardInfoSection(item: item, imageURL: store.imageURL(for: item))
             }
             .padding(.horizontal, 12)
+            .task(id: item.id) {
+                await refreshCodeMarkdown(item)
+            }
         } else {
             Color.clear
         }
@@ -826,7 +845,11 @@ struct ClipboardPreview: View {
                 attributed: SearchHighlight.attributed(item.text ?? "", query: query)
             )
         case .code:
-            CodePreview(code: item.text ?? "", query: query)
+            if settings.renderMarkdown, codeRendersAsMarkdown {
+                MarkdownPreview(source: item.text ?? "", query: query)
+            } else {
+                CodePreview(code: item.text ?? "", query: query)
+            }
         case .image:
             let imageURL = store.imageURL(for: item)
             AsyncThumbnail(url: imageURL, maxPixel: Self.previewMaxPixel) {
@@ -858,6 +881,18 @@ struct ClipboardPreview: View {
                 .allowsHitTesting(false)
             }
         }
+    }
+
+    private func refreshCodeMarkdown(_ item: ClipboardItem) async {
+        guard item.kind == .code, let text = item.text, !text.isEmpty else {
+            codeRendersAsMarkdown = false
+            return
+        }
+        let renders = await Task.detached(priority: .utility) {
+            ClipboardTextClassifier.isMarkdownArticle(text)
+        }.value
+        guard !Task.isCancelled else { return }
+        codeRendersAsMarkdown = renders
     }
 }
 
@@ -937,8 +972,7 @@ private struct ClipboardInfoSection: View {
         }
         switch item.kind {
         case .text, .code, .link:
-            let typeLabel = item.kind == .text && details.isMarkdown
-                ? "Markdown" : item.kind.typeLabel
+            let typeLabel = details.isMarkdown ? "Markdown" : item.kind.typeLabel
             rows.append(InfoRow(label: "Type", value: typeLabel, localizesValue: true))
             if let characters = details.characters {
                 rows.append(
@@ -991,6 +1025,8 @@ private struct ClipboardInfoSection: View {
                 details.words = Self.wordCount(text)
                 if item.kind == .text {
                     details.isMarkdown = MarkdownAttributedRenderer.isMarkdown(text)
+                } else if item.kind == .code {
+                    details.isMarkdown = ClipboardTextClassifier.isMarkdownArticle(text)
                 }
             }
             if let url {

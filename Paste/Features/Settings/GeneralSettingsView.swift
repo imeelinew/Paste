@@ -31,6 +31,17 @@ struct GeneralSettingsView: View {
                 .toggleStyle(.checkbox)
             }
 
+            PreferencesRow(label: "Focus on Open") {
+                Picker("Focus on Open", selection: $settings.paletteOpenFocus) {
+                    ForEach(PaletteOpenFocus.allCases) { option in
+                        Text(LocalizedStringKey(option.title)).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+
             PreferencesRow(label: "Content Preview", alignment: .firstTextBaseline) {
                 Toggle("Render Markdown", isOn: $settings.renderMarkdown)
                     .toggleStyle(.checkbox)

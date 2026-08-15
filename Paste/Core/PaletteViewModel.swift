@@ -29,7 +29,7 @@ enum PaletteCommand: Equatable {
     case copy
     case cancel
     case toggleActions
-    case pinImageToScreen
+    case pinToScreen
     case togglePin
     case revealInFinder
     case toggleQuickLook
@@ -46,7 +46,7 @@ enum PaletteMenuAction: Equatable {
     case paste(ClipboardItem)
     case pasteKeepingOpen(ClipboardItem)
     case copy(ClipboardItem)
-    case pinImageToScreen(ClipboardItem)
+    case pinToScreen(ClipboardItem)
     case togglePin(ClipboardItem)
     case revealInFinder(ClipboardItem)
     case delete(ClipboardItem)
@@ -128,8 +128,8 @@ final class PaletteViewModel: ObservableObject {
                 .pasteKeepingOpen(item),
                 .copy(item),
             ]
-            if item.kind == .image {
-                actions.append(.pinImageToScreen(item))
+            if item.canPinToScreen {
+                actions.append(.pinToScreen(item))
             }
             actions.append(.togglePin(item))
             if item.kind == .image {
@@ -148,7 +148,11 @@ final class PaletteViewModel: ObservableObject {
         imageQuickLookOpen = false
         query = ""
         focusToken = UUID()
-        resetToken = UUID()
+        if selectionIndex > 0 {
+            followToken = UUID()
+        } else {
+            resetToken = UUID()
+        }
     }
 
     func select(_ id: ClipboardItem.ID, follow: Bool = false) {
@@ -215,10 +219,10 @@ final class PaletteViewModel: ObservableObject {
             guard searchReady, let id = selectedID else { return true }
             overlay = overlay == .actions(id) ? .none : .actions(id)
             menuSelection = 0
-        case .pinImageToScreen:
-            guard searchReady, let item = actionTarget, item.kind == .image else { return true }
+        case .pinToScreen:
+            guard searchReady, let item = actionTarget, item.canPinToScreen else { return true }
             overlay = .none
-            core.pinImageToScreen(item)
+            core.pinToScreen(item)
         case .togglePin:
             guard searchReady, let item = actionTarget else { return true }
             overlay = .none
@@ -294,8 +298,8 @@ final class PaletteViewModel: ObservableObject {
             core.pasteKeepingWindowOpen(item)
         case .copy(let item):
             core.copyToClipboard(item)
-        case .pinImageToScreen(let item):
-            core.pinImageToScreen(item)
+        case .pinToScreen(let item):
+            core.pinToScreen(item)
         case .togglePin(let item):
             togglePin(item)
         case .revealInFinder(let item):
@@ -373,7 +377,10 @@ final class PaletteViewModel: ObservableObject {
         {
             selectedID = priorID
         } else {
-            let index = resetSelection ? 0 : min(priorIndex, newResults.count - 1)
+            let index =
+                resetSelection
+                ? initialSelectionIndex(in: newResults)
+                : min(priorIndex, newResults.count - 1)
             selectedID = newResults[index].id
         }
 
@@ -382,5 +389,13 @@ final class PaletteViewModel: ObservableObject {
         {
             overlay = .none
         }
+    }
+
+    /// Empty-query opens honor the focus setting; search results always start at the first match.
+    private func initialSelectionIndex(in results: [ClipboardItem]) -> Int {
+        guard queryIsEmpty, core.settings.paletteOpenFocus == .regularItems,
+            let index = results.firstIndex(where: { !$0.isPinned })
+        else { return 0 }
+        return index
     }
 }

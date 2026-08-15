@@ -29,6 +29,7 @@
 "Disable System Clipboard" = "禁用系统剪贴板";
 "Earlier" = "更早";
 "English" = "English";
+"Focus on Open" = "打开时聚焦";
 "Follow System" = "跟随系统";
 "Forever" = "永久";
 "General" = "通用";
@@ -54,12 +55,17 @@
 "Past 7 Days" = "过去 7 天";
 "Pin Entry" = "固定项目";
 "Pin to Screen" = "钉到屏幕上";
+"Pinned Code" = "钉选代码";
 "Pinned Image" = "钉选图片";
 "Pinned Image Size" = "钉选图片大小";
+"Pinned Items" = "固定项";
+"Pinned Markdown" = "钉选 Markdown";
+"Regular Items" = "普通项";
 "Small" = "小";
 "Medium" = "中";
 "Large" = "大";
 "Close Pinned Image" = "关闭钉选图片";
+"Close Pinned Item" = "关闭钉选内容";
 "Close All Pinned Images" = "关闭所有钉选图片";
 "Dismiss Pinned Image" = "退出钉选图片";
 "Copy Pinned Image" = "复制钉选图片";

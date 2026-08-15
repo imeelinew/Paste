@@ -963,14 +963,28 @@ final class ClipboardStore: ObservableObject {
 
 /// Conservative classification for clipboard text. Whole-string http(s) URLs classify as links;
 /// strong syntax forms classify as code on their own; weaker punctuation signals must combine,
-/// keeping prose and ordinary messages as text. Only a bounded prefix is inspected for code so a
+/// keeping prose and ordinary messages as text. Fenced blocks inside Markdown are ignored so an
+/// AI answer with ` ```tsx ` examples stays text. Only a bounded prefix is inspected for code so a
 /// large copy cannot stall capture.
 enum ClipboardTextClassifier {
     private static let sampleLimit = 12_000
+    /// Opening fence, optional info string, body, then a matching closing fence.
+    private static let closedFenceRegex: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?m)^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^[ \t]{0,3}\1[ \t]*$"#
+    )
+    private static let openFenceRegex: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?m)^[ \t]{0,3}(`{3,}|~{3,})"#
+    )
 
     static func kind(for text: String) -> ClipboardItem.Kind {
         if isLink(text) { return .link }
         return isCode(text) ? .code : .text
+    }
+
+    /// A Markdown document that embeds source, not a source file. Used to render rows that were
+    /// captured as `.code` before fenced examples were excluded from classification.
+    static func isMarkdownArticle(_ text: String) -> Bool {
+        MarkdownAttributedRenderer.isMarkdown(text) && !isCode(text)
     }
 
     /// Whole clipboard string is a single http(s) URL (no surrounding prose).
@@ -987,30 +1001,62 @@ enum ClipboardTextClassifier {
         let sample = String(text.prefix(sampleLimit)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard sample.count >= 4 else { return false }
 
-        if sample.hasPrefix("```") || sample.hasPrefix("#!") { return true }
+        if sample.hasPrefix("#!") { return true }
         if isJSONObject(sample) { return true }
+        if isStandaloneFencedBlock(sample) { return true }
+
+        let body = strippingFencedCodeBlocks(sample)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard body.count >= 4 else { return false }
 
         let strongSyntax = #"(?m)^\s*(?:(?:import\s+.+(?:\s+from\s+)?[\"'<])|(?:export\s+(?:default\s+)?)|(?:(?:const|let|var)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*(?::[^=\n]+)?=)|(?:(?:func|function|def|class|struct|enum|protocol|extension|interface|type|fn)\s+[A-Za-z_][A-Za-z0-9_]*)|(?:(?:public|private|protected|internal|open|static|final|pub)\s+(?:class|struct|enum|func|fn|let|var|const)\b)|(?:#include\s*[<\"])|(?:(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER)\b.+\b(?:FROM|INTO|TABLE|SET)\b))"#
-        if matches(strongSyntax, in: sample) { return true }
+        if matches(strongSyntax, in: body) { return true }
 
         let standaloneCall = #"^\s*[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\s*\([^\n]*\)\s*;?\s*$"#
-        if matches(standaloneCall, in: sample) { return true }
+        if matches(standaloneCall, in: body) { return true }
 
         let markup = #"(?s)<[A-Za-z][^>]*>.*</[A-Za-z][^>]*>"#
-        if matches(markup, in: sample) { return true }
+        if matches(markup, in: body) { return true }
 
         var score = 0
-        if sample.contains("{") && sample.contains("}") { score += 1 }
-        if sample.contains("=>") || sample.contains("::") || sample.contains("?.") { score += 1 }
-        if matches(#"(?m);\s*$"#, in: sample) { score += 1 }
-        if matches(#"\b(?:return|await|throw|guard|switch|case|while|foreach|impl|lambda)\b"#, in: sample) {
+        if body.contains("{") && body.contains("}") { score += 1 }
+        if body.contains("=>") || body.contains("::") || body.contains("?.") { score += 1 }
+        if matches(#"(?m);\s*$"#, in: body) { score += 1 }
+        if matches(#"\b(?:return|await|throw|guard|switch|case|while|foreach|impl|lambda)\b"#, in: body) {
             score += 1
         }
-        if matches(#"(?m)^\s{2,}\S+"#, in: sample) && sample.contains("\n") { score += 1 }
-        if matches(#"\b[A-Za-z_$][A-Za-z0-9_$]*\s*\([^\n)]*\)"#, in: sample) {
+        if matches(#"(?m)^\s{2,}\S+"#, in: body) && body.contains("\n") { score += 1 }
+        if matches(#"\b[A-Za-z_$][A-Za-z0-9_$]*\s*\([^\n)]*\)"#, in: body) {
             score += 1
         }
         return score >= 3
+    }
+
+    /// A copy that is only a fenced block (including the fences) is source, not an article.
+    private static func isStandaloneFencedBlock(_ sample: String) -> Bool {
+        guard sample.hasPrefix("```") || sample.hasPrefix("~~~") else { return false }
+        return strippingFencedCodeBlocks(sample)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
+    /// Drop closed fences, then a trailing unclosed opener (the 12k prefix may cut mid-block).
+    private static func strippingFencedCodeBlocks(_ text: String) -> String {
+        let full = NSRange(text.startIndex..., in: text)
+        var result = text
+        if let closedFenceRegex {
+            result = closedFenceRegex.stringByReplacingMatches(
+                in: result, range: full, withTemplate: "\n")
+        }
+        if let openFenceRegex {
+            let remaining = NSRange(result.startIndex..., in: result)
+            if let match = openFenceRegex.firstMatch(in: result, range: remaining),
+                let start = Range(match.range, in: result)
+            {
+                result = String(result[..<start.lowerBound])
+            }
+        }
+        return result
     }
 
     private static func matches(_ pattern: String, in text: String) -> Bool {
