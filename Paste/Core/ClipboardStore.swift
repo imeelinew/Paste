@@ -963,9 +963,9 @@ final class ClipboardStore: ObservableObject {
 
 /// Conservative classification for clipboard text. Whole-string http(s) URLs classify as links;
 /// strong syntax forms classify as code on their own; weaker punctuation signals must combine,
-/// keeping prose and ordinary messages as text. Fenced blocks inside Markdown are ignored so an
-/// AI answer with ` ```tsx ` examples stays text. Only a bounded prefix is inspected for code so a
-/// large copy cannot stall capture.
+/// keeping prose and ordinary messages as text. Code blocks and inline code inside Markdown are
+/// ignored so an AI answer explaining source stays text. Only a bounded prefix is inspected for
+/// code so a large copy cannot stall capture.
 enum ClipboardTextClassifier {
     private static let sampleLimit = 12_000
     /// Opening fence, optional info string, body, then a matching closing fence.
@@ -974,6 +974,9 @@ enum ClipboardTextClassifier {
     )
     private static let openFenceRegex: NSRegularExpression? = try? NSRegularExpression(
         pattern: #"(?m)^[ \t]{0,3}(`{3,}|~{3,})"#
+    )
+    private static let inlineCodeRegex: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?s)(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)"#
     )
 
     static func kind(for text: String) -> ClipboardItem.Kind {
@@ -1005,7 +1008,7 @@ enum ClipboardTextClassifier {
         if isJSONObject(sample) { return true }
         if isStandaloneFencedBlock(sample) { return true }
 
-        let body = strippingFencedCodeBlocks(sample)
+        let body = strippingMarkdownCode(sample)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard body.count >= 4 else { return false }
 
@@ -1038,6 +1041,18 @@ enum ClipboardTextClassifier {
         return strippingFencedCodeBlocks(sample)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
+    }
+
+    /// Inline snippets such as `return () => {}` are prose examples and must not contribute code
+    /// punctuation or keywords to the whole-document score.
+    private static func strippingMarkdownCode(_ text: String) -> String {
+        let withoutFences = strippingFencedCodeBlocks(text)
+        guard let inlineCodeRegex else { return withoutFences }
+        return inlineCodeRegex.stringByReplacingMatches(
+            in: withoutFences,
+            range: NSRange(withoutFences.startIndex..., in: withoutFences),
+            withTemplate: " "
+        )
     }
 
     /// Drop closed fences, then a trailing unclosed opener (the 12k prefix may cut mid-block).
