@@ -11,15 +11,41 @@ struct SelectableAttributedText: NSViewRepresentable {
 
     private let storage: Storage
     private let fontSize: CGFloat?
+    private let scrollPosition: CGPoint?
+    private let selection: NSRange?
+    private let onScroll: ((CGPoint) -> Void)?
+    private let onSelectionChange: ((NSRange) -> Void)?
 
-    init(attributed: AttributedString, fontSize: CGFloat? = nil) {
+    init(
+        attributed: AttributedString,
+        fontSize: CGFloat? = nil,
+        scrollPosition: CGPoint? = nil,
+        selection: NSRange? = nil,
+        onScroll: ((CGPoint) -> Void)? = nil,
+        onSelectionChange: ((NSRange) -> Void)? = nil
+    ) {
         storage = .swiftUI(attributed)
         self.fontSize = fontSize
+        self.scrollPosition = scrollPosition
+        self.selection = selection
+        self.onScroll = onScroll
+        self.onSelectionChange = onSelectionChange
     }
 
-    init(nsAttributed: NSAttributedString, fontSize: CGFloat? = nil) {
+    init(
+        nsAttributed: NSAttributedString,
+        fontSize: CGFloat? = nil,
+        scrollPosition: CGPoint? = nil,
+        selection: NSRange? = nil,
+        onScroll: ((CGPoint) -> Void)? = nil,
+        onSelectionChange: ((NSRange) -> Void)? = nil
+    ) {
         storage = .appKit(nsAttributed)
         self.fontSize = fontSize
+        self.scrollPosition = scrollPosition
+        self.selection = selection
+        self.onScroll = onScroll
+        self.onSelectionChange = onSelectionChange
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -34,6 +60,8 @@ struct SelectableAttributedText: NSViewRepresentable {
 
     func updateNSView(_ scrollView: PreviewTextScrollView, context: Context) {
         context.coordinator.onCopy = { Paster.copyString($0) }
+        context.coordinator.onSelectionChange = onSelectionChange
+        scrollView.onScroll = onScroll
         let textView = scrollView.textView
         let ns: NSAttributedString
         switch storage {
@@ -57,7 +85,11 @@ struct SelectableAttributedText: NSViewRepresentable {
             }
             textView.invalidateIntrinsicContentSize()
         }
+        if let selection, selection != textView.selectedRange(), NSMaxRange(selection) <= ns.length {
+            textView.setSelectedRange(selection)
+        }
         scrollView.updateDocumentGeometry()
+        scrollView.setScrollPosition(scrollPosition)
     }
 
     /// `AttributedString` stores the highlighters' colors in SwiftUI's attribute scope. The
@@ -144,11 +176,13 @@ struct SelectableAttributedText: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var onCopy: ((String) -> Void)?
+        var onSelectionChange: ((NSRange) -> Void)?
         private var pending: String?
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             let range = textView.selectedRange()
+            onSelectionChange?(range)
             let ns = textView.string as NSString
             guard range.length > 0, NSMaxRange(range) <= ns.length else {
                 pending = nil
@@ -173,7 +207,10 @@ struct SelectableAttributedText: NSViewRepresentable {
 
 final class PreviewTextScrollView: NSScrollView {
     let textView = PreviewTextView()
+    var onScroll: ((CGPoint) -> Void)?
     private var styleObserver: NotificationToken?
+    private var restoringScrollPosition = false
+    private var desiredScrollPosition: CGPoint?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -219,6 +256,16 @@ final class PreviewTextScrollView: NSScrollView {
     override func layout() {
         super.layout()
         updateDocumentGeometry()
+        if let desiredScrollPosition {
+            restoreScrollPosition(desiredScrollPosition)
+        }
+    }
+
+    override func reflectScrolledClipView(_ clipView: NSClipView) {
+        super.reflectScrolledClipView(clipView)
+        guard clipView === contentView, !restoringScrollPosition else { return }
+        desiredScrollPosition = clipView.bounds.origin
+        onScroll?(clipView.bounds.origin)
     }
 
     func updateDocumentGeometry() {
@@ -234,6 +281,27 @@ final class PreviewTextScrollView: NSScrollView {
         if textView.frame.size != size {
             textView.setFrameSize(size)
         }
+    }
+
+    func setScrollPosition(_ requested: CGPoint?) {
+        desiredScrollPosition = requested
+        if let requested {
+            restoreScrollPosition(requested)
+        }
+    }
+
+    private func restoreScrollPosition(_ requested: CGPoint) {
+        guard requested.x.isFinite, requested.y.isFinite else { return }
+        let maximumY = max(textView.frame.height - contentView.bounds.height, 0)
+        let position = CGPoint(x: 0, y: min(max(requested.y, 0), maximumY))
+        let current = contentView.bounds.origin
+        guard abs(current.x - position.x) > 0.5 || abs(current.y - position.y) > 0.5 else {
+            return
+        }
+        restoringScrollPosition = true
+        contentView.scroll(to: position)
+        reflectScrolledClipView(contentView)
+        restoringScrollPosition = false
     }
 
     private func observeScrollerStyleChanges() {

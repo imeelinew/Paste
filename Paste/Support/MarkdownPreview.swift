@@ -46,6 +46,10 @@ struct MarkdownPreview: View {
     let source: String
     var query: String = ""
     var fontSize: CGFloat? = nil
+    var scrollPosition: CGPoint? = nil
+    var selection: NSRange? = nil
+    var onScroll: ((CGPoint) -> Void)? = nil
+    var onSelectionChange: ((NSRange) -> Void)? = nil
 
     @State private var rendered: Rendered?
 
@@ -85,11 +89,11 @@ struct MarkdownPreview: View {
         Group {
             switch rendered {
             case .appKit(let value):
-                SelectableAttributedText(nsAttributed: value, fontSize: fontSize)
+                selectableText(nsAttributed: value)
             case .swiftUI(let value):
-                SelectableAttributedText(attributed: value, fontSize: fontSize)
+                selectableText(attributed: value)
             case nil:
-                SelectableAttributedText(attributed: AttributedString(source), fontSize: fontSize)
+                selectableText(attributed: AttributedString(source))
             }
         }
         .task(id: RenderID(source: source, query: query, fontSize: fontSize)) {
@@ -105,5 +109,25 @@ struct MarkdownPreview: View {
             guard !Task.isCancelled else { return }
             rendered = result
         }
+    }
+
+    private func selectableText(attributed: AttributedString) -> SelectableAttributedText {
+        SelectableAttributedText(
+            attributed: attributed,
+            fontSize: fontSize,
+            scrollPosition: scrollPosition,
+            selection: selection,
+            onScroll: onScroll,
+            onSelectionChange: onSelectionChange)
+    }
+
+    private func selectableText(nsAttributed: NSAttributedString) -> SelectableAttributedText {
+        SelectableAttributedText(
+            nsAttributed: nsAttributed,
+            fontSize: fontSize,
+            scrollPosition: scrollPosition,
+            selection: selection,
+            onScroll: onScroll,
+            onSelectionChange: onSelectionChange)
     }
 }

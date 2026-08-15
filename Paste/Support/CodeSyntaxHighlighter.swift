@@ -135,6 +135,10 @@ struct CodePreview: View {
     let code: String
     var query: String = ""
     var fontSize: CGFloat? = nil
+    var scrollPosition: CGPoint? = nil
+    var selection: NSRange? = nil
+    var onScroll: ((CGPoint) -> Void)? = nil
+    var onSelectionChange: ((NSRange) -> Void)? = nil
     @State private var highlighted: AttributedString?
 
     private struct RenderID: Hashable {
@@ -149,7 +153,11 @@ struct CodePreview: View {
     var body: some View {
         SelectableAttributedText(
             attributed: highlighted ?? AttributedString(code),
-            fontSize: fontSize)
+            fontSize: fontSize,
+            scrollPosition: scrollPosition,
+            selection: selection,
+            onScroll: onScroll,
+            onSelectionChange: onSelectionChange)
         .task(id: RenderID(code: code, query: query)) {
             highlighted = nil
             let task = Task.detached(priority: .userInitiated) {

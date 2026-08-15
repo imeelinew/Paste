@@ -31,6 +31,7 @@ final class AppCore: ObservableObject {
         activationPolicy.reset()
         settings.appearance.apply()
         updateService.start()
+        pinnedImageWindows.restore()
 
         clipboardStore.maxAge = settings.clipboardRetention.maxAge
         clipboardStore.load()
@@ -39,6 +40,10 @@ final class AppCore: ObservableObject {
         KeyboardShortcuts.onKeyUp(for: .toggleClipboard) { [weak self] in
             self?.togglePalette()
         }
+    }
+
+    func prepareForTermination() {
+        pinnedImageWindows.flushPersistence()
     }
 
     func togglePalette() {
