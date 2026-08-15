@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -5,14 +6,48 @@ import SwiftUI
 /// lexical forms common across Swift, JavaScript/TypeScript, Python, C-family languages, Rust, Go,
 /// SQL, shell, JSON, and markup; unknown syntax remains the native primary text color.
 enum CodeSyntaxHighlighter {
+    private enum TokenStyle {
+        case orange
+        case secondary
+        case red
+        case blue
+        case purple
+        case teal
+        case indigo
+
+        var swiftUIColor: Color {
+            switch self {
+            case .orange: .orange
+            case .secondary: .secondary
+            case .red: .red
+            case .blue: .blue
+            case .purple: .purple
+            case .teal: .teal
+            case .indigo: .indigo
+            }
+        }
+
+        var appKitColor: NSColor {
+            switch self {
+            case .orange: .systemOrange
+            case .secondary: .secondaryLabelColor
+            case .red: .systemRed
+            case .blue: .systemBlue
+            case .purple: .systemPurple
+            case .teal: .systemTeal
+            case .indigo: .systemIndigo
+            }
+        }
+    }
+
     private struct Rule {
         let expression: NSRegularExpression
-        let color: Color
+        let style: TokenStyle
     }
 
     private struct Token {
         let range: NSRange
-        let color: Color
+        let style: TokenStyle
         let priority: Int
     }
 
@@ -31,25 +66,52 @@ enum CodeSyntaxHighlighter {
         rule(#"\b[A-Za-z_$][A-Za-z0-9_$]*(?=[\t ]*\()"#, .indigo),
     ]
 
-    private static func rule(_ pattern: String, _ color: Color) -> Rule {
+    private static func rule(_ pattern: String, _ style: TokenStyle) -> Rule {
         // Every pattern is a source literal covered by the render smoke test. Falling back to a
         // never-matching expression keeps a typo from crashing the app when a code row is selected.
         let expression =
             (try? NSRegularExpression(pattern: pattern))
             ?? (try! NSRegularExpression(pattern: "(?!)"))
-        return Rule(expression: expression, color: color)
+        return Rule(expression: expression, style: style)
     }
 
     static func highlight(_ source: String) -> AttributedString {
         var output = AttributedString(source)
         output.foregroundColor = .primary
-        let fullRange = NSRange(source.startIndex..<source.endIndex, in: source)
+        for token in highlightedTokens(in: source) {
+            guard !Task.isCancelled else { return output }
+            let tokenRange = token.range
+            guard let stringRange = Range(tokenRange, in: source),
+                let lower = AttributedString.Index(stringRange.lowerBound, within: output),
+                let upper = AttributedString.Index(stringRange.upperBound, within: output)
+            else { continue }
+            output[lower..<upper].foregroundColor = token.style.swiftUIColor
+        }
+        return output
+    }
 
+    /// AppKit variant used by the Markdown renderer. The caller's font, background, and paragraph
+    /// styling remain intact while the same token rules and colors as `CodePreview` are applied.
+    static func highlight(
+        _ source: String,
+        attributes: [NSAttributedString.Key: Any]
+    ) -> NSMutableAttributedString {
+        let output = NSMutableAttributedString(string: source, attributes: attributes)
+        for token in highlightedTokens(in: source) {
+            guard !Task.isCancelled else { return output }
+            output.addAttribute(
+                .foregroundColor, value: token.style.appKitColor, range: token.range)
+        }
+        return output
+    }
+
+    private static func highlightedTokens(in source: String) -> [Token] {
+        let fullRange = NSRange(source.startIndex..<source.endIndex, in: source)
         var tokens: [Token] = []
         for (priority, rule) in rules.enumerated() {
-            guard !Task.isCancelled else { return output }
+            guard !Task.isCancelled else { return [] }
             for match in rule.expression.matches(in: source, range: fullRange) {
-                tokens.append(Token(range: match.range, color: rule.color, priority: priority))
+                tokens.append(Token(range: match.range, style: rule.style, priority: priority))
             }
         }
         tokens.sort {
@@ -57,19 +119,15 @@ enum CodeSyntaxHighlighter {
                 ? $0.priority < $1.priority : $0.range.location < $1.range.location
         }
 
+        var highlighted: [Token] = []
         var consumedThrough = 0
         for token in tokens {
-            guard !Task.isCancelled else { return output }
-            let tokenRange = token.range
-            guard tokenRange.location >= consumedThrough else { continue }
-            guard let stringRange = Range(tokenRange, in: source),
-                let lower = AttributedString.Index(stringRange.lowerBound, within: output),
-                let upper = AttributedString.Index(stringRange.upperBound, within: output)
-            else { continue }
-            output[lower..<upper].foregroundColor = token.color
-            consumedThrough = NSMaxRange(tokenRange)
+            guard !Task.isCancelled else { return highlighted }
+            guard token.range.location >= consumedThrough else { continue }
+            highlighted.append(token)
+            consumedThrough = NSMaxRange(token.range)
         }
-        return output
+        return highlighted
     }
 }
 

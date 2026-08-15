@@ -190,12 +190,11 @@ enum MarkdownAttributedRenderer {
 
         private mutating func appendCodeBlock(_ codeBlock: CodeBlock, leftIndent: CGFloat) {
             let code = codeBlock.code.trimmingCharacters(in: .newlines)
-            let content = NSMutableAttributedString(
-                string: code,
+            let content = CodeSyntaxHighlighter.highlight(
+                code,
                 attributes: [
                     .font: font(for: .code, pointSize: basePointSize - 0.5),
                     .foregroundColor: NSColor.labelColor,
-                    .backgroundColor: NSColor.labelColor.withAlphaComponent(0.07),
                 ])
             let style = bodyParagraphStyle(
                 leftIndent: leftIndent + 8, spacingAfter: 8,
