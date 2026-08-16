@@ -112,14 +112,18 @@ struct AppearanceSettingsView: View {
                 HStack(spacing: Theme.Spacing.md) {
                     Slider(
                         value: $settings.pinnedWindowOpacity,
-                        in: PinnedWindowOpacity.minimum...PinnedWindowOpacity.maximum,
-                        step: 1
+                        in: PinnedWindowOpacity.minimum...PinnedWindowOpacity.maximum
                     )
                     .accessibilityLabel(Text("Pinned Opacity"))
                     Text(verbatim: "\(Int(settings.pinnedWindowOpacity.rounded()))%")
                         .monospacedDigit()
                         .frame(minWidth: 40, alignment: .trailing)
                 }
+            }
+
+            PreferencesRow(label: "Background Blur", alignment: .firstTextBaseline) {
+                Toggle("Blur Card Background", isOn: $settings.pinnedWindowBlur)
+                    .toggleStyle(.checkbox)
             }
         }
     }

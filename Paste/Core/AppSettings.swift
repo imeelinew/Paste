@@ -100,7 +100,7 @@ enum PinnedTextSize {
 }
 
 enum PinnedWindowOpacity {
-    static let minimum: Double = 0
+    static let minimum: Double = 50
     static let maximum: Double = 100
     static let defaultValue: Double = 100
 
@@ -130,6 +130,7 @@ final class AppSettings: ObservableObject {
         static let pinnedImageSize = "pinnedImageSize"
         static let pinnedTextSize = "pinnedTextSize"
         static let pinnedWindowOpacity = "pinnedWindowOpacity"
+        static let pinnedWindowBlur = "pinnedWindowBlur"
     }
 
     @Published var clipboardRetention: ClipboardRetention {
@@ -187,9 +188,14 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(Double(pinnedTextSize), forKey: Key.pinnedTextSize) }
     }
 
-    /// Visible alpha of every pinned card, stored as 0...100 so 100 keeps today's fully opaque look.
+    /// Visible alpha of every pinned card, stored as 50...100 so 100 keeps today's fully opaque look.
     @Published var pinnedWindowOpacity: Double {
         didSet { defaults.set(pinnedWindowOpacity, forKey: Key.pinnedWindowOpacity) }
+    }
+
+    /// When enabled, pinned cards use a vibrancy material so the desktop shows through as blur.
+    @Published var pinnedWindowBlur: Bool {
+        didSet { defaults.set(pinnedWindowBlur, forKey: Key.pinnedWindowBlur) }
     }
 
     var pinnedWindowAlpha: CGFloat {
@@ -227,5 +233,6 @@ final class AppSettings: ObservableObject {
                 ? PinnedWindowOpacity.defaultValue
                 : defaults.double(forKey: Key.pinnedWindowOpacity)
         )
+        pinnedWindowBlur = defaults.bool(forKey: Key.pinnedWindowBlur)
     }
 }

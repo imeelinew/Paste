@@ -1305,6 +1305,22 @@ private final class PinnedImagePanel: NSPanel {
 }
 
 @MainActor
+private struct PinnedCardBackground: View {
+    @ObservedObject private var settings = AppCore.shared.settings
+
+    var body: some View {
+        Group {
+            if settings.pinnedWindowBlur {
+                VisualEffectView()
+            } else {
+                Color(nsColor: .windowBackgroundColor)
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+@MainActor
 private struct PinnedImageContent: View {
     let itemID: ClipboardItem.ID
     let url: URL
@@ -1316,7 +1332,7 @@ private struct PinnedImageContent: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color(nsColor: .windowBackgroundColor)
+            PinnedCardBackground()
 
             if let image {
                 Image(nsImage: image)
@@ -1338,7 +1354,12 @@ private struct PinnedImageContent: View {
             PinnedImageDragSurface()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            PinnedCardChrome(itemID: itemID, closeLabel: "Close Pinned Image", onClose: onClose) {
+            PinnedCardChrome(
+                itemID: itemID,
+                trailingWidth: 28,
+                closeLabel: "Close Pinned Image",
+                onClose: onClose
+            ) {
                 Color.clear
                     .frame(width: 28, height: 28)
                     .allowsHitTesting(false)
@@ -1384,7 +1405,7 @@ private struct PinnedTextContent: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color(nsColor: .windowBackgroundColor)
+            PinnedCardBackground()
 
             Group {
                 switch style {
@@ -1415,7 +1436,12 @@ private struct PinnedTextContent: View {
                 .frame(height: 44)
                 .frame(maxWidth: .infinity, alignment: .top)
 
-            PinnedCardChrome(itemID: itemID, closeLabel: "Close Pinned Item", onClose: onClose) {
+            PinnedCardChrome(
+                itemID: itemID,
+                trailingWidth: 64,
+                closeLabel: "Close Pinned Item",
+                onClose: onClose
+            ) {
                 HStack(spacing: 8) {
                     PinnedCardButton(
                         systemName: "minus",
@@ -1460,24 +1486,26 @@ private struct PinnedTextContent: View {
 
 private struct PinnedCardChrome<Trailing: View>: View {
     let itemID: ClipboardItem.ID
+    let trailingWidth: CGFloat
     let closeLabel: LocalizedStringKey
     let onClose: () -> Void
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        ZStack {
-            HStack(spacing: 8) {
-                PinnedCardButton(
-                    systemName: "xmark",
-                    label: closeLabel,
-                    action: onClose
-                )
-                Spacer(minLength: 0)
-                    .allowsHitTesting(false)
-                trailing
-            }
+        HStack(spacing: 8) {
+            PinnedCardButton(
+                systemName: "xmark",
+                label: closeLabel,
+                action: onClose
+            )
+            .frame(width: trailingWidth, alignment: .leading)
+
             PinnedCardTitle(itemID: itemID)
-                .padding(.horizontal, 44)
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .clipped()
+
+            trailing
+                .frame(width: trailingWidth, alignment: .trailing)
         }
         .padding(10)
         .frame(maxWidth: .infinity)
@@ -1521,10 +1549,7 @@ private struct PinnedCardTitle: View {
                 .accessibilityLabel(Text("Rename"))
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .frame(minWidth: 48, maxWidth: 280)
-        .frosted(in: Capsule())
+        .frame(minWidth: 0, maxWidth: 280)
         .onChange(of: isEditing) {
             if isEditing {
                 focused = true
