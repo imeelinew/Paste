@@ -1,11 +1,10 @@
+import AppKit
 import SwiftUI
 
 struct RootPaletteView: View {
     @EnvironmentObject private var vm: PaletteViewModel
     @ObservedObject private var settings = AppCore.shared.settings
 
-    @FocusState private var searchFocused: Bool
-    @FocusState private var renameFocused: Bool
     @State private var scroll = ScrollIntent(kind: .top)
 
     private var isQueryEmpty: Bool {
@@ -19,10 +18,7 @@ struct RootPaletteView: View {
 
     private var showAppMenu: Bool { vm.overlay == .appMenu }
 
-    private var showRename: Bool {
-        if case .rename = vm.overlay { return true }
-        return false
-    }
+    private var showRename: Bool { vm.renamingID != nil }
 
     @MainActor
     private var menuItems: [PopoverMenuItem] {
@@ -47,7 +43,10 @@ struct RootPaletteView: View {
                         onSelect: { vm.select($0.id) },
                         onActions: { item in
                             vm.openActions(for: item.id)
-                        }
+                        },
+                        renamingID: vm.renamingID,
+                        renameDraft: vm.renameDraft,
+                        onCommitRename: { vm.commitOpenRename($0) }
                     )
                     .frame(width: Theme.Size.clipboardListWidth)
                     Rectangle()
@@ -60,6 +59,7 @@ struct RootPaletteView: View {
         .safeAreaInset(edge: .top, spacing: 0) { header }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             bottomBar(showActionGroup: selected != nil)
+                .allowsHitTesting(!showRename)
         }
         .overlay {
             if vm.menuOpen {
@@ -92,52 +92,30 @@ struct RootPaletteView: View {
                 .transition(Self.menuTransition(.bottomTrailing))
             }
         }
-        .overlay {
-            if showRename {
-                renameOverlay
-                    .transition(Self.menuTransition(.center))
-            }
-        }
         // Animate the state transition, not individual input paths. Mouse, keyboard, and future
         // commands all receive the same menu entrance and exit automatically.
         .animation(Self.menuAnimation, value: vm.overlay)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(VisualEffectView())
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
-        .onChange(of: vm.focusToken) {
-            requestSearchFocus()
-        }
-        .onChange(of: vm.overlay) {
-            if showRename {
-                requestRenameFocus()
-            } else if renameFocused {
-                renameFocused = false
-                requestSearchFocus()
-            }
-        }
         .onChange(of: vm.resetToken) {
             scroll = ScrollIntent(kind: .top)
         }
         .onChange(of: vm.followToken) {
             scroll = ScrollIntent(kind: .follow)
         }
-        .onAppear {
-            requestSearchFocus()
-        }
         .environment(\.locale, settings.language.locale)
     }
 
     private var header: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.md) {
-            TextField(
-                "", text: $vm.query,
-                prompt: Text("Search")
-                    .foregroundStyle(Theme.Colors.textTertiary)
+            PaletteSearchField(
+                text: $vm.query,
+                focused: vm.searchFocused,
+                enabled: !showRename,
+                onFocusChanged: vm.searchFocusChanged
             )
-            .textFieldStyle(.plain)
-            .font(Theme.Typography.searchField)
-            .tint(Color.primary)
-            .focused($searchFocused)
+            .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, Theme.Spacing.md * 2)
         .frame(height: Theme.Size.headerHeight)
@@ -196,54 +174,8 @@ struct RootPaletteView: View {
         .frosted(in: Capsule())
     }
 
-    private var renameOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.001)
-                .contentShape(Rectangle())
-                .onTapGesture { vm.handle(.cancel) }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                Text("Rename")
-                    .font(Theme.Typography.menuRow)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                TextField("", text: $vm.renameDraft)
-                    .textFieldStyle(.plain)
-                    .font(Theme.Typography.searchField)
-                    .focused($renameFocused)
-                    .onSubmit { vm.handle(.activate) }
-            }
-            .padding(Theme.Spacing.xl + Theme.Spacing.sm)
-            .frame(width: 320)
-            .glassEffect(
-                .regular,
-                in: RoundedRectangle(cornerRadius: Theme.Radius.menuPanel, style: .continuous)
-            )
-        }
-    }
-
     private func activateMenuItem(_ index: Int) {
         vm.activateMenuItem(at: index)
-    }
-
-    /// `@FocusState` can remain logically true after AppKit has lost its field editor. Pulse the
-    /// binding so every window-level focus request produces a fresh first-responder transition.
-    private func requestSearchFocus() {
-        guard !showRename else { return }
-        searchFocused = false
-        Task { @MainActor in
-            await Task.yield()
-            guard !showRename else { return }
-            searchFocused = true
-        }
-    }
-
-    private func requestRenameFocus() {
-        searchFocused = false
-        renameFocused = true
-        Task { @MainActor in
-            await Task.yield()
-            renameFocused = true
-        }
     }
 
     private static let menuInset: CGFloat = 8
@@ -251,6 +183,89 @@ struct RootPaletteView: View {
 
     private static func menuTransition(_ anchor: UnitPoint) -> AnyTransition {
         .opacity.combined(with: .scale(scale: 0.96, anchor: anchor))
+    }
+}
+
+private struct PaletteSearchField: NSViewRepresentable {
+    @Binding var text: String
+    let focused: Bool
+    let enabled: Bool
+    let onFocusChanged: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onFocusChanged: onFocusChanged)
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(frame: .zero)
+        field.delegate = context.coordinator
+        field.isBezeled = false
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: 20, weight: .regular)
+        field.textColor = .labelColor
+        field.cell?.usesSingleLineMode = true
+        field.cell?.wraps = false
+        field.cell?.isScrollable = true
+        field.setAccessibilityLabel(String(localized: "Search"))
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.text = $text
+        context.coordinator.onFocusChanged = onFocusChanged
+        context.coordinator.wantsFocus = focused && enabled
+
+        if field.stringValue != text {
+            field.stringValue = text
+        }
+        field.isEnabled = enabled
+        field.placeholderAttributedString = NSAttributedString(
+            string: String(localized: "Search", locale: context.environment.locale),
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 20, weight: .regular),
+                .foregroundColor: NSColor.tertiaryLabelColor,
+            ]
+        )
+
+        if context.coordinator.wantsFocus {
+            guard field.currentEditor() == nil else { return }
+            DispatchQueue.main.async { [weak field, weak coordinator = context.coordinator] in
+                guard let field, coordinator?.wantsFocus == true, field.isEnabled else { return }
+                field.window?.makeFirstResponder(field)
+            }
+        } else if field.currentEditor() != nil {
+            // Only resign this search field. A delayed update must never clear the row editor.
+            field.window?.makeFirstResponder(nil)
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var text: Binding<String>
+        var onFocusChanged: (Bool) -> Void
+        var wantsFocus = false
+
+        init(text: Binding<String>, onFocusChanged: @escaping (Bool) -> Void) {
+            self.text = text
+            self.onFocusChanged = onFocusChanged
+        }
+
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            onFocusChanged(true)
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field = obj.object as? NSTextField,
+                text.wrappedValue != field.stringValue
+            else { return }
+            text.wrappedValue = field.stringValue
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            onFocusChanged(false)
+        }
     }
 }
 

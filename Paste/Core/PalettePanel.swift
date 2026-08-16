@@ -40,8 +40,12 @@ final class PalettePanel: NSPanel {
             }
         }
 
-        if case .rename = paletteViewModel.overlay {
+        if paletteViewModel.renamingID != nil {
             return routeRename(event, keyCode: keyCode, modifiers: modifiers)
+        }
+
+        if modifiers == .command, keyCode == kVK_ANSI_F {
+            return handleOnce(.focusSearch, event: event)
         }
 
         if modifiers == .command, keyCode == kVK_Delete {
@@ -92,7 +96,9 @@ final class PalettePanel: NSPanel {
                 }
                 // At an empty query, Space is a Quick Look gesture even when the selected item
                 // cannot be previewed. Swallow it instead of starting a useless blank search.
-                if paletteViewModel.queryIsEmpty { return true }
+                if paletteViewModel.inputMode == .browsing, paletteViewModel.queryIsEmpty {
+                    return true
+                }
             default:
                 break
             }
@@ -117,7 +123,9 @@ final class PalettePanel: NSPanel {
         if modifiers.isEmpty {
             switch keyCode {
             case kVK_Return, kVK_ANSI_KeypadEnter:
-                return handleOnce(.activate, event: event)
+                // Let the active NSTextField finish editing so marked text is finalized and the
+                // row editor commits its actual value instead of a separately mirrored draft.
+                return false
             case kVK_Escape:
                 return paletteViewModel?.handle(.cancel) ?? false
             default:

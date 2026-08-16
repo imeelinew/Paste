@@ -27,6 +27,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
             InputSourceSwitcher.selectEnglish()
         }
         panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(nil)
         panel.orderFrontRegardless()
         DispatchQueue.main.async { [weak panel] in
             guard let panel, panel.isVisible, !panel.isKeyWindow else { return }
@@ -46,12 +47,6 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     func windowDidResignKey(_ notification: Notification) {
         guard isVisible else { return }
         core.hidePalette(restoreFocus: false)
-    }
-
-    func windowDidBecomeKey(_ notification: Notification) {
-        DispatchQueue.main.async { [weak self] in
-            self?.core.palette.focusToken = UUID()
-        }
     }
 
     private func ensurePanel() -> PalettePanel {

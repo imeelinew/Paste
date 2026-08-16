@@ -9,11 +9,15 @@ struct ClipboardList: View {
     let scroll: ScrollIntent
     let onSelect: (ClipboardItem) -> Void
     let onActions: (ClipboardItem) -> Void
+    let renamingID: ClipboardItem.ID?
+    let renameDraft: String
+    let onCommitRename: (String) -> Void
     @EnvironmentObject private var store: ClipboardStore
     @State private var geometry = ClipboardTableGeometry()
     @State private var scrollActivity = UUID()
 
-    var body: some View {        ClipboardTableRepresentable(
+    var body: some View {
+        ClipboardTableRepresentable(
             results: results,
             selectedID: selectedID,
             query: query,
@@ -21,6 +25,9 @@ struct ClipboardList: View {
             store: store,
             onSelect: onSelect,
             onActions: onActions,
+            renamingID: renamingID,
+            renameDraft: renameDraft,
+            onCommitRename: onCommitRename,
             onGeometryChange: { geometry = $0 },
             onScrollActivity: { scrollActivity = UUID() }
         )
@@ -85,16 +92,19 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
     let store: ClipboardStore
     let onSelect: (ClipboardItem) -> Void
     let onActions: (ClipboardItem) -> Void
+    let renamingID: ClipboardItem.ID?
+    let renameDraft: String
+    let onCommitRename: (String) -> Void
     let onGeometryChange: (ClipboardTableGeometry) -> Void
     let onScrollActivity: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeNSView(context: Context) -> ClipboardTableScrollView {
-        context.coordinator.makeScrollView()
+    func makeNSView(context: Context) -> ClipboardTableContainerView {
+        context.coordinator.makeContainerView()
     }
 
-    func updateNSView(_ scrollView: ClipboardTableScrollView, context: Context) {
+    func updateNSView(_ containerView: ClipboardTableContainerView, context: Context) {
         context.coordinator.update(
             results: results,
             selectedID: selectedID,
@@ -104,13 +114,16 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             store: store,
             onSelect: onSelect,
             onActions: onActions,
+            renamingID: renamingID,
+            renameDraft: renameDraft,
+            onCommitRename: onCommitRename,
             onGeometryChange: onGeometryChange,
             onScrollActivity: onScrollActivity
         )
     }
 
     @MainActor
-    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
         private var rows: [ClipboardTableRow] = []
         private var selectedID: ClipboardItem.ID?
         private var query = ""
@@ -118,10 +131,14 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
         private weak var store: ClipboardStore?
         private var onSelect: ((ClipboardItem) -> Void)?
         private var onActions: ((ClipboardItem) -> Void)?
+        private var onCommitRename: ((String) -> Void)?
         private var onGeometryChange: ((ClipboardTableGeometry) -> Void)?
         private var onScrollActivity: (() -> Void)?
+        private var renamingID: ClipboardItem.ID?
+        private var renameDraft = ""
+        private var editingID: ClipboardItem.ID?
         private var boundsToken: NotificationToken?
-        private weak var hostedTableView: ClipboardTableView?
+        private weak var hostedContainerView: ClipboardTableContainerView?
         private var lastScroll: ScrollIntent?
         private var applyingSelection = false
         private var lastGeometry = ClipboardTableGeometry()
@@ -130,7 +147,7 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
         private let itemIdentifier = NSUserInterfaceItemIdentifier("ClipboardItemCell")
         private let headerIdentifier = NSUserInterfaceItemIdentifier("ClipboardHeaderCell")
 
-        func makeScrollView() -> ClipboardTableScrollView {
+        func makeContainerView() -> ClipboardTableContainerView {
             let tableView = ClipboardTableView()
             tableView.headerView = nil
             tableView.backgroundColor = .clear
@@ -147,7 +164,6 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             tableView.dataSource = self
             tableView.delegate = self
             tableView.onRightClick = { [weak self] row in self?.rightClicked(row) }
-            hostedTableView = tableView
 
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Clipboard"))
             column.resizingMask = .autoresizingMask
@@ -179,7 +195,12 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
                 MainActor.assumeIsolated { self?.boundsChanged(scrollView.contentView.bounds.origin) }
             }
             boundsToken = NotificationToken(token, center: .default)
-            return scrollView
+
+            let containerView = ClipboardTableContainerView(scrollView: scrollView)
+            containerView.renameField.delegate = self
+            containerView.onLayout = { [weak self] in self?.positionRenameEditor() }
+            hostedContainerView = containerView
+            return containerView
         }
 
         func update(
@@ -187,6 +208,9 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             scroll: ScrollIntent, locale: Locale, store: ClipboardStore,
             onSelect: @escaping (ClipboardItem) -> Void,
             onActions: @escaping (ClipboardItem) -> Void,
+            renamingID: ClipboardItem.ID?,
+            renameDraft: String,
+            onCommitRename: @escaping (String) -> Void,
             onGeometryChange: @escaping (ClipboardTableGeometry) -> Void,
             onScrollActivity: @escaping () -> Void
         ) {
@@ -194,6 +218,9 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             self.store = store
             self.onSelect = onSelect
             self.onActions = onActions
+            self.renamingID = renamingID
+            self.renameDraft = renameDraft
+            self.onCommitRename = onCommitRename
             self.onGeometryChange = onGeometryChange
             self.onScrollActivity = onScrollActivity
 
@@ -221,11 +248,12 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
                 lastScroll = scroll
                 apply(scroll, selectedID: selectedID, to: tableView)
             }
+            syncInlineRename(in: tableView)
             reportGeometry(scrolling: false)
         }
 
         private var tableView: ClipboardTableView? {
-            hostedTableView
+            hostedContainerView?.tableView
         }
 
         private static func makeRows(_ results: [ClipboardItem]) -> [ClipboardTableRow] {
@@ -250,12 +278,21 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
         func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
         func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+            guard renamingID == nil else { return false }
             guard rows.indices.contains(row), case .item = rows[row] else { return false }
             return true
         }
 
+        func selectionShouldChange(in tableView: NSTableView) -> Bool {
+            renamingID == nil
+        }
+
         func tableViewSelectionDidChange(_ notification: Notification) {
             guard !applyingSelection, let tableView = notification.object as? NSTableView else {
+                return
+            }
+            if let renamingID {
+                applySelection(renamingID, to: tableView)
                 return
             }
             let row = tableView.selectedRow
@@ -298,12 +335,15 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
                     imageURL: store?.imageURL(for: item),
                     locale: locale
                 )
+                view.setTitleHidden(item.id == editingID)
                 return view
             }
         }
 
         private func rightClicked(_ row: Int) {
-            guard let tableView, rows.indices.contains(row), case .item(let item) = rows[row] else {
+            guard renamingID == nil, let tableView, rows.indices.contains(row),
+                case .item(let item) = rows[row]
+            else {
                 return
             }
             applyingSelection = true
@@ -312,6 +352,120 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             selectedID = item.id
             updateVisibleSelection(in: tableView)
             onActions?(item)
+        }
+
+        private func rowIndex(for id: ClipboardItem.ID) -> Int? {
+            rows.firstIndex {
+                if case .item(let item) = $0 { return item.id == id }
+                return false
+            }
+        }
+
+        private func itemCell(at row: Int, in tableView: NSTableView, makeIfNecessary: Bool)
+            -> ClipboardItemCellView?
+        {
+            tableView.view(atColumn: 0, row: row, makeIfNecessary: makeIfNecessary)
+                as? ClipboardItemCellView
+        }
+
+        private func syncInlineRename(in tableView: NSTableView) {
+            guard let renamingID else {
+                endInlineRename()
+                return
+            }
+            if editingID == renamingID {
+                positionRenameEditor()
+                return
+            }
+            beginInlineRename(renamingID)
+        }
+
+        private func beginInlineRename(_ id: ClipboardItem.ID) {
+            guard let containerView = hostedContainerView, let tableView,
+                let row = rowIndex(for: id)
+            else { return }
+
+            tableView.scrollRowToVisible(row)
+            editingID = id
+            containerView.renameField.stringValue = renameDraft
+            positionRenameEditor()
+
+            DispatchQueue.main.async { [weak self, weak containerView] in
+                guard let self, let containerView, self.editingID == id,
+                    self.renamingID == id
+                else { return }
+                self.positionRenameEditor()
+                containerView.window?.makeFirstResponder(containerView.renameField)
+                containerView.renameField.currentEditor()?.selectAll(nil)
+            }
+        }
+
+        private func endInlineRename() {
+            editingID = nil
+            if let containerView = hostedContainerView {
+                containerView.renameField.isHidden = true
+                if containerView.renameField.currentEditor() != nil {
+                    containerView.window?.makeFirstResponder(nil)
+                }
+            }
+            guard let tableView else { return }
+            tableView.enumerateAvailableRowViews { _, row in
+                (tableView.view(atColumn: 0, row: row, makeIfNecessary: false)
+                    as? ClipboardItemCellView)?.setTitleHidden(false)
+            }
+        }
+
+        private func positionRenameEditor() {
+            guard let id = editingID, renamingID == id,
+                let containerView = hostedContainerView, let tableView,
+                let row = rowIndex(for: id)
+            else {
+                hostedContainerView?.renameField.isHidden = true
+                return
+            }
+
+            tableView.layoutSubtreeIfNeeded()
+            guard let cell = itemCell(at: row, in: tableView, makeIfNecessary: true) else {
+                containerView.renameField.isHidden = true
+                return
+            }
+            cell.layoutSubtreeIfNeeded()
+            cell.setTitleHidden(true)
+            containerView.renameField.frame = cell.titleFrame(in: containerView).insetBy(
+                dx: -4, dy: -2)
+            containerView.renameField.isHidden = false
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard editingID != nil, let field = obj.object as? NSTextField,
+                field === hostedContainerView?.renameField
+            else { return }
+            renameDraft = field.stringValue
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            guard let field = obj.object as? NSTextField,
+                field === hostedContainerView?.renameField
+            else { return }
+            commitInlineRename(field.stringValue)
+        }
+
+        func control(
+            _ control: NSControl,
+            textView: NSTextView,
+            doCommandBy commandSelector: Selector
+        ) -> Bool {
+            guard commandSelector == #selector(NSResponder.insertNewline(_:)),
+                control === hostedContainerView?.renameField
+            else { return false }
+            commitInlineRename(textView.string)
+            return true
+        }
+
+        private func commitInlineRename(_ title: String) {
+            guard let id = editingID, renamingID == id else { return }
+            editingID = nil
+            onCommitRename?(title)
         }
 
         private func applySelection(_ id: ClipboardItem.ID?, to tableView: NSTableView) {
@@ -402,6 +556,7 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
         private func boundsChanged(_ origin: NSPoint) {
             let scrolling = lastBoundsOrigin.map { $0 != origin } ?? false
             lastBoundsOrigin = origin
+            positionRenameEditor()
             reportGeometry(scrolling: scrolling)
         }
 
@@ -415,6 +570,56 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             default: return String(localized: "Earlier", locale: locale)
             }
         }
+    }
+}
+
+private final class ClipboardTableContainerView: NSView {
+    let scrollView: ClipboardTableScrollView
+    let renameField = NSTextField(frame: .zero)
+    var onLayout: (() -> Void)?
+
+    var tableView: ClipboardTableView? {
+        scrollView.documentView as? ClipboardTableView
+    }
+
+    init(scrollView: ClipboardTableScrollView) {
+        self.scrollView = scrollView
+        super.init(frame: .zero)
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(scrollView)
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        renameField.font = .preferredFont(forTextStyle: .body)
+        renameField.textColor = .labelColor
+        renameField.isBordered = false
+        renameField.isBezeled = false
+        renameField.isEditable = true
+        renameField.isSelectable = true
+        renameField.drawsBackground = true
+        renameField.backgroundColor = .controlBackgroundColor
+        renameField.focusRingType = .exterior
+        renameField.cell?.usesSingleLineMode = true
+        renameField.cell?.wraps = false
+        renameField.cell?.isScrollable = true
+        renameField.wantsLayer = true
+        renameField.layer?.cornerRadius = 4
+        renameField.layer?.cornerCurve = .continuous
+        renameField.isHidden = true
+        addSubview(renameField)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        onLayout?()
     }
 }
 
@@ -497,6 +702,7 @@ private final class ClipboardItemCellView: NSTableCellView {
         titleLabel.cell?.truncatesLastVisibleLine = true
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textField = titleLabel
 
         addSubview(highlightView)
         addSubview(thumbnailView)
@@ -528,6 +734,7 @@ private final class ClipboardItemCellView: NSTableCellView {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        titleLabel.isHidden = false
         thumbnailView.prepareForReuse()
     }
 
@@ -542,12 +749,19 @@ private final class ClipboardItemCellView: NSTableCellView {
     ) {
         self.selected = selected
         updateSelectionColor()
-
         titleLabel.attributedStringValue = SearchHighlight.nsAttributed(
             item.displayTitle(locale: locale),
             query: query,
             font: .preferredFont(forTextStyle: .body))
         thumbnailView.configure(item: item, imageURL: imageURL)
+    }
+
+    func setTitleHidden(_ hidden: Bool) {
+        titleLabel.isHidden = hidden
+    }
+
+    func titleFrame(in view: NSView) -> NSRect {
+        titleLabel.convert(titleLabel.bounds, to: view)
     }
 
     func setSelected(_ selected: Bool) {
