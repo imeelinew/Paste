@@ -35,11 +35,17 @@ final class PalettePanel: NSPanel {
                 return handleOnce(.settings, event: event)
             case kVK_ANSI_Q:
                 return handleOnce(.quit, event: event)
-            case kVK_Delete:
-                return paletteViewModel.handle(.clearQuery)
             default:
                 break
             }
+        }
+
+        if case .rename = paletteViewModel.overlay {
+            return routeRename(event, keyCode: keyCode, modifiers: modifiers)
+        }
+
+        if modifiers == .command, keyCode == kVK_Delete {
+            return paletteViewModel.handle(.clearQuery)
         }
 
         if PaletteShortcut.actions.matches(shortcut) {
@@ -47,6 +53,9 @@ final class PalettePanel: NSPanel {
         }
         if PaletteShortcut.copyToClipboard.matches(shortcut) {
             return handleOnce(.copy, event: event)
+        }
+        if PaletteShortcut.rename.matches(shortcut) {
+            return handleOnce(.rename, event: event)
         }
         if PaletteShortcut.pinToScreen.matches(shortcut) {
             return handleOnce(.pinToScreen, event: event)
@@ -92,6 +101,30 @@ final class PalettePanel: NSPanel {
         // An overlay menu is modal. Unsupported keys must not leak into the search editor or the
         // read-only preview behind it.
         return paletteViewModel.menuOpen
+    }
+
+    private func routeRename(
+        _ event: NSEvent, keyCode: Int, modifiers: NSEvent.ModifierFlags
+    ) -> Bool {
+        if modifiers == .command {
+            switch keyCode {
+            case kVK_ANSI_C, kVK_ANSI_X, kVK_ANSI_V, kVK_ANSI_A:
+                return handleEditingShortcut(keyCode)
+            default:
+                break
+            }
+        }
+        if modifiers.isEmpty {
+            switch keyCode {
+            case kVK_Return, kVK_ANSI_KeypadEnter:
+                return handleOnce(.activate, event: event)
+            case kVK_Escape:
+                return paletteViewModel?.handle(.cancel) ?? false
+            default:
+                return false
+            }
+        }
+        return false
     }
 
     private func handleOnce(_ command: PaletteCommand, event: NSEvent) -> Bool {

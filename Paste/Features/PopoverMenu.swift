@@ -50,6 +50,10 @@ struct PopoverMenuItem {
             title = "Copy to Clipboard"
             icon = nil
             shortcut = PaletteShortcut.copyToClipboard.displayString
+        case .rename:
+            title = "Rename"
+            icon = nil
+            shortcut = PaletteShortcut.rename.displayString
         case .pinToScreen:
             title = "Pin to Screen"
             icon = nil

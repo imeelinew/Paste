@@ -30,6 +30,8 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
     let sourceBundleID: String?
     /// When the entry was pinned. Pinned entries lead the list newest-pin-first and are exempt from retention pruning.
     let pinnedAt: Date?
+    /// User-assigned list title. Nil means the visible title is derived from the copied content.
+    let customTitle: String?
 
     var isPinned: Bool { pinnedAt != nil }
 
@@ -48,7 +50,8 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
 
     fileprivate init(
         id: UUID, kind: Kind, text: String?, imagePath: String?, imageFingerprint: String?,
-        createdAt: Date, sourceBundleID: String?, pinnedAt: Date? = nil
+        createdAt: Date, sourceBundleID: String?, pinnedAt: Date? = nil,
+        customTitle: String? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -58,6 +61,7 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.sourceBundleID = sourceBundleID
         self.pinnedAt = pinnedAt
+        self.customTitle = customTitle
     }
 
     /// Copy with the two fields the store rewrites in place; the pin is stated outright because every rewrite either stamps it or drops the row back into the history.
@@ -65,7 +69,14 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
         ClipboardItem(
             id: id, kind: kind, text: text, imagePath: imagePath,
             imageFingerprint: imageFingerprint, createdAt: createdAt ?? self.createdAt,
-            sourceBundleID: sourceBundleID, pinnedAt: pinnedAt)
+            sourceBundleID: sourceBundleID, pinnedAt: pinnedAt, customTitle: customTitle)
+    }
+
+    func withCustomTitle(_ customTitle: String?) -> ClipboardItem {
+        ClipboardItem(
+            id: id, kind: kind, text: text, imagePath: imagePath,
+            imageFingerprint: imageFingerprint, createdAt: createdAt,
+            sourceBundleID: sourceBundleID, pinnedAt: pinnedAt, customTitle: customTitle)
     }
 
     /// A repeated image is the same entry with a fresh copy time and source application.
@@ -73,13 +84,40 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
         ClipboardItem(
             id: id, kind: kind, text: text, imagePath: imagePath,
             imageFingerprint: imageFingerprint, createdAt: Date(),
-            sourceBundleID: sourceBundleID, pinnedAt: pinnedAt)
+            sourceBundleID: sourceBundleID, pinnedAt: pinnedAt, customTitle: customTitle)
+    }
+
+    /// Visible list/card title: a persisted custom name, otherwise the first line of text or "Image".
+    func displayTitle(locale: Locale) -> String {
+        if let customTitle {
+            let trimmed = customTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return defaultTitle(locale: locale)
+    }
+
+    func defaultTitle(locale: Locale) -> String {
+        switch kind {
+        case .image:
+            return String(localized: "Image", locale: locale)
+        case .text, .code, .link:
+            let text = String((text ?? "").prefix(200)).trimmingCharacters(
+                in: .whitespacesAndNewlines)
+            let lineEnd = text.firstIndex(where: { $0.isNewline }) ?? text.endIndex
+            return String(text[..<lineEnd])
+        }
     }
 
     /// Case-insensitive literal or pinyin match for resident and pinned entries.
     /// Latin-letter queries also match Mandarin pinyin (full spelling or initials) so `nihao` / `nh` can find `你好`.
     func matches(_ query: String) -> Bool {
+        if matches(query, in: customTitle) { return true }
         guard let text else { return false }
+        return matches(query, in: text)
+    }
+
+    private func matches(_ query: String, in text: String?) -> Bool {
+        guard let text, !text.isEmpty else { return false }
         if text.localizedCaseInsensitiveContains(query) { return true }
         guard Pinyin.queryLooksLatin(query) else { return false }
         return Pinyin.matches(query: query, text: text)
@@ -294,6 +332,7 @@ final class ClipboardStore: ObservableObject {
           source_app TEXT,
           pinned_at REAL,
           image_fingerprint TEXT,
+          custom_title TEXT,
           pinyin TEXT,
           pinyin_initials TEXT
         );
@@ -337,6 +376,8 @@ final class ClipboardStore: ObservableObject {
     private var staleImagesStmt: OpaquePointer?
     private var deleteStaleStmt: OpaquePointer?
     private var imageByFingerprintStmt: OpaquePointer?
+    private var itemByIDStmt: OpaquePointer?
+    private var updateTitleStmt: OpaquePointer?
     private var pendingSearchMetadata: [SearchMetadataUpdate] = []
     private var searchMetadataTask: Task<Void, Never>?
 
@@ -452,6 +493,32 @@ final class ClipboardStore: ObservableObject {
         if item.isPinned { unpin(item) } else { pin(item) }
     }
 
+    func item(id: ClipboardItem.ID) -> ClipboardItem? {
+        if let item = items.first(where: { $0.id == id }) { return item }
+        return loadItem(id: id)
+    }
+
+    /// Persist a user-assigned title. Empty or whitespace-only values restore the automatic title.
+    func setCustomTitle(_ title: String?, for id: ClipboardItem.ID) {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stored = (trimmed?.isEmpty == false) ? trimmed : nil
+        let current = item(id: id)
+        guard let current, current.customTitle != stored else { return }
+        guard let stmt = updateTitleStmt else { return }
+        if let stored {
+            sqlite3_bind_text(stmt, 1, stored, -1, SQLITE_TRANSIENT)
+        } else {
+            sqlite3_bind_null(stmt, 1)
+        }
+        sqlite3_bind_text(stmt, 2, id.uuidString, -1, SQLITE_TRANSIENT)
+        guard stepAndReset(stmt) else { return }
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            items[index] = items[index].withCustomTitle(stored)
+        } else {
+            revision &+= 1
+        }
+    }
+
     func remove(_ item: ClipboardItem) {
         guard let stmt = deleteByIDStmt else { return }
         sqlite3_bind_text(stmt, 1, item.id.uuidString, -1, SQLITE_TRANSIENT)
@@ -535,16 +602,17 @@ final class ClipboardStore: ObservableObject {
             usesFTS
             ? """
               SELECT i.id, i.kind, i.text, i.image_path, i.created_at, i.source_app,
-                     i.pinned_at, i.image_fingerprint
+                     i.pinned_at, i.image_fingerprint, i.custom_title
               FROM items_fts f JOIN items i ON i.rowid = f.rowid
               WHERE items_fts MATCH ? ORDER BY f.rowid DESC LIMIT 2000
               """
             : """
               SELECT id, kind, text, image_path, created_at, source_app, pinned_at,
-                     image_fingerprint
+                     image_fingerprint, custom_title
               FROM items
               WHERE text LIKE ? ESCAPE '\\' OR pinyin LIKE ? ESCAPE '\\'
                  OR pinyin_initials LIKE ? ESCAPE '\\'
+                 OR custom_title LIKE ? ESCAPE '\\'
               ORDER BY rowid DESC LIMIT 2000
               """
         var statement: OpaquePointer?
@@ -556,28 +624,42 @@ final class ClipboardStore: ObservableObject {
         }
         defer { sqlite3_finalize(statement) }
 
+        let escaped = query
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+        let pattern = "%\(escaped)%"
+
         if usesFTS {
             let match = "\"" + query.replacingOccurrences(of: "\"", with: "\"\"") + "\""
             sqlite3_bind_text(statement, 1, match, -1, SQLITE_TRANSIENT)
         } else {
-            let escaped = query
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "%", with: "\\%")
-                .replacingOccurrences(of: "_", with: "\\_")
-            let pattern = "%\(escaped)%"
-            for index in 1...3 {
+            for index in 1...4 {
                 sqlite3_bind_text(statement, Int32(index), pattern, -1, SQLITE_TRANSIENT)
             }
         }
 
         var results: [ClipboardItem] = []
+        var seen = Set<UUID>()
         var status = sqlite3_step(statement)
         while status == SQLITE_ROW {
             if Task.isCancelled { return nil }
-            if let item = row(statement) { results.append(item) }
+            if let item = row(statement), seen.insert(item.id).inserted {
+                results.append(item)
+            }
             status = sqlite3_step(statement)
         }
-        return status == SQLITE_DONE ? results : nil
+        guard status == SQLITE_DONE else { return nil }
+
+        if usesFTS {
+            let titleMatches = queryCustomTitles(
+                connection: connection, pattern: pattern)
+            guard let titleMatches else { return nil }
+            for item in titleMatches where seen.insert(item.id).inserted {
+                results.append(item)
+            }
+        }
+        return results
     }
 
     func waitForSearchMetadata() async {
@@ -791,7 +873,51 @@ final class ClipboardStore: ObservableObject {
         } else {
             sqlite3_bind_null(stmt, 8)
         }
+        if let customTitle = item.customTitle {
+            sqlite3_bind_text(stmt, 9, customTitle, -1, SQLITE_TRANSIENT)
+        } else {
+            sqlite3_bind_null(stmt, 9)
+        }
         return stepAndReset(stmt)
+    }
+
+    private func loadItem(id: UUID) -> ClipboardItem? {
+        guard let stmt = itemByIDStmt else { return nil }
+        sqlite3_bind_text(stmt, 1, id.uuidString, -1, SQLITE_TRANSIENT)
+        let status = sqlite3_step(stmt)
+        let item = status == SQLITE_ROW ? Self.row(stmt) : nil
+        sqlite3_reset(stmt)
+        sqlite3_clear_bindings(stmt)
+        return status == SQLITE_ROW || status == SQLITE_DONE ? item : nil
+    }
+
+    private nonisolated static func queryCustomTitles(
+        connection: OpaquePointer, pattern: String
+    ) -> [ClipboardItem]? {
+        let sql = """
+            SELECT id, kind, text, image_path, created_at, source_app, pinned_at,
+                   image_fingerprint, custom_title
+            FROM items
+            WHERE custom_title LIKE ? ESCAPE '\\'
+            ORDER BY rowid DESC LIMIT 200
+            """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(connection, sql, -1, &statement, nil) == SQLITE_OK,
+            let statement
+        else {
+            sqlite3_finalize(statement)
+            return nil
+        }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_text(statement, 1, pattern, -1, SQLITE_TRANSIENT)
+        var results: [ClipboardItem] = []
+        var status = sqlite3_step(statement)
+        while status == SQLITE_ROW {
+            if Task.isCancelled { return nil }
+            if let item = row(statement) { results.append(item) }
+            status = sqlite3_step(statement)
+        }
+        return status == SQLITE_DONE ? results : nil
     }
 
     private func image(matching fingerprint: String) -> ClipboardItem? {
@@ -867,18 +993,20 @@ final class ClipboardStore: ObservableObject {
             sqlite3_exec(db, Self.coreSchema, nil, nil, nil) == SQLITE_OK
         else { return false }
         guard sqlite3_exec(db, Self.searchSchema, nil, nil, nil) == SQLITE_OK else { return false }
+        ensureCustomTitleColumn()
         insertStmt = prepare(
             """
             INSERT INTO items(
-              id, kind, text, image_path, created_at, source_app, pinned_at, image_fingerprint
-            ) VALUES(?,?,?,?,?,?,?,?)
+              id, kind, text, image_path, created_at, source_app, pinned_at, image_fingerprint,
+              custom_title
+            ) VALUES(?,?,?,?,?,?,?,?,?)
             """
         )
         // Every pinned row plus the newest `memoryWindow` unpinned ones, keyed off the floor rowid `windowFloor` looks up. Two indexed branches rather than one `pinned_at IS NOT NULL OR rowid >= ?`: the planner can't drive an OR from an index while holding the row order, so that form reads the whole table.
         loadStmt = prepare(
             """
             SELECT id, kind, text, image_path, created_at, source_app, pinned_at,
-                   image_fingerprint FROM (
+                   image_fingerprint, custom_title FROM (
               SELECT rowid AS rid, * FROM items WHERE rowid >= ?1
               UNION ALL
               SELECT rowid AS rid, * FROM items WHERE pinned_at IS NOT NULL AND rowid < ?1
@@ -898,12 +1026,37 @@ final class ClipboardStore: ObservableObject {
         imageByFingerprintStmt = prepare(
             """
             SELECT id, kind, text, image_path, created_at, source_app, pinned_at,
-                   image_fingerprint
+                   image_fingerprint, custom_title
             FROM items WHERE image_fingerprint = ? LIMIT 1
             """)
+        itemByIDStmt = prepare(
+            """
+            SELECT id, kind, text, image_path, created_at, source_app, pinned_at,
+                   image_fingerprint, custom_title
+            FROM items WHERE id = ? LIMIT 1
+            """)
+        updateTitleStmt = prepare("UPDATE items SET custom_title = ? WHERE id = ?")
         return insertStmt != nil && loadStmt != nil && windowFloorStmt != nil
             && deleteByIDStmt != nil && pinStmt != nil && staleImagesStmt != nil
             && deleteStaleStmt != nil && imageByFingerprintStmt != nil
+            && itemByIDStmt != nil && updateTitleStmt != nil
+    }
+
+    private func ensureCustomTitleColumn() {
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, "PRAGMA table_info(items)", -1, &stmt, nil) == SQLITE_OK else {
+            return
+        }
+        var hasColumn = false
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let name = Self.columnString(stmt, 1), name == "custom_title" {
+                hasColumn = true
+                break
+            }
+        }
+        guard !hasColumn else { return }
+        sqlite3_exec(db, "ALTER TABLE items ADD COLUMN custom_title TEXT", nil, nil, nil)
     }
 
     private func prepare(_ sql: String) -> OpaquePointer? {
@@ -923,7 +1076,8 @@ final class ClipboardStore: ObservableObject {
     private func closeDatabase() {
         [
             insertStmt, loadStmt, windowFloorStmt, deleteByIDStmt, pinStmt,
-            staleImagesStmt, deleteStaleStmt, imageByFingerprintStmt,
+            staleImagesStmt, deleteStaleStmt, imageByFingerprintStmt, itemByIDStmt,
+            updateTitleStmt,
         ].forEach { sqlite3_finalize($0) }
         insertStmt = nil
         loadStmt = nil
@@ -933,6 +1087,8 @@ final class ClipboardStore: ObservableObject {
         staleImagesStmt = nil
         deleteStaleStmt = nil
         imageByFingerprintStmt = nil
+        itemByIDStmt = nil
+        updateTitleStmt = nil
         sqlite3_close_v2(db)
         db = nil
     }
@@ -946,7 +1102,8 @@ final class ClipboardStore: ObservableObject {
             id: id, kind: storedKind, text: columnString(stmt, 2), imagePath: columnString(stmt, 3),
             imageFingerprint: columnString(stmt, 7),
             createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4)),
-            sourceBundleID: columnString(stmt, 5), pinnedAt: columnDate(stmt, 6))
+            sourceBundleID: columnString(stmt, 5), pinnedAt: columnDate(stmt, 6),
+            customTitle: columnString(stmt, 8))
     }
 
     private nonisolated static func columnDate(_ stmt: OpaquePointer?, _ index: Int32) -> Date? {

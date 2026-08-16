@@ -199,12 +199,20 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
 
             let newRows = Self.makeRows(results)
             let contentChanged = rows.map(\.id) != newRows.map(\.id)
+            let titleChanged = zip(rows, newRows).contains { lhs, rhs in
+                switch (lhs, rhs) {
+                case (.item(let old), .item(let new)):
+                    return old.customTitle != new.customTitle
+                default:
+                    return false
+                }
+            }
             let appearanceChanged = self.query != query || self.locale != locale
             rows = newRows
             self.query = query
             self.locale = locale
 
-            if contentChanged || appearanceChanged {
+            if contentChanged || titleChanged || appearanceChanged {
                 tableView.reloadData()
             }
             applySelection(selectedID, to: tableView)
@@ -288,7 +296,7 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
                     selected: item.id == selectedID,
                     query: query,
                     imageURL: store?.imageURL(for: item),
-                    imageTitle: String(localized: "Image", locale: locale)
+                    locale: locale
                 )
                 return view
             }
@@ -530,24 +538,15 @@ private final class ClipboardItemCellView: NSTableCellView {
     }
 
     func configure(
-        item: ClipboardItem, selected: Bool, query: String, imageURL: URL?, imageTitle: String
+        item: ClipboardItem, selected: Bool, query: String, imageURL: URL?, locale: Locale
     ) {
         self.selected = selected
         updateSelectionColor()
 
-        switch item.kind {
-        case .text, .code, .link:
-            let text = String((item.text ?? "").prefix(200)).trimmingCharacters(
-                in: .whitespacesAndNewlines)
-            let lineEnd = text.firstIndex(where: { $0.isNewline }) ?? text.endIndex
-            let preview = String(text[..<lineEnd])
-            titleLabel.attributedStringValue = SearchHighlight.nsAttributed(
-                preview, query: query, font: .preferredFont(forTextStyle: .body))
-        case .image:
-            titleLabel.stringValue = imageTitle
-            titleLabel.font = .preferredFont(forTextStyle: .body)
-            titleLabel.textColor = .labelColor
-        }
+        titleLabel.attributedStringValue = SearchHighlight.nsAttributed(
+            item.displayTitle(locale: locale),
+            query: query,
+            font: .preferredFont(forTextStyle: .body))
         thumbnailView.configure(item: item, imageURL: imageURL)
     }
 

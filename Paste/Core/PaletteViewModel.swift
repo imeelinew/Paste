@@ -19,14 +19,23 @@ enum PaletteOverlay: Equatable {
     case none
     case actions(ClipboardItem.ID)
     case appMenu
+    case rename(ClipboardItem.ID)
 
     var isOpen: Bool { self != .none }
+
+    var isMenu: Bool {
+        switch self {
+        case .actions, .appMenu: return true
+        default: return false
+        }
+    }
 }
 
 enum PaletteCommand: Equatable {
     case move(Int)
     case activate
     case copy
+    case rename
     case cancel
     case toggleActions
     case pinToScreen
@@ -46,6 +55,7 @@ enum PaletteMenuAction: Equatable {
     case paste(ClipboardItem)
     case pasteKeepingOpen(ClipboardItem)
     case copy(ClipboardItem)
+    case rename(ClipboardItem)
     case pinToScreen(ClipboardItem)
     case togglePin(ClipboardItem)
     case revealInFinder(ClipboardItem)
@@ -79,6 +89,7 @@ final class PaletteViewModel: ObservableObject {
         }
     }
     @Published var menuSelection = 0
+    @Published var renameDraft = ""
 
     var onMenuOpenChanged: ((Bool) -> Void)?
 
@@ -96,7 +107,7 @@ final class PaletteViewModel: ObservableObject {
             }
     }
 
-    var menuOpen: Bool { overlay.isOpen }
+    var menuOpen: Bool { overlay.isMenu }
 
     /// Space opens Quick Look for a selected image while the palette is not searching.
     var canToggleQuickLook: Bool {
@@ -127,6 +138,7 @@ final class PaletteViewModel: ObservableObject {
                 .paste(item),
                 .pasteKeepingOpen(item),
                 .copy(item),
+                .rename(item),
             ]
             if item.canPinToScreen {
                 actions.append(.pinToScreen(item))
@@ -137,6 +149,8 @@ final class PaletteViewModel: ObservableObject {
             }
             actions.append(.delete(item))
             return actions
+        case .rename:
+            return []
         }
     }
 
@@ -196,7 +210,9 @@ final class PaletteViewModel: ObservableObject {
                 moveSelection(delta)
             }
         case .activate:
-            if menuOpen {
+            if case .rename = overlay {
+                commitRename()
+            } else if menuOpen {
                 activateMenuItem(at: menuSelection)
             } else if searchReady, let item = selectedItem {
                 core.paste(item)
@@ -205,10 +221,15 @@ final class PaletteViewModel: ObservableObject {
             guard searchReady, let item = actionTarget else { return true }
             overlay = .none
             core.copyToClipboard(item)
+        case .rename:
+            guard searchReady, let item = actionTarget else { return true }
+            beginRename(item)
         case .cancel:
             if imageQuickLookOpen {
                 imageQuickLookOpen = false
                 ImageQuickLook.close()
+            } else if case .rename = overlay {
+                overlay = .none
             } else if menuOpen {
                 overlay = .none
                 menuSelection = 0
@@ -257,7 +278,7 @@ final class PaletteViewModel: ObservableObject {
             return item(withID: id)
         case .none:
             return selectedItem
-        case .appMenu:
+        case .appMenu, .rename:
             return nil
         }
     }
@@ -298,6 +319,8 @@ final class PaletteViewModel: ObservableObject {
             core.pasteKeepingWindowOpen(item)
         case .copy(let item):
             core.copyToClipboard(item)
+        case .rename(let item):
+            beginRename(item)
         case .pinToScreen(let item):
             core.pinToScreen(item)
         case .togglePin(let item):
@@ -319,6 +342,18 @@ final class PaletteViewModel: ObservableObject {
     private func togglePin(_ item: ClipboardItem) {
         core.clipboardStore.togglePinned(item)
         select(item.id, follow: true)
+    }
+
+    private func beginRename(_ item: ClipboardItem) {
+        overlay = .rename(item.id)
+        menuSelection = 0
+        renameDraft = item.displayTitle(locale: core.settings.language.locale)
+    }
+
+    private func commitRename() {
+        guard case .rename(let id) = overlay else { return }
+        overlay = .none
+        core.clipboardStore.setCustomTitle(renameDraft, for: id)
     }
 
     private func queryChanged() {
@@ -384,10 +419,13 @@ final class PaletteViewModel: ObservableObject {
             selectedID = newResults[index].id
         }
 
-        if case .actions(let id) = overlay,
-            !newResults.contains(where: { $0.id == id })
-        {
-            overlay = .none
+        switch overlay {
+        case .actions(let id), .rename(let id):
+            if !newResults.contains(where: { $0.id == id }) {
+                overlay = .none
+            }
+        case .none, .appMenu:
+            break
         }
     }
 

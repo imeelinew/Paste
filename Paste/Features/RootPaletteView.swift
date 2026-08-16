@@ -5,6 +5,7 @@ struct RootPaletteView: View {
     @ObservedObject private var settings = AppCore.shared.settings
 
     @FocusState private var searchFocused: Bool
+    @FocusState private var renameFocused: Bool
     @State private var scroll = ScrollIntent(kind: .top)
 
     private var isQueryEmpty: Bool {
@@ -17,6 +18,11 @@ struct RootPaletteView: View {
     }
 
     private var showAppMenu: Bool { vm.overlay == .appMenu }
+
+    private var showRename: Bool {
+        if case .rename = vm.overlay { return true }
+        return false
+    }
 
     @MainActor
     private var menuItems: [PopoverMenuItem] {
@@ -86,6 +92,12 @@ struct RootPaletteView: View {
                 .transition(Self.menuTransition(.bottomTrailing))
             }
         }
+        .overlay {
+            if showRename {
+                renameOverlay
+                    .transition(Self.menuTransition(.center))
+            }
+        }
         // Animate the state transition, not individual input paths. Mouse, keyboard, and future
         // commands all receive the same menu entrance and exit automatically.
         .animation(Self.menuAnimation, value: vm.overlay)
@@ -94,6 +106,14 @@ struct RootPaletteView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
         .onChange(of: vm.focusToken) {
             requestSearchFocus()
+        }
+        .onChange(of: vm.overlay) {
+            if showRename {
+                requestRenameFocus()
+            } else if renameFocused {
+                renameFocused = false
+                requestSearchFocus()
+            }
         }
         .onChange(of: vm.resetToken) {
             scroll = ScrollIntent(kind: .top)
@@ -176,6 +196,31 @@ struct RootPaletteView: View {
         .frosted(in: Capsule())
     }
 
+    private var renameOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.001)
+                .contentShape(Rectangle())
+                .onTapGesture { vm.handle(.cancel) }
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                Text("Rename")
+                    .font(Theme.Typography.menuRow)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                TextField("", text: $vm.renameDraft)
+                    .textFieldStyle(.plain)
+                    .font(Theme.Typography.searchField)
+                    .focused($renameFocused)
+                    .onSubmit { vm.handle(.activate) }
+            }
+            .padding(Theme.Spacing.xl + Theme.Spacing.sm)
+            .frame(width: 320)
+            .glassEffect(
+                .regular,
+                in: RoundedRectangle(cornerRadius: Theme.Radius.menuPanel, style: .continuous)
+            )
+        }
+    }
+
     private func activateMenuItem(_ index: Int) {
         vm.activateMenuItem(at: index)
     }
@@ -183,10 +228,21 @@ struct RootPaletteView: View {
     /// `@FocusState` can remain logically true after AppKit has lost its field editor. Pulse the
     /// binding so every window-level focus request produces a fresh first-responder transition.
     private func requestSearchFocus() {
+        guard !showRename else { return }
         searchFocused = false
         Task { @MainActor in
             await Task.yield()
+            guard !showRename else { return }
             searchFocused = true
+        }
+    }
+
+    private func requestRenameFocus() {
+        searchFocused = false
+        renameFocused = true
+        Task { @MainActor in
+            await Task.yield()
+            renameFocused = true
         }
     }
 

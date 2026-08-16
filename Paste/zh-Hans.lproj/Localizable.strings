@@ -58,10 +58,12 @@
 "Pinned Code" = "钉选代码";
 "Pinned Image" = "钉选图片";
 "Pinned Image Size" = "钉选图片大小";
+"Pinned Opacity" = "钉选不透明度";
 "Pinned Text Size" = "钉选文字大小";
 "Pinned Items" = "固定项";
 "Pinned Markdown" = "钉选 Markdown";
 "Regular Items" = "普通项";
+"Rename" = "重命名";
 "Small" = "小";
 "Medium" = "中";
 "Large" = "大";
@@ -75,6 +77,7 @@
 "Zoom In Pinned Image" = "放大钉选图片";
 "Zoom Out Pinned Image" = "缩小钉选图片";
 "Fit Pinned Image to Screen" = "使钉选图片适合屏幕";
+"Hide Pinned Cards" = "隐藏钉选卡片";
 "Pinned" = "已固定";
 "Quit" = "退出";
 "Quit Paste" = "退出 Paste";

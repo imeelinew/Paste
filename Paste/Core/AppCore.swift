@@ -31,14 +31,16 @@ final class AppCore: ObservableObject {
         activationPolicy.reset()
         settings.appearance.apply()
         updateService.start()
-        pinnedImageWindows.restore()
-
         clipboardStore.maxAge = settings.clipboardRetention.maxAge
         clipboardStore.load()
+        pinnedImageWindows.restore()
         clipboardManager.start()
 
         KeyboardShortcuts.onKeyUp(for: .toggleClipboard) { [weak self] in
             self?.togglePalette()
+        }
+        KeyboardShortcuts.onKeyUp(for: .hidePinnedCards) { [weak self] in
+            self?.pinnedImageWindows.toggleParked()
         }
     }
 
@@ -165,6 +167,7 @@ final class AppCore: ObservableObject {
 
     func pinToScreen(_ item: ClipboardItem) {
         let locale = settings.language.locale
+        let title = item.displayTitle(locale: locale)
         switch item.kind {
         case .image:
             guard let url = clipboardStore.imageURL(for: item) else { return }
@@ -172,7 +175,7 @@ final class AppCore: ObservableObject {
             pinnedImageWindows.show(
                 itemID: item.id,
                 url: url,
-                title: String(localized: "Pinned Image", locale: locale),
+                title: title,
                 preferredLongEdge: { [weak settings] in
                     settings?.pinnedImageSize.longestEdge ?? PinnedImageSize.medium.longestEdge
                 }
@@ -185,7 +188,7 @@ final class AppCore: ObservableObject {
                     itemID: item.id,
                     text: text,
                     style: .markdown,
-                    title: String(localized: "Pinned Markdown", locale: locale)
+                    title: title
                 )
             } else if item.kind == .code {
                 hidePalette()
@@ -193,7 +196,7 @@ final class AppCore: ObservableObject {
                     itemID: item.id,
                     text: text,
                     style: .code,
-                    title: String(localized: "Pinned Code", locale: locale)
+                    title: title
                 )
             }
         case .link:

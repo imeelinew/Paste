@@ -1,5 +1,7 @@
 import AppKit
+import Combine
 import KeyboardShortcuts
+import QuartzCore
 import SwiftUI
 
 private enum PinnedImageCommand {
@@ -267,11 +269,17 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
     private var observesExclusiveFullScreen = false
     private var restoredSession = false
     private let sessionStore = PinnedCardSessionStore()
+    private var titleObserver: AnyCancellable?
+    private var opacityObserver: AnyCancellable?
+    private var parkedHomeFrames: [ClipboardItem.ID: NSRect] = [:]
+    private var isUnparking = false
 
     func restore() {
         guard !restoredSession else { return }
         restoredSession = true
         observeExclusiveFullScreenIfNeeded()
+        observeTitlesIfNeeded()
+        observeOpacityIfNeeded()
 
         for record in sessionStore.records {
             let restored: Bool
@@ -290,10 +298,19 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
     }
 
     func flushPersistence() {
+        persistParkedHomeFrames()
         persistenceTask?.cancel()
         persistenceTask = nil
         sessionStore.saveNow()
         lastPersistenceSave = Date()
+    }
+
+    func toggleParked() {
+        if isParked {
+            unpark()
+        } else {
+            park()
+        }
     }
 
     func show(
@@ -303,6 +320,8 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         preferredLongEdge: @escaping () -> CGFloat
     ) {
         observeExclusiveFullScreenIfNeeded()
+        observeTitlesIfNeeded()
+        observeOpacityIfNeeded()
         if let panel = panels[itemID] {
             reveal(panel, itemID: itemID)
             return
@@ -338,6 +357,7 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
 
         install(
             PinnedImageContent(
+                itemID: itemID,
                 url: contentURL,
                 decodeMaxPixel: imageDecodeMaxPixel,
                 onClose: { [weak self] in self?.close(itemID) }
@@ -358,6 +378,8 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         title: String
     ) {
         observeExclusiveFullScreenIfNeeded()
+        observeTitlesIfNeeded()
+        observeOpacityIfNeeded()
         if let panel = panels[itemID] {
             reveal(panel, itemID: itemID)
             return
@@ -383,6 +405,7 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         }
         install(
             PinnedTextContent(
+                itemID: itemID,
                 text: text,
                 style: style,
                 viewport: PinnedTextViewport(),
@@ -415,7 +438,8 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
             preferredLongEdge: preferredLongEdge()
         )
         let panel = makePanel(
-            title: String(localized: "Pinned Image", locale: settings.language.locale),
+            title: cardTitle(for: record.id, fallback: String(
+                localized: "Pinned Image", locale: settings.language.locale)),
             initialSize: initialSize,
             aspectRatio: imageSize,
             minSize: PinnedImageLayout.minimumSize(
@@ -435,6 +459,7 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         }
         install(
             PinnedImageContent(
+                itemID: record.id,
                 url: url,
                 decodeMaxPixel: imageDecodeMaxPixel,
                 onClose: { [weak self] in self?.close(record.id) }
@@ -449,19 +474,16 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         guard let text = sessionStore.text(for: record) else { return false }
         let visibleFrame = visibleFrame(for: record.frame.rect)
         let initialSize = PinnedTextLayout.initialSize(text: text, visibleFrame: visibleFrame)
-        let title: String
-        switch style {
-        case .markdown:
-            title = String(
+        let fallback =
+            style == .markdown
+            ? String(
                 localized: "Pinned Markdown",
                 locale: AppCore.shared.settings.language.locale)
-        case .code:
-            title = String(
+            : String(
                 localized: "Pinned Code",
                 locale: AppCore.shared.settings.language.locale)
-        }
         let panel = makePanel(
-            title: title,
+            title: cardTitle(for: record.id, fallback: fallback),
             initialSize: initialSize,
             aspectRatio: nil,
             minSize: PinnedTextLayout.minimumSize
@@ -479,6 +501,7 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         }
         install(
             PinnedTextContent(
+                itemID: record.id,
                 text: text,
                 style: style,
                 viewport: viewport,
@@ -495,7 +518,7 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
 
     private func restore(_ panel: PinnedImagePanel, record: PinnedCardRecord) {
         let frame = restoredFrame(record.frame.rect, minimumSize: panel.contentMinSize)
-        panel.alphaValue = 1
+        applyVisibleAlpha(to: panel)
         panel.setFrame(frame, display: false)
         panels[record.id] = panel
         if hidesForExclusiveFullScreen(panel) {
@@ -570,13 +593,13 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
 
     /// Bring an existing panel forward unless its display is in exclusive fullscreen.
     private func reveal(_ panel: PinnedImagePanel, itemID: ClipboardItem.ID) {
+        if isParked { unpark() }
         if hidesForExclusiveFullScreen(panel) {
             hideForFullscreen(itemID, panel)
             return
         }
         hiddenForFullscreen.remove(itemID)
-        panel.alphaValue = 1
-        panel.ignoresMouseEvents = false
+        applyVisibleAlpha(to: panel)
         activate(panel)
     }
 
@@ -587,6 +610,8 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         panels.removeValue(forKey: itemID)
         closingPanels.remove(itemID)
         hiddenForFullscreen.remove(itemID)
+        parkedHomeFrames.removeValue(forKey: itemID)
+        if parkedHomeFrames.isEmpty { isUnparking = false }
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -632,11 +657,104 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
     }
 
     private func persistFrame(from notification: Notification) {
-        guard let panel = notification.object as? PinnedImagePanel,
+        guard !isParked, let panel = notification.object as? PinnedImagePanel,
             let itemID = itemID(for: panel),
             sessionStore.updateFrame(itemID: itemID, frame: panel.frame)
         else { return }
         schedulePersistence()
+    }
+
+    private var isParked: Bool { !parkedHomeFrames.isEmpty }
+
+    private func park() {
+        if isUnparking {
+            isUnparking = false
+            slideParkedCardsOffscreen()
+            return
+        }
+
+        let candidates = panels.filter { itemID, _ in
+            !closingPanels.contains(itemID) && !hiddenForFullscreen.contains(itemID)
+        }
+        guard !candidates.isEmpty else { return }
+
+        var homes: [ClipboardItem.ID: NSRect] = [:]
+        for (itemID, panel) in candidates {
+            homes[itemID] = panel.frame
+        }
+        parkedHomeFrames = homes
+        slideParkedCardsOffscreen()
+    }
+
+    private func unpark() {
+        guard isParked, !isUnparking else { return }
+        isUnparking = true
+        let homes = parkedHomeFrames.mapValues { frame in
+            restoredFrame(frame, minimumSize: CGSize(width: 44, height: 44))
+        }
+        for (itemID, home) in homes {
+            guard let panel = panels[itemID], !closingPanels.contains(itemID) else { continue }
+            if !panel.isVisible {
+                let screen = bestScreen(for: home)?.frame ?? home
+                panel.setFrame(PinnedCardPark.offscreenFrame(home, screen: screen), display: false)
+            }
+            applyVisibleAlpha(to: panel)
+            if hidesForExclusiveFullScreen(panel) {
+                hideForFullscreen(itemID, panel)
+            } else {
+                hiddenForFullscreen.remove(itemID)
+                panel.orderFrontRegardless()
+            }
+        }
+        animateParkedFrames(homes) { [weak self] in
+            guard let self else { return }
+            for (itemID, home) in self.parkedHomeFrames {
+                _ = self.sessionStore.updateFrame(itemID: itemID, frame: home)
+            }
+            self.parkedHomeFrames.removeAll()
+            self.isUnparking = false
+            self.schedulePersistence()
+        }
+    }
+
+    private func slideParkedCardsOffscreen() {
+        var targets: [ClipboardItem.ID: NSRect] = [:]
+        for (itemID, home) in parkedHomeFrames {
+            guard panels[itemID] != nil, !closingPanels.contains(itemID) else { continue }
+            let screen = bestScreen(for: home)?.frame ?? home
+            targets[itemID] = PinnedCardPark.offscreenFrame(home, screen: screen)
+        }
+        guard !targets.isEmpty else { return }
+        animateParkedFrames(targets) { [weak self] in
+            guard let self else { return }
+            for itemID in self.parkedHomeFrames.keys {
+                self.panels[itemID]?.orderOut(nil)
+            }
+        }
+    }
+
+    private func persistParkedHomeFrames() {
+        for (itemID, frame) in parkedHomeFrames {
+            _ = sessionStore.updateFrame(itemID: itemID, frame: frame)
+        }
+    }
+
+    private func animateParkedFrames(
+        _ frames: [ClipboardItem.ID: NSRect],
+        completion: (@MainActor @Sendable () -> Void)? = nil
+    ) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = PinnedCardPark.duration
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.4, 0.0, 0.2, 1.0)
+            for (itemID, frame) in frames {
+                guard let panel = panels[itemID], !closingPanels.contains(itemID) else { continue }
+                panel.animator().setFrame(frame, display: true)
+            }
+        } completionHandler: {
+            Task { @MainActor in
+                completion?()
+            }
+        }
     }
 
     private func updateViewport(itemID: ClipboardItem.ID, viewport: PinnedTextViewport) {
@@ -738,6 +856,61 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         panel.setFrame(NSRect(origin: origin, size: size), display: true, animate: true)
     }
 
+    private func cardTitle(for itemID: ClipboardItem.ID, fallback: String) -> String {
+        let locale = AppCore.shared.settings.language.locale
+        let title = AppCore.shared.clipboardStore.item(id: itemID)?.displayTitle(locale: locale)
+            ?? ""
+        return title.isEmpty ? fallback : title
+    }
+
+    private func observeTitlesIfNeeded() {
+        guard titleObserver == nil else { return }
+        titleObserver = AppCore.shared.clipboardStore.$revision
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.syncPanelTitles()
+            }
+    }
+
+    private func observeOpacityIfNeeded() {
+        guard opacityObserver == nil else { return }
+        opacityObserver = AppCore.shared.settings.$pinnedWindowOpacity
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.applyVisibleAlphaToOpenPanels()
+            }
+    }
+
+    private var visibleAlpha: CGFloat {
+        AppCore.shared.settings.pinnedWindowAlpha
+    }
+
+    private func applyVisibleAlpha(to panel: PinnedImagePanel) {
+        let alpha = visibleAlpha
+        panel.alphaValue = alpha
+        panel.ignoresMouseEvents = alpha <= 0
+    }
+
+    private func applyVisibleAlphaToOpenPanels() {
+        for (itemID, panel) in panels {
+            guard !closingPanels.contains(itemID), !hiddenForFullscreen.contains(itemID) else {
+                continue
+            }
+            applyVisibleAlpha(to: panel)
+        }
+    }
+
+    private func syncPanelTitles() {
+        let locale = AppCore.shared.settings.language.locale
+        let store = AppCore.shared.clipboardStore
+        for (id, panel) in panels {
+            let title = store.item(id: id)?.displayTitle(locale: locale) ?? ""
+            if !title.isEmpty, panel.title != title {
+                panel.title = title
+            }
+        }
+    }
+
     private func makePanel(
         title: String,
         initialSize: CGSize,
@@ -797,14 +970,15 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         panels[itemID] = panel
         if hidesForExclusiveFullScreen(panel) {
             panel.setFrame(finalFrame, display: false)
-            panel.alphaValue = 1
+            applyVisibleAlpha(to: panel)
             hideForFullscreen(itemID, panel)
             return finalFrame
         }
         activate(panel)
+        panel.ignoresMouseEvents = visibleAlpha <= 0
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.18
-            panel.animator().alphaValue = 1
+            panel.animator().alphaValue = visibleAlpha
             panel.animator().setFrame(finalFrame, display: true)
         }
         return finalFrame
@@ -880,8 +1054,8 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
             if hidesForExclusiveFullScreen(panel) {
                 hideForFullscreen(itemID, panel)
             } else if hiddenForFullscreen.remove(itemID) != nil {
-                panel.alphaValue = 1
-                panel.ignoresMouseEvents = false
+                guard parkedHomeFrames[itemID] == nil else { continue }
+                applyVisibleAlpha(to: panel)
                 panel.orderFrontRegardless()
             }
         }
@@ -1053,6 +1227,19 @@ enum PinnedTextLayout {
     }
 }
 
+private enum PinnedCardPark {
+    static let duration: TimeInterval = 0.34
+    static let margin: CGFloat = 12
+
+    static func offscreenFrame(_ frame: NSRect, screen: NSRect) -> NSRect {
+        let x =
+            frame.midX < screen.midX
+            ? screen.minX - frame.width - margin
+            : screen.maxX + margin
+        return NSRect(x: x, y: frame.minY, width: frame.width, height: frame.height)
+    }
+}
+
 private final class PinnedImagePanel: NSPanel {
     var onCommand: ((PinnedImageCommand) -> Void)?
 
@@ -1060,17 +1247,27 @@ private final class PinnedImagePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown, let command = command(for: event) {
-            if !event.isARepeat || command.allowsKeyRepeat {
-                onCommand?(command)
+        if event.type == .keyDown {
+            if isEditingTitle {
+                super.sendEvent(event)
+                return
             }
-            return
+            if let command = command(for: event) {
+                if !event.isARepeat || command.allowsKeyRepeat {
+                    onCommand?(command)
+                }
+                return
+            }
         }
         if event.type == .magnify {
             resize(by: max(1 + event.magnification, 0.1))
             return
         }
         super.sendEvent(event)
+    }
+
+    private var isEditingTitle: Bool {
+        (firstResponder as? NSTextView)?.isEditable == true
     }
 
     func resize(by requestedScale: CGFloat) {
@@ -1109,6 +1306,7 @@ private final class PinnedImagePanel: NSPanel {
 
 @MainActor
 private struct PinnedImageContent: View {
+    let itemID: ClipboardItem.ID
     let url: URL
     let decodeMaxPixel: CGFloat
     let onClose: () -> Void
@@ -1117,7 +1315,7 @@ private struct PinnedImageContent: View {
     @State private var loadFailed = false
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        ZStack(alignment: .top) {
             Color(nsColor: .windowBackgroundColor)
 
             if let image {
@@ -1140,12 +1338,11 @@ private struct PinnedImageContent: View {
             PinnedImageDragSurface()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            PinnedCardButton(
-                systemName: "xmark",
-                label: "Close Pinned Image",
-                action: onClose
-            )
-            .padding(10)
+            PinnedCardChrome(itemID: itemID, closeLabel: "Close Pinned Image", onClose: onClose) {
+                Color.clear
+                    .frame(width: 28, height: 28)
+                    .allowsHitTesting(false)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
@@ -1160,6 +1357,7 @@ private struct PinnedImageContent: View {
 
 @MainActor
 private struct PinnedTextContent: View {
+    let itemID: ClipboardItem.ID
     let text: String
     let style: PinnedTextStyle
     let onViewportChange: (PinnedTextViewport) -> Void
@@ -1169,12 +1367,14 @@ private struct PinnedTextContent: View {
     @State private var viewport: PinnedTextViewport
 
     init(
+        itemID: ClipboardItem.ID,
         text: String,
         style: PinnedTextStyle,
         viewport: PinnedTextViewport,
         onViewportChange: @escaping (PinnedTextViewport) -> Void,
         onClose: @escaping () -> Void
     ) {
+        self.itemID = itemID
         self.text = text
         self.style = style
         self.onViewportChange = onViewportChange
@@ -1183,7 +1383,7 @@ private struct PinnedTextContent: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        ZStack(alignment: .top) {
             Color(nsColor: .windowBackgroundColor)
 
             Group {
@@ -1215,32 +1415,25 @@ private struct PinnedTextContent: View {
                 .frame(height: 44)
                 .frame(maxWidth: .infinity, alignment: .top)
 
-            PinnedCardButton(
-                systemName: "xmark",
-                label: "Close Pinned Item",
-                action: onClose
-            )
-            .padding(10)
+            PinnedCardChrome(itemID: itemID, closeLabel: "Close Pinned Item", onClose: onClose) {
+                HStack(spacing: 8) {
+                    PinnedCardButton(
+                        systemName: "minus",
+                        label: "Decrease Pinned Text Size"
+                    ) {
+                        changeTextSize(by: -PinnedTextSize.step)
+                    }
+                    .disabled(settings.pinnedTextSize <= PinnedTextSize.minimum)
 
-            HStack(spacing: 8) {
-                PinnedCardButton(
-                    systemName: "minus",
-                    label: "Decrease Pinned Text Size"
-                ) {
-                    changeTextSize(by: -PinnedTextSize.step)
+                    PinnedCardButton(
+                        systemName: "plus",
+                        label: "Increase Pinned Text Size"
+                    ) {
+                        changeTextSize(by: PinnedTextSize.step)
+                    }
+                    .disabled(settings.pinnedTextSize >= PinnedTextSize.maximum)
                 }
-                .disabled(settings.pinnedTextSize <= PinnedTextSize.minimum)
-
-                PinnedCardButton(
-                    systemName: "plus",
-                    label: "Increase Pinned Text Size"
-                ) {
-                    changeTextSize(by: PinnedTextSize.step)
-                }
-                .disabled(settings.pinnedTextSize >= PinnedTextSize.maximum)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
@@ -1262,6 +1455,110 @@ private struct PinnedTextContent: View {
         guard viewport.selection != selection else { return }
         viewport.selection = selection
         onViewportChange(viewport)
+    }
+}
+
+private struct PinnedCardChrome<Trailing: View>: View {
+    let itemID: ClipboardItem.ID
+    let closeLabel: LocalizedStringKey
+    let onClose: () -> Void
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        ZStack {
+            HStack(spacing: 8) {
+                PinnedCardButton(
+                    systemName: "xmark",
+                    label: closeLabel,
+                    action: onClose
+                )
+                Spacer(minLength: 0)
+                    .allowsHitTesting(false)
+                trailing
+            }
+            PinnedCardTitle(itemID: itemID)
+                .padding(.horizontal, 44)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct PinnedCardTitle: View {
+    let itemID: ClipboardItem.ID
+
+    @ObservedObject private var store = AppCore.shared.clipboardStore
+    @ObservedObject private var settings = AppCore.shared.settings
+    @State private var isEditing = false
+    @State private var draft = ""
+    @State private var skipCommitOnBlur = false
+    @FocusState private var focused: Bool
+
+    private var title: String {
+        store.item(id: itemID)?.displayTitle(locale: settings.language.locale) ?? ""
+    }
+
+    var body: some View {
+        Group {
+            if isEditing {
+                TextField("", text: $draft)
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 12, weight: .semibold))
+                    .focused($focused)
+                    .onSubmit(commit)
+                    .onExitCommand(perform: cancel)
+            } else {
+                Button(action: beginEditing) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .buttonStyle(.plain)
+                .help(Text("Rename"))
+                .accessibilityLabel(Text("Rename"))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(minWidth: 48, maxWidth: 280)
+        .frosted(in: Capsule())
+        .onChange(of: isEditing) {
+            if isEditing {
+                focused = true
+            }
+        }
+        .onChange(of: focused) {
+            if isEditing, !focused {
+                if skipCommitOnBlur {
+                    skipCommitOnBlur = false
+                    isEditing = false
+                } else {
+                    commit()
+                }
+            }
+        }
+    }
+
+    private func beginEditing() {
+        skipCommitOnBlur = false
+        draft = title
+        isEditing = true
+    }
+
+    private func commit() {
+        guard isEditing else { return }
+        isEditing = false
+        skipCommitOnBlur = false
+        focused = false
+        store.setCustomTitle(draft, for: itemID)
+    }
+
+    private func cancel() {
+        skipCommitOnBlur = true
+        focused = false
     }
 }
 

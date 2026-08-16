@@ -14,6 +14,10 @@ extension KeyboardShortcuts.Name {
         "paletteCopyToClipboard",
         default: .init(.return, modifiers: [.command])
     )
+    static let paletteRename = Self(
+        "paletteRename",
+        default: .init(.r, modifiers: [.command])
+    )
     static let palettePinToScreen = Self("palettePinToScreen")
     static let paletteTogglePin = Self(
         "paletteTogglePin",
@@ -48,17 +52,23 @@ extension KeyboardShortcuts.Name {
         "pinnedImageResetSize",
         default: .init(.zero, modifiers: [.command])
     )
+    static let hidePinnedCards = Self(
+        "hidePinnedCards",
+        default: .init(.h, modifiers: [.command, .shift])
+    )
 }
 
 enum PaletteShortcut {
     case actions
     case copyToClipboard
+    case rename
     case pinToScreen
     case togglePin
     case showInFinder
 
     private static let actionsName = local(.paletteActions)
     private static let copyToClipboardName = local(.paletteCopyToClipboard)
+    private static let renameName = local(.paletteRename)
     private static let pinToScreenName = local(.palettePinToScreen)
     private static let togglePinName = local(.paletteTogglePin)
     private static let showInFinderName = local(.paletteShowInFinder)
@@ -67,6 +77,7 @@ enum PaletteShortcut {
         switch self {
         case .actions: Self.actionsName
         case .copyToClipboard: Self.copyToClipboardName
+        case .rename: Self.renameName
         case .pinToScreen: Self.pinToScreenName
         case .togglePin: Self.togglePinName
         case .showInFinder: Self.showInFinderName
@@ -163,6 +174,7 @@ struct ShortcutsSettingsView: View {
 
             shortcutRow("Actions", shortcut: .actions)
             shortcutRow("Copy to Clipboard", shortcut: .copyToClipboard)
+            shortcutRow("Rename", shortcut: .rename)
             shortcutRow("Pin to Screen", shortcut: .pinToScreen)
             shortcutRow("Pin Entry", shortcut: .togglePin)
             shortcutRow("Show in Finder", shortcut: .showInFinder)
@@ -176,6 +188,12 @@ struct ShortcutsSettingsView: View {
             pinnedImageShortcutRow("Zoom In Pinned Image", shortcut: .zoomIn)
             pinnedImageShortcutRow("Zoom Out Pinned Image", shortcut: .zoomOut)
             pinnedImageShortcutRow("Fit Pinned Image to Screen", shortcut: .resetSize)
+
+            PreferencesDivider()
+
+            PreferencesRow(label: "Hide Pinned Cards") {
+                KeyboardShortcuts.Recorder(for: .hidePinnedCards)
+            }
         }
     }
 
