@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Combine
+import KeyboardShortcuts
 import MacAppSettingsUI
 import SwiftUI
 
@@ -10,7 +11,7 @@ final class PasteSettingsWindowController {
     private let activationPolicy: ActivationPolicyCoordinator
     private var controller: SettingsWindowController?
     private var closeObserver: NSObjectProtocol?
-    private var commandWMonitor: Any?
+    private var commandWCloseView: CommandWCloseView?
     private var builtLanguage: AppLanguage?
     private var languageObserver: AnyCancellable?
 
@@ -41,7 +42,7 @@ final class PasteSettingsWindowController {
 
         select(tab, in: controller)
         attachCloseObserverIfNeeded(to: controller.window)
-        installCommandWMonitorIfNeeded()
+        installCommandWCloseViewIfNeeded(on: controller.window)
 
         activationPolicy.acquire("settings")
         NSApp.activate(ignoringOtherApps: true)
@@ -87,7 +88,7 @@ final class PasteSettingsWindowController {
         // Keep the existing settings activation; tear-down closed the window
         // without releasing so we don't acquire a second time here.
         attachCloseObserverIfNeeded(to: controller.window)
-        installCommandWMonitorIfNeeded()
+        installCommandWCloseViewIfNeeded(on: controller.window)
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
     }
@@ -97,7 +98,8 @@ final class PasteSettingsWindowController {
             NotificationCenter.default.removeObserver(closeObserver)
             self.closeObserver = nil
         }
-        removeCommandWMonitor()
+        commandWCloseView?.removeFromSuperview()
+        commandWCloseView = nil
         controller?.close()
         controller = nil
     }
@@ -157,35 +159,46 @@ final class PasteSettingsWindowController {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.removeCommandWMonitor()
                 self?.activationPolicy.release("settings")
             }
         }
     }
 
-    /// Agent apps lack File → Close, so mirror `AuxiliaryWindow` and handle ⌘W locally.
-    private func installCommandWMonitorIfNeeded() {
-        guard commandWMonitor == nil else { return }
-        commandWMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
-            [weak self] event in
-            guard let self else { return event }
-            let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
-            guard modifiers == .command, event.keyCode == UInt16(kVK_ANSI_W) else {
-                return event
-            }
-            guard let window = self.controller?.window, window.isKeyWindow else {
-                return event
-            }
-            window.performClose(nil)
-            return nil
+    /// Agent apps lack File → Close. Handle ⌘W in the view hierarchy so it only runs after local
+    /// monitors; a shortcut recorder can then consume the event instead of closing the window.
+    private func installCommandWCloseViewIfNeeded(on window: NSWindow?) {
+        guard commandWCloseView == nil, let content = window?.contentView else { return }
+        let view = CommandWCloseView(frame: content.bounds)
+        view.autoresizingMask = [.width, .height]
+        content.addSubview(view)
+        commandWCloseView = view
+    }
+}
+
+/// Closes the settings window on ⌘W without a local event monitor, so KeyboardShortcuts.Recorder
+/// can observe the same keystroke while it is recording.
+private final class CommandWCloseView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        guard modifiers == .command, event.keyCode == UInt16(kVK_ANSI_W) else {
+            return super.performKeyEquivalent(with: event)
         }
+        if isShortcutRecorderFirstResponder {
+            return false
+        }
+        window?.performClose(nil)
+        return true
     }
 
-    private func removeCommandWMonitor() {
-        if let commandWMonitor {
-            NSEvent.removeMonitor(commandWMonitor)
-            self.commandWMonitor = nil
+    private var isShortcutRecorderFirstResponder: Bool {
+        var responder: NSResponder? = window?.firstResponder
+        while let current = responder {
+            if current is KeyboardShortcuts.RecorderCocoa { return true }
+            responder = current.nextResponder
         }
+        return false
     }
 }
 
