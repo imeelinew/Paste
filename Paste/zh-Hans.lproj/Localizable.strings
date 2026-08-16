@@ -45,6 +45,7 @@
 "Launch at Login" = "登录时启动";
 "Switch to English When Opening" = "打开时切换到英文输入法";
 "No matching entries" = "没有匹配的项目";
+"Palette" = "面板";
 "Paste" = "粘贴";
 "Paste & Keep Window Open" = "粘贴并保持窗口打开";
 "Paste Settings" = "Paste 设置";
@@ -55,9 +56,11 @@
 "Past 7 Days" = "过去 7 天";
 "Pin Entry" = "固定项目";
 "Pin to Screen" = "钉到屏幕上";
+"Pinned Cards" = "钉选卡片";
 "Pinned Code" = "钉选代码";
 "Pinned Image" = "钉选图片";
 "Pinned Image Size" = "钉选图片大小";
+"Pinned Images" = "钉选图片";
 "Pinned Opacity" = "钉选不透明度";
 "Pinned Text Size" = "钉选文字大小";
 "Pinned Items" = "固定项";

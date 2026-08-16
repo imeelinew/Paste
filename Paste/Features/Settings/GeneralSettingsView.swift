@@ -3,7 +3,6 @@ import SwiftUI
 
 struct GeneralSettingsView: View {
     @ObservedObject private var settings = AppCore.shared.settings
-    @ObservedObject private var systemClipboardHistory = AppCore.shared.systemClipboardHistory
     @ObservedObject private var updateService = AppCore.shared.updateService
 
     var body: some View {
@@ -42,10 +41,7 @@ struct GeneralSettingsView: View {
                 .fixedSize()
             }
 
-            PreferencesRow(label: "Content Preview", alignment: .firstTextBaseline) {
-                Toggle("Render Markdown", isOn: $settings.renderMarkdown)
-                    .toggleStyle(.checkbox)
-            }
+            PreferencesDivider()
 
             PreferencesRow(label: "Updates", alignment: .firstTextBaseline) {
                 Toggle(
@@ -57,26 +53,9 @@ struct GeneralSettingsView: View {
                 )
                 .toggleStyle(.checkbox)
             }
-
-            PreferencesRow(label: "System Clipboard", alignment: .firstTextBaseline) {
-                Toggle(
-                    "Disable System Clipboard",
-                    isOn: Binding(
-                        get: { systemClipboardHistory.isDisabled },
-                        set: { systemClipboardHistory.setDisabled($0) }
-                    )
-                )
-                .toggleStyle(.checkbox)
-            }
         }
         .onAppear {
             settings.launchAtLogin = LaunchAtLogin.isEnabled
-            systemClipboardHistory.refresh()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-        ) { _ in
-            systemClipboardHistory.refresh()
         }
     }
 }
@@ -86,6 +65,8 @@ struct AppearanceSettingsView: View {
 
     var body: some View {
         PreferencesForm {
+            PreferencesSectionHeader(title: "Theme")
+
             PreferencesRow(label: "Appearance") {
                 Picker("Appearance", selection: $settings.appearance) {
                     ForEach(AppAppearance.allCases) { option in
@@ -97,6 +78,10 @@ struct AppearanceSettingsView: View {
                 .fixedSize()
                 .accessibilityLabel("Theme")
             }
+
+            PreferencesDivider()
+
+            PreferencesSectionHeader(title: "Pinned Cards")
 
             PreferencesRow(label: "Pinned Image Size") {
                 Picker("Pinned Image Size", selection: $settings.pinnedImageSize) {

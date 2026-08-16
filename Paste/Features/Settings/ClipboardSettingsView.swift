@@ -2,26 +2,31 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct HistorySettingsView: View {
+struct ClipboardSettingsView: View {
     @ObservedObject private var settings = AppCore.shared.settings
-    @State private var confirmingClear = false
+    @ObservedObject private var systemClipboardHistory = AppCore.shared.systemClipboardHistory
 
     var body: some View {
         PreferencesForm {
-            PreferencesRow(label: "Keep history for") {
-                Picker("Keep history for", selection: $settings.clipboardRetention) {
-                    ForEach(ClipboardRetention.allCases) { retention in
-                        Text(LocalizedStringKey(retention.title)).tag(retention)
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
-                .onChange(of: settings.clipboardRetention) {
-                    let store = AppCore.shared.clipboardStore
-                    store.maxAge = settings.clipboardRetention.maxAge
-                    store.enforceLimits()
-                }
+            PreferencesRow(label: "Content Preview", alignment: .firstTextBaseline) {
+                Toggle("Render Markdown", isOn: $settings.renderMarkdown)
+                    .toggleStyle(.checkbox)
             }
+
+            PreferencesDivider()
+
+            PreferencesRow(label: "System Clipboard", alignment: .firstTextBaseline) {
+                Toggle(
+                    "Disable System Clipboard",
+                    isOn: Binding(
+                        get: { systemClipboardHistory.isDisabled },
+                        set: { systemClipboardHistory.setDisabled($0) }
+                    )
+                )
+                .toggleStyle(.checkbox)
+            }
+
+            PreferencesDivider()
 
             PreferencesRow(label: "Disabled Applications", alignment: .top) {
                 VStack(spacing: 0) {
@@ -64,26 +69,14 @@ struct HistorySettingsView: View {
                 }
                 .frame(maxWidth: PreferencesMetrics.appListMaxWidth, alignment: .leading)
             }
-
-            PreferencesDivider()
-
-            PreferencesRow(label: "Clear history") {
-                Button("Clear") { confirmingClear = true }
-                    .foregroundStyle(.red)
-                    .controlSize(.regular)
-            }
         }
-        .confirmationDialog(
-            "Clear clipboard history?",
-            isPresented: $confirmingClear,
-            titleVisibility: .visible
-        ) {
-            Button("Clear History", role: .destructive) {
-                AppCore.shared.clipboardStore.clearAll()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This can't be undone.")
+        .onAppear {
+            systemClipboardHistory.refresh()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            systemClipboardHistory.refresh()
         }
     }
 
@@ -106,6 +99,52 @@ struct HistorySettingsView: View {
             apps.append(bundleID)
         }
         settings.clipboardDisabledApps = apps
+    }
+}
+
+struct HistorySettingsView: View {
+    @ObservedObject private var settings = AppCore.shared.settings
+    @State private var confirmingClear = false
+
+    var body: some View {
+        PreferencesForm {
+            PreferencesRow(label: "Keep history for") {
+                Picker("Keep history for", selection: $settings.clipboardRetention) {
+                    ForEach(ClipboardRetention.allCases) { retention in
+                        Text(LocalizedStringKey(retention.title)).tag(retention)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .onChange(of: settings.clipboardRetention) {
+                    let store = AppCore.shared.clipboardStore
+                    store.maxAge = settings.clipboardRetention.maxAge
+                    store.enforceLimits()
+                }
+            }
+
+            PreferencesDivider()
+
+            PreferencesSectionHeader(title: "Danger Zone")
+
+            PreferencesRow(label: "Clear history") {
+                Button("Clear") { confirmingClear = true }
+                    .foregroundStyle(.red)
+                    .controlSize(.regular)
+            }
+        }
+        .confirmationDialog(
+            "Clear clipboard history?",
+            isPresented: $confirmingClear,
+            titleVisibility: .visible
+        ) {
+            Button("Clear History", role: .destructive) {
+                AppCore.shared.clipboardStore.clearAll()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This can't be undone.")
+        }
     }
 }
 

@@ -45,6 +45,7 @@
 "Launch at Login" = "Launch at Login";
 "Switch to English When Opening" = "Switch to English When Opening";
 "No matching entries" = "No matching entries";
+"Palette" = "Palette";
 "Paste" = "Paste";
 "Paste & Keep Window Open" = "Paste & Keep Window Open";
 "Paste Settings" = "Paste Settings";
@@ -55,9 +56,11 @@
 "Past 7 Days" = "Past 7 Days";
 "Pin Entry" = "Pin Entry";
 "Pin to Screen" = "Pin to Screen";
+"Pinned Cards" = "Pinned Cards";
 "Pinned Code" = "Pinned Code";
 "Pinned Image" = "Pinned Image";
 "Pinned Image Size" = "Pinned Image Size";
+"Pinned Images" = "Pinned Images";
 "Pinned Opacity" = "Pinned Opacity";
 "Pinned Text Size" = "Pinned Text Size";
 "Pinned Items" = "Pinned Items";

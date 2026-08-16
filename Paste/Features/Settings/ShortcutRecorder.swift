@@ -172,6 +172,8 @@ struct ShortcutsSettingsView: View {
 
             PreferencesDivider()
 
+            PreferencesSectionHeader(title: "Palette")
+
             shortcutRow("Actions", shortcut: .actions)
             shortcutRow("Copy to Clipboard", shortcut: .copyToClipboard)
             shortcutRow("Rename", shortcut: .rename)
@@ -181,6 +183,8 @@ struct ShortcutsSettingsView: View {
 
             PreferencesDivider()
 
+            PreferencesSectionHeader(title: "Pinned Images")
+
             pinnedImageShortcutRow("Close Pinned Image", shortcut: .close)
             pinnedImageShortcutRow("Close All Pinned Images", shortcut: .closeAll)
             pinnedImageShortcutRow("Dismiss Pinned Image", shortcut: .dismiss)
@@ -188,8 +192,6 @@ struct ShortcutsSettingsView: View {
             pinnedImageShortcutRow("Zoom In Pinned Image", shortcut: .zoomIn)
             pinnedImageShortcutRow("Zoom Out Pinned Image", shortcut: .zoomOut)
             pinnedImageShortcutRow("Fit Pinned Image to Screen", shortcut: .resetSize)
-
-            PreferencesDivider()
 
             PreferencesRow(label: "Hide Pinned Cards") {
                 KeyboardShortcuts.Recorder(for: .hidePinnedCards)

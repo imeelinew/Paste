@@ -49,3 +49,15 @@ struct PreferencesDivider: View {
         Divider()
     }
 }
+
+/// Group title inside a preferences form. Rows under it keep the existing two-column style.
+struct PreferencesSectionHeader: View {
+    let title: LocalizedStringKey
+
+    var body: some View {
+        Text(title)
+            .font(Theme.Typography.sectionHeader)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}

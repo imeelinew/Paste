@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
-    case general, shortcuts, appearance, history, about
+    case general, shortcuts, appearance, clipboard, history, about
 
     var id: Int { rawValue }
 
@@ -10,6 +10,7 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         case .general: return "General"
         case .shortcuts: return "Shortcuts"
         case .appearance: return "Appearance"
+        case .clipboard: return "Clipboard"
         case .history: return "History"
         case .about: return "About"
         }
@@ -21,6 +22,7 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         case .general: return "general"
         case .shortcuts: return "shortcuts"
         case .appearance: return "appearance"
+        case .clipboard: return "clipboard"
         case .history: return "history"
         case .about: return "about"
         }
@@ -31,6 +33,7 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         case .general: return "gearshape"
         case .shortcuts: return "keyboard"
         case .appearance: return "eyeglasses"
+        case .clipboard: return "doc.on.clipboard"
         case .history: return "clock"
         case .about: return "info.circle"
         }
@@ -38,10 +41,11 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
 
     var preferredPaneHeight: CGFloat {
         switch self {
-        case .general: return 360
-        case .shortcuts: return 704
-        case .appearance: return 280
-        case .history: return 360
+        case .general: return 300
+        case .shortcuts: return 800
+        case .appearance: return 360
+        case .clipboard: return 360
+        case .history: return 220
         case .about: return 320
         }
     }
