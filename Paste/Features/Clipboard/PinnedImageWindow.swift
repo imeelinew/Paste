@@ -1203,7 +1203,9 @@ enum PinnedImageLayout {
     static func minimumSize(imageSize: CGSize, visibleFrame: CGRect) -> CGSize {
         let natural = normalized(imageSize)
         let longSideScale = 160 / max(natural.width, natural.height)
-        let shortSideScale = 44 / min(natural.width, natural.height)
+        // The 28-point close control has 10-point card insets on both sides. Never let either
+        // image dimension fall below 48 points, even for extreme panoramas or long screenshots.
+        let shortSideScale = 48 / min(natural.width, natural.height)
         let desiredScale = max(longSideScale, shortSideScale)
         let displayScale = min(
             visibleFrame.width * 0.9 / natural.width,
@@ -1276,7 +1278,10 @@ private final class PinnedImagePanel: NSPanel {
             }
         }
         if event.type == .magnify {
-            resize(by: max(1 + event.magnification, 0.1))
+            resize(
+                by: max(1 + event.magnification, 0.1),
+                anchorInWindow: event.locationInWindow
+            )
             return
         }
         super.sendEvent(event)
@@ -1286,25 +1291,55 @@ private final class PinnedImagePanel: NSPanel {
         (firstResponder as? NSTextView)?.isEditable == true
     }
 
-    func resize(by requestedScale: CGFloat) {
+    func resize(by requestedScale: CGFloat, anchorInWindow requestedAnchor: NSPoint? = nil) {
         guard requestedScale.isFinite, requestedScale > 0, requestedScale != 1 else { return }
 
         let current = frame
         guard current.width > 0, current.height > 0 else { return }
 
-        let minimumScale = max(
+        let visibleFrame = resizeVisibleFrame()
+        let maximumScale = min(
+            visibleFrame.width / current.width,
+            visibleFrame.height / current.height
+        )
+        guard maximumScale.isFinite, maximumScale > 0 else { return }
+        let minimumScale = min(max(
             contentMinSize.width / current.width,
             contentMinSize.height / current.height
-        )
-        let scale = max(requestedScale, minimumScale)
+        ), maximumScale)
+        let scale = min(max(requestedScale, minimumScale), maximumScale)
         let size = CGSize(width: current.width * scale, height: current.height * scale)
-        let resizedFrame = NSRect(
-            x: current.midX - size.width / 2,
-            y: current.midY - size.height / 2,
-            width: size.width,
-            height: size.height
+
+        let rawAnchor = requestedAnchor ?? NSPoint(x: current.width / 2, y: current.height / 2)
+        let anchor = NSPoint(
+            x: min(max(rawAnchor.x, 0), current.width),
+            y: min(max(rawAnchor.y, 0), current.height)
         )
+        let unitAnchor = NSPoint(x: anchor.x / current.width, y: anchor.y / current.height)
+        let screenAnchor = NSPoint(x: current.minX + anchor.x, y: current.minY + anchor.y)
+        let proposedOrigin = NSPoint(
+            x: screenAnchor.x - size.width * unitAnchor.x,
+            y: screenAnchor.y - size.height * unitAnchor.y
+        )
+        let origin = NSPoint(
+            x: min(max(proposedOrigin.x, visibleFrame.minX), visibleFrame.maxX - size.width),
+            y: min(max(proposedOrigin.y, visibleFrame.minY), visibleFrame.maxY - size.height)
+        )
+        let resizedFrame = NSRect(origin: origin, size: size)
+        guard !resizedFrame.nearlyEquals(current) else { return }
+
         setFrame(resizedFrame, display: true)
+        // Magnify events arrive much faster than SwiftUI's normal display pass. Keep the hosting
+        // tree and its clipping layer synchronized with every window frame so stale bounds cannot
+        // crop the image or card controls mid-gesture.
+        contentView?.layoutSubtreeIfNeeded()
+    }
+
+    private func resizeVisibleFrame() -> NSRect {
+        let visible = screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1_280, height: 800)
+        let inset = min(12, max(min(visible.width, visible.height) / 4, 0))
+        return visible.insetBy(dx: inset, dy: inset)
     }
 
     private func command(for event: NSEvent) -> PinnedImageCommand? {
@@ -1317,6 +1352,13 @@ private final class PinnedImagePanel: NSPanel {
         if PinnedImageShortcut.zoomOut.matches(shortcut) { return .zoomOut }
         if PinnedImageShortcut.resetSize.matches(shortcut) { return .resetSize }
         return nil
+    }
+}
+
+private extension NSRect {
+    func nearlyEquals(_ other: NSRect, tolerance: CGFloat = 0.01) -> Bool {
+        abs(minX - other.minX) <= tolerance && abs(minY - other.minY) <= tolerance
+            && abs(width - other.width) <= tolerance && abs(height - other.height) <= tolerance
     }
 }
 
@@ -1353,9 +1395,8 @@ private struct PinnedImageContent: View {
             if let image {
                 Image(nsImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
             } else if loadFailed {
                 Image(systemName: "photo.badge.exclamationmark")
                     .font(.system(size: 28, weight: .regular))
@@ -1516,21 +1557,26 @@ private struct PinnedCardChrome<Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(spacing: 8) {
-            PinnedCardButton(
-                systemName: "xmark",
-                label: closeLabel,
-                action: onClose
-            )
-            .frame(width: trailingWidth, alignment: .leading)
+        GeometryReader { geometry in
+            let titleWidth = max(geometry.size.width - 2 * (trailingWidth + 8), 0)
 
-            PinnedCardTitle(itemID: itemID)
-                .frame(minWidth: 0, maxWidth: .infinity)
-                .clipped()
+            ZStack {
+                PinnedCardTitle(itemID: itemID)
+                    .frame(width: titleWidth)
+                    .clipped()
 
-            trailing
-                .frame(width: trailingWidth, alignment: .trailing)
+                PinnedCardButton(
+                    systemName: "xmark",
+                    label: closeLabel,
+                    action: onClose
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                trailing
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
+        .frame(height: 28)
         .padding(10)
         .frame(maxWidth: .infinity)
     }
