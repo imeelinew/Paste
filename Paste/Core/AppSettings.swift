@@ -99,6 +99,20 @@ enum PinnedTextSize {
     }
 }
 
+enum PinnedWindowOpacity {
+    static let minimum: Double = 0
+    static let maximum: Double = 100
+    static let defaultValue: Double = 100
+
+    static func clamped(_ value: Double) -> Double {
+        min(max(value, minimum), maximum)
+    }
+
+    static func alpha(from percent: Double) -> CGFloat {
+        CGFloat(clamped(percent) / 100)
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
@@ -115,6 +129,7 @@ final class AppSettings: ObservableObject {
         static let paletteOpenFocus = "paletteOpenFocus"
         static let pinnedImageSize = "pinnedImageSize"
         static let pinnedTextSize = "pinnedTextSize"
+        static let pinnedWindowOpacity = "pinnedWindowOpacity"
     }
 
     @Published var clipboardRetention: ClipboardRetention {
@@ -172,6 +187,15 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(Double(pinnedTextSize), forKey: Key.pinnedTextSize) }
     }
 
+    /// Visible alpha of every pinned card, stored as 0...100 so 100 keeps today's fully opaque look.
+    @Published var pinnedWindowOpacity: Double {
+        didSet { defaults.set(pinnedWindowOpacity, forKey: Key.pinnedWindowOpacity) }
+    }
+
+    var pinnedWindowAlpha: CGFloat {
+        PinnedWindowOpacity.alpha(from: pinnedWindowOpacity)
+    }
+
     init() {
         clipboardRetention =
             ClipboardRetention(rawValue: defaults.integer(forKey: Key.clipboardRetention))
@@ -197,6 +221,11 @@ final class AppSettings: ObservableObject {
             defaults.object(forKey: Key.pinnedTextSize) == nil
                 ? PinnedTextSize.defaultValue
                 : CGFloat(defaults.double(forKey: Key.pinnedTextSize))
+        )
+        pinnedWindowOpacity = PinnedWindowOpacity.clamped(
+            defaults.object(forKey: Key.pinnedWindowOpacity) == nil
+                ? PinnedWindowOpacity.defaultValue
+                : defaults.double(forKey: Key.pinnedWindowOpacity)
         )
     }
 }

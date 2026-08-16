@@ -122,6 +122,20 @@ struct AppearanceSettingsView: View {
                 .fixedSize()
                 .accessibilityLabel(Text("Pinned Text Size"))
             }
+
+            PreferencesRow(label: "Pinned Opacity") {
+                HStack(spacing: Theme.Spacing.md) {
+                    Slider(
+                        value: $settings.pinnedWindowOpacity,
+                        in: PinnedWindowOpacity.minimum...PinnedWindowOpacity.maximum,
+                        step: 1
+                    )
+                    .accessibilityLabel(Text("Pinned Opacity"))
+                    Text(verbatim: "\(Int(settings.pinnedWindowOpacity.rounded()))%")
+                        .monospacedDigit()
+                        .frame(minWidth: 40, alignment: .trailing)
+                }
+            }
         }
     }
 }
