@@ -180,27 +180,23 @@ final class AppCore: ObservableObject {
                     settings?.pinnedImageSize.longestEdge ?? PinnedImageSize.medium.longestEdge
                 }
             )
-        case .text, .code:
+        case .text, .code, .link:
             guard let text = item.text, !text.isEmpty else { return }
+            let style: PinnedTextStyle
             if ClipboardTextClassifier.isMarkdownArticle(text) {
-                hidePalette()
-                pinnedImageWindows.showText(
-                    itemID: item.id,
-                    text: text,
-                    style: .markdown,
-                    title: title
-                )
+                style = .markdown
             } else if item.kind == .code {
-                hidePalette()
-                pinnedImageWindows.showText(
-                    itemID: item.id,
-                    text: text,
-                    style: .code,
-                    title: title
-                )
+                style = .code
+            } else {
+                style = .plain
             }
-        case .link:
-            return
+            hidePalette()
+            pinnedImageWindows.showText(
+                itemID: item.id,
+                text: text,
+                style: style,
+                title: title
+            )
         }
     }
 

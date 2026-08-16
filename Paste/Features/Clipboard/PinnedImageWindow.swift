@@ -19,6 +19,7 @@ private enum PinnedImageCommand {
 }
 
 enum PinnedTextStyle: Equatable {
+    case plain
     case markdown
     case code
 }
@@ -36,6 +37,7 @@ private struct PinnedTextViewport: Equatable {
 private struct PinnedCardRecord: Codable, Identifiable {
     enum Kind: String, Codable {
         case image
+        case plain
         case markdown
         case code
 
@@ -286,6 +288,8 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
             switch record.kind {
             case .image:
                 restored = restoreImage(record)
+            case .plain:
+                restored = restoreText(record, style: .plain)
             case .markdown:
                 restored = restoreText(record, style: .markdown)
             case .code:
@@ -385,7 +389,12 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let recordKind: PinnedCardRecord.Kind = style == .markdown ? .markdown : .code
+        let recordKind: PinnedCardRecord.Kind
+        switch style {
+        case .plain: recordKind = .plain
+        case .markdown: recordKind = .markdown
+        case .code: recordKind = .code
+        }
         let storedPayload = sessionStore.writeTextPayload(
             text, itemID: itemID, kind: recordKind)
         let visibleFrame = targetVisibleFrame()
@@ -475,13 +484,20 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         let visibleFrame = visibleFrame(for: record.frame.rect)
         let initialSize = PinnedTextLayout.initialSize(text: text, visibleFrame: visibleFrame)
         let fallback =
-            style == .markdown
-            ? String(
-                localized: "Pinned Markdown",
-                locale: AppCore.shared.settings.language.locale)
-            : String(
-                localized: "Pinned Code",
-                locale: AppCore.shared.settings.language.locale)
+            switch style {
+            case .plain:
+                String(
+                    localized: "Pinned Text",
+                    locale: AppCore.shared.settings.language.locale)
+            case .markdown:
+                String(
+                    localized: "Pinned Markdown",
+                    locale: AppCore.shared.settings.language.locale)
+            case .code:
+                String(
+                    localized: "Pinned Code",
+                    locale: AppCore.shared.settings.language.locale)
+            }
         let panel = makePanel(
             title: cardTitle(for: record.id, fallback: fallback),
             initialSize: initialSize,
@@ -1409,6 +1425,14 @@ private struct PinnedTextContent: View {
 
             Group {
                 switch style {
+                case .plain:
+                    SelectableAttributedText(
+                        nsAttributed: NSAttributedString(string: text),
+                        fontSize: settings.pinnedTextSize,
+                        scrollPosition: viewport.scrollPosition,
+                        selection: viewport.selection,
+                        onScroll: updateScrollPosition,
+                        onSelectionChange: updateSelection)
                 case .markdown:
                     MarkdownPreview(
                         source: text,
@@ -1604,20 +1628,6 @@ private struct PinnedCardButton: View {
         .frosted(in: Circle())
         .accessibilityLabel(Text(label))
         .help(Text(label))
-    }
-}
-
-extension ClipboardItem {
-    var canPinToScreen: Bool {
-        switch kind {
-        case .image, .code:
-            return true
-        case .text:
-            guard let text, !text.isEmpty else { return false }
-            return MarkdownAttributedRenderer.isMarkdown(text)
-        case .link:
-            return false
-        }
     }
 }
 
