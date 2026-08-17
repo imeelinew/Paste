@@ -31,7 +31,6 @@
 "Disable System Clipboard" = "Disable System Clipboard";
 "Earlier" = "Earlier";
 "English" = "English";
-"Focus on Open" = "Focus on Open";
 "Follow System" = "Follow System";
 "Forever" = "Forever";
 "General" = "General";
@@ -65,10 +64,8 @@
 "Pinned Images" = "Pinned Images";
 "Pinned Opacity" = "Pinned Opacity";
 "Pinned Text Size" = "Pinned Text Size";
-"Pinned Items" = "Pinned Items";
 "Pinned Markdown" = "Pinned Markdown";
 "Pinned Text" = "Pinned Text";
-"Regular Items" = "Regular Items";
 "Rename" = "Rename";
 "Small" = "Small";
 "Medium" = "Medium";

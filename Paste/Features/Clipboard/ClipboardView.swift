@@ -249,9 +249,8 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             let reloadRequired = contentChanged || titleChanged || appearanceChanged
             let wasApplyingSelection = applyingSelection
             if reloadRequired {
-                // `allowsEmptySelection == false` makes AppKit temporarily choose the first
-                // selectable row during reload. Suppress that implementation-detail callback
-                // until the model's selected ID has been restored below.
+                // AppKit temporarily chooses the first selectable row during reload. Suppress
+                // that implementation-detail callback until the model selection is restored.
                 tableView.clearHover()
                 applyingSelection = true
                 tableView.reloadData()
@@ -496,7 +495,11 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             if let row {
                 tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
             } else {
+                // Keep click behavior single-selected while still permitting the intentional
+                // no-selection state used when the palette first opens.
+                tableView.allowsEmptySelection = true
                 tableView.deselectAll(nil)
+                tableView.allowsEmptySelection = false
             }
             applyingSelection = wasApplyingSelection
             updateVisibleSelection(in: tableView)

@@ -60,6 +60,11 @@
 		F1E4B87385492A86C5F5CDFE /* ImageThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2FD6AB5017BBFF5EE420A4 /* ImageThumbnail.swift */; };
 		F2793D8EFF543BEDD5DF57C1 /* PaletteViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11927303CFC909AE918568B6 /* PaletteViewModel.swift */; };
 		F3C7ADFBEBBA4EF387C9A15F /* MarkdownAttributedRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81D51FA4C7914F68805A9D72 /* MarkdownAttributedRenderer.swift */; };
+		AA3100000000000000000005 /* PasteControllerProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3100000000000000000001 /* PasteControllerProtocol.swift */; };
+		AA3100000000000000000006 /* PasteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3100000000000000000002 /* PasteController.swift */; };
+		AA3100000000000000000007 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3100000000000000000003 /* main.swift */; };
+		AA3100000000000000000008 /* PasteControllerProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3100000000000000000001 /* PasteControllerProtocol.swift */; };
+		AA3100000000000000000012 /* paste-cli in CopyFiles */ = {isa = PBXBuildFile; fileRef = AA3100000000000000000004 /* paste-cli */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -116,6 +121,10 @@
 		FC1779D1C157B1B6F9C37365 /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
 		FC678FC84A80AE731726D744 /* Paster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paster.swift; sourceTree = "<group>"; };
 		FCFFE5C6B9CC83C972FD0B0D /* ClipboardStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardStore.swift; sourceTree = "<group>"; };
+		AA3100000000000000000001 /* PasteControllerProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteControllerProtocol.swift; sourceTree = "<group>"; };
+		AA3100000000000000000002 /* PasteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteController.swift; sourceTree = "<group>"; };
+		AA3100000000000000000003 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		AA3100000000000000000004 /* paste-cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "paste-cli"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -127,6 +136,13 @@
 				CE1562B33E657CF448D04DDC /* KeyboardShortcuts in Frameworks */,
 				D1F4A37B85934AE6A943621C /* Markdown in Frameworks */,
 				E640C47775B8E5E915E0166A /* MacAppSettingsUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA310000000000000000000D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,6 +163,8 @@
 			isa = PBXGroup;
 			children = (
 				0C1D141FBB730290AF3CA00C /* AppCore.swift */,
+				AA3100000000000000000002 /* PasteController.swift */,
+				AA3100000000000000000001 /* PasteControllerProtocol.swift */,
 				67393F83039423D6A2A4C9B5 /* AppSettings.swift */,
 				A5FB3EB883C67D7DA6D8FEAF /* ClipboardCapturePipeline.swift */,
 				A08EBA3DF42E6A3D8518C909 /* ClipboardManager.swift */,
@@ -230,6 +248,7 @@
 			isa = PBXGroup;
 			children = (
 				D4D9055FFD80C01DC26C2056 /* Paste */,
+				AA310000000000000000000A /* PasteCLI */,
 				B768B677384035BB57EEA712 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -238,6 +257,7 @@
 			isa = PBXGroup;
 			children = (
 				E1C61CC3EAF30E7A03C2A141 /* Paste.app */,
+				AA3100000000000000000004 /* paste-cli */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -279,6 +299,14 @@
 			path = Features;
 			sourceTree = "<group>";
 		};
+		AA310000000000000000000A /* PasteCLI */ = {
+			isa = PBXGroup;
+			children = (
+				AA3100000000000000000003 /* main.swift */,
+			);
+			path = PasteCLI;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -289,10 +317,12 @@
 				8A95500F24E10A81F9788E08 /* Sources */,
 				E0B3487F77980DE088DF0051 /* Resources */,
 				7B89C24AFFAA31720BE26BC7 /* Frameworks */,
+				AA3100000000000000000011 /* Embed paste-cli */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AA3100000000000000000014 /* PBXTargetDependency */,
 			);
 			name = Paste;
 			packageProductDependencies = (
@@ -305,7 +335,41 @@
 			productReference = E1C61CC3EAF30E7A03C2A141 /* Paste.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AA310000000000000000000B /* paste-cli */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA3100000000000000000010 /* Build configuration list for PBXNativeTarget "paste-cli" */;
+			buildPhases = (
+				AA310000000000000000000C /* Sources */,
+				AA310000000000000000000D /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "paste-cli";
+			productName = "paste-cli";
+			productReference = AA3100000000000000000004 /* paste-cli */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		AA3100000000000000000013 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DF30A449222F94C11CFB0A63 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA310000000000000000000B;
+			remoteInfo = "paste-cli";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		AA3100000000000000000014 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA310000000000000000000B /* paste-cli */;
+			targetProxy = AA3100000000000000000013 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		DF30A449222F94C11CFB0A63 /* Project object */ = {
@@ -315,6 +379,10 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					3BDB676D0A88A545F238711A = {
+						DevelopmentTeam = 5Q5QT76MJU;
+						ProvisioningStyle = Automatic;
+					};
+					AA310000000000000000000B = {
 						DevelopmentTeam = 5Q5QT76MJU;
 						ProvisioningStyle = Automatic;
 					};
@@ -342,6 +410,7 @@
 			projectRoot = "";
 			targets = (
 				3BDB676D0A88A545F238711A /* Paste */,
+				AA310000000000000000000B /* paste-cli */,
 			);
 		};
 /* End PBXProject section */
@@ -362,6 +431,20 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		AA3100000000000000000011 /* Embed paste-cli */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Applications;
+			dstSubfolderSpec = 1;
+			files = (
+				AA3100000000000000000012 /* paste-cli in CopyFiles */,
+			);
+			name = "Embed paste-cli";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		8A95500F24E10A81F9788E08 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -369,6 +452,8 @@
 			files = (
 				3967DE16A769A2E33CCD9692 /* AboutView.swift in Sources */,
 				316668E91BB14E5E55142438 /* AppCore.swift in Sources */,
+				AA3100000000000000000006 /* PasteController.swift in Sources */,
+				AA3100000000000000000005 /* PasteControllerProtocol.swift in Sources */,
 				39845C7BA7BF8871C80EE1BE /* AppSettings.swift in Sources */,
 				DF868B19AE7D7BF3751879EF /* ClipboardCapturePipeline.swift in Sources */,
 				A9BFCCAECCC68D9444932887 /* ClipboardManager.swift in Sources */,
@@ -410,6 +495,15 @@
 				6B1C7B8816B750407EFCB52C /* Theme.swift in Sources */,
 				4176341D42A93B3915ADC2AC /* ThinScrollbar.swift in Sources */,
 				8D646A86A4AD889296D77961 /* VisualEffectView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA310000000000000000000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA3100000000000000000007 /* main.swift in Sources */,
+				AA3100000000000000000008 /* PasteControllerProtocol.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -605,6 +699,38 @@
 			};
 			name = Release;
 		};
+		AA310000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5Q5QT76MJU;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.eli.Paste.cli;
+				PRODUCT_NAME = "paste-cli";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AA310000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5Q5QT76MJU;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.eli.Paste.cli;
+				PRODUCT_NAME = "paste-cli";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -622,6 +748,15 @@
 			buildConfigurations = (
 				8821A099FDCB53F0BDB4310A /* Debug */,
 				6B1D352E31029E477C727993 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AA3100000000000000000010 /* Build configuration list for PBXNativeTarget "paste-cli" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA310000000000000000000E /* Debug */,
+				AA310000000000000000000F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

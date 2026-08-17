@@ -19,6 +19,7 @@ final class AppCore: ObservableObject {
     private lazy var settingsWindowController = PasteSettingsWindowController(
         activationPolicy: activationPolicy
     )
+    private var controller: PasteController?
     private var transferTask: Task<Void, Never>?
     private var transferGeneration = UUID()
 
@@ -35,6 +36,9 @@ final class AppCore: ObservableObject {
         clipboardStore.load()
         pinnedImageWindows.restore()
         clipboardManager.start()
+        let controller = PasteController(core: self, cards: pinnedImageWindows)
+        controller.start()
+        self.controller = controller
 
         KeyboardShortcuts.onKeyUp(for: .toggleClipboard) { [weak self] in
             self?.togglePalette()
@@ -44,7 +48,15 @@ final class AppCore: ObservableObject {
         }
     }
 
+    func handleControllerRequest(_ data: Data) async -> [String: Any] {
+        guard let controller else {
+            return PasteControllerIPC.response(ok: false, error: "Controller unavailable")
+        }
+        return await controller.handleRequest(data)
+    }
+
     func prepareForTermination() {
+        controller?.stop()
         pinnedImageWindows.flushPersistence()
     }
 
@@ -159,19 +171,19 @@ final class AppCore: ObservableObject {
         }
     }
 
-    func revealClipboardImage(_ item: ClipboardItem) {
+    func revealClipboardImage(_ item: ClipboardItem, dismissPalette: Bool = true) {
         guard let url = clipboardStore.imageURL(for: item) else { return }
-        hidePalette(restoreFocus: false)
+        if dismissPalette { hidePalette(restoreFocus: false) }
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    func pinToScreen(_ item: ClipboardItem) {
+    func pinToScreen(_ item: ClipboardItem, dismissPalette: Bool = true) {
         let locale = settings.language.locale
         let title = item.displayTitle(locale: locale)
         switch item.kind {
         case .image:
             guard let url = clipboardStore.imageURL(for: item) else { return }
-            hidePalette()
+            if dismissPalette { hidePalette() }
             pinnedImageWindows.show(
                 itemID: item.id,
                 url: url,
@@ -190,7 +202,7 @@ final class AppCore: ObservableObject {
             } else {
                 style = .plain
             }
-            hidePalette()
+            if dismissPalette { hidePalette() }
             pinnedImageWindows.showText(
                 itemID: item.id,
                 text: text,

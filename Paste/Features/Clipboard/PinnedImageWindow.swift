@@ -256,6 +256,14 @@ private final class PinnedCardSessionStore {
     }
 }
 
+struct PinnedCardInfo: Sendable {
+    let id: UUID
+    let kind: String
+    let title: String
+    let visible: Bool
+    let parked: Bool
+}
+
 /// Owns durable pinned-content panels independently from the clipboard palette. Each clipboard
 /// item gets at most one panel; pinning it again brings the existing panel forward. Open panels
 /// restore after relaunch, follow regular Spaces, and hide on exclusive fullscreen Spaces.
@@ -315,6 +323,51 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         } else {
             park()
         }
+    }
+
+    var areParked: Bool { isParked }
+
+    func parkCards() {
+        if !isParked { park() }
+    }
+
+    func unparkCards() {
+        if isParked { unpark() }
+    }
+
+    func cardInfos() -> [PinnedCardInfo] {
+        let locale = AppCore.shared.settings.language.locale
+        let store = AppCore.shared.clipboardStore
+        return sessionStore.records.map { record in
+            let title = store.item(id: record.id)?.displayTitle(locale: locale) ?? ""
+            let panel = panels[record.id]
+            return PinnedCardInfo(
+                id: record.id,
+                kind: record.kind.rawValue,
+                title: title,
+                visible: panel?.isVisible == true
+                    && parkedHomeFrames[record.id] == nil
+                    && !hiddenForFullscreen.contains(record.id),
+                parked: parkedHomeFrames[record.id] != nil
+            )
+        }
+    }
+
+    @discardableResult
+    func closeCard(_ itemID: ClipboardItem.ID) -> Bool {
+        let known =
+            panels[itemID] != nil
+            || sessionStore.records.contains { $0.id == itemID }
+        guard known else { return false }
+        close(itemID)
+        return true
+    }
+
+    @discardableResult
+    func closeAllCards() -> Int {
+        let ids = Set(panels.keys).union(sessionStore.records.map(\.id))
+        for id in ids { close(id) }
+        return ids.count
     }
 
     func show(

@@ -165,14 +165,10 @@ final class PaletteViewModel: ObservableObject {
         overlay = .none
         renamingID = nil
         menuSelection = 0
-        selectedID = nil
         imageQuickLookOpen = false
         query = ""
-        if selectionIndex > 0 {
-            followToken = UUID()
-        } else {
-            resetToken = UUID()
-        }
+        // Opening the palette leaves selection entirely to pointer or keyboard intent.
+        selectedID = nil
     }
 
     func select(_ id: ClipboardItem.ID, follow: Bool = false) {
@@ -300,7 +296,12 @@ final class PaletteViewModel: ObservableObject {
 
     private func moveSelection(_ delta: Int) {
         guard searchReady, !results.isEmpty else { return }
-        let next = min(max(selectionIndex + delta, 0), results.count - 1)
+        let next: Int
+        if let selectedID, let current = results.firstIndex(where: { $0.id == selectedID }) {
+            next = min(max(current + delta, 0), results.count - 1)
+        } else {
+            next = delta < 0 ? results.count - 1 : 0
+        }
         selectedID = results[next].id
         imageQuickLookOpen = false
         ImageQuickLook.close()
@@ -431,15 +432,14 @@ final class PaletteViewModel: ObservableObject {
             if renamingID != nil { endRename() }
             return
         }
-        if !resetSelection, let priorID,
-            newResults.contains(where: { $0.id == priorID })
-        {
+        if resetSelection {
+            selectedID = newResults[0].id
+        } else if let priorID, newResults.contains(where: { $0.id == priorID }) {
             selectedID = priorID
+        } else if priorID == nil {
+            selectedID = nil
         } else {
-            let index =
-                resetSelection
-                ? initialSelectionIndex(in: newResults)
-                : min(priorIndex, newResults.count - 1)
+            let index = min(priorIndex, newResults.count - 1)
             selectedID = newResults[index].id
         }
 
@@ -454,13 +454,5 @@ final class PaletteViewModel: ObservableObject {
         if let renamingID, !newResults.contains(where: { $0.id == renamingID }) {
             endRename()
         }
-    }
-
-    /// Empty-query opens honor the focus setting; search results always start at the first match.
-    private func initialSelectionIndex(in results: [ClipboardItem]) -> Int {
-        guard queryIsEmpty, core.settings.paletteOpenFocus == .regularItems,
-            let index = results.firstIndex(where: { !$0.isPinned })
-        else { return 0 }
-        return index
     }
 }

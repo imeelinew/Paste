@@ -443,12 +443,14 @@ final class ClipboardStore: ObservableObject {
         return sqlite3_step(stmt) == SQLITE_ROW ? sqlite3_column_int64(stmt, 0) : 0
     }
 
+    @discardableResult
     func addText(
         _ text: String, sourceBundleID: String?, expectedGeneration: UInt64? = nil
-    ) {
-        if let expectedGeneration, expectedGeneration != captureGeneration { return }
-        if items.first?.kind != .image, items.first?.text == text { return }
-        insert(ClipboardItem(text: text, sourceBundleID: sourceBundleID))
+    ) -> ClipboardItem? {
+        if let expectedGeneration, expectedGeneration != captureGeneration { return nil }
+        if items.first?.kind != .image, items.first?.text == text { return items.first }
+        let item = ClipboardItem(text: text, sourceBundleID: sourceBundleID)
+        return insert(item) ? item : nil
     }
 
     func addImage(

@@ -50,20 +50,6 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 }
 
-enum PaletteOpenFocus: String, CaseIterable, Identifiable {
-    case pinnedItems
-    case regularItems
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .pinnedItems: return "Pinned Items"
-        case .regularItems: return "Regular Items"
-        }
-    }
-}
-
 enum PinnedImageSize: String, CaseIterable, Identifiable {
     case small
     case medium
@@ -126,7 +112,6 @@ final class AppSettings: ObservableObject {
         static let renderMarkdown = "renderMarkdown"
         static let language = "appLanguage"
         static let appearance = "appAppearance"
-        static let paletteOpenFocus = "paletteOpenFocus"
         static let pinnedImageSize = "pinnedImageSize"
         static let pinnedTextSize = "pinnedTextSize"
         static let pinnedWindowOpacity = "pinnedWindowOpacity"
@@ -173,12 +158,6 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// When the palette opens to an empty query, select the first pinned row or the first
-    /// unpinned row. A list with no matching section falls back to the first row.
-    @Published var paletteOpenFocus: PaletteOpenFocus {
-        didSet { defaults.set(paletteOpenFocus.rawValue, forKey: Key.paletteOpenFocus) }
-    }
-
     @Published var pinnedImageSize: PinnedImageSize {
         didSet { defaults.set(pinnedImageSize.rawValue, forKey: Key.pinnedImageSize) }
     }
@@ -217,9 +196,6 @@ final class AppSettings: ObservableObject {
         appearance =
             defaults.string(forKey: Key.appearance).flatMap(AppAppearance.init(rawValue:))
             ?? .system
-        paletteOpenFocus =
-            defaults.string(forKey: Key.paletteOpenFocus).flatMap(PaletteOpenFocus.init(rawValue:))
-            ?? .pinnedItems
         pinnedImageSize =
             defaults.string(forKey: Key.pinnedImageSize).flatMap(PinnedImageSize.init(rawValue:))
             ?? .medium

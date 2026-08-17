@@ -31,7 +31,6 @@
 "Disable System Clipboard" = "禁用系统剪贴板";
 "Earlier" = "更早";
 "English" = "English";
-"Focus on Open" = "打开时聚焦";
 "Follow System" = "跟随系统";
 "Forever" = "永久";
 "General" = "通用";
@@ -65,10 +64,8 @@
 "Pinned Images" = "钉选图片";
 "Pinned Opacity" = "不透明度";
 "Pinned Text Size" = "字体大小";
-"Pinned Items" = "固定项";
 "Pinned Markdown" = "钉选 Markdown";
 "Pinned Text" = "钉选文本";
-"Regular Items" = "普通项";
 "Rename" = "重命名";
 "Small" = "小";
 "Medium" = "中";
