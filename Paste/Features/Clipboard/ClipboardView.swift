@@ -657,6 +657,8 @@ private final class ClipboardTableScrollView: NSScrollView {
 }
 
 private final class ClipboardTableView: NSTableView {
+    private static let hoverIntentDelay: Duration = .milliseconds(200)
+
     var onRightClick: ((Int) -> Void)?
     var hoverEnabled = true {
         didSet {
@@ -671,6 +673,9 @@ private final class ClipboardTableView: NSTableView {
 
     private var hoveredRow: Int?
     private var hoverTrackingArea: NSTrackingArea?
+    private var lastPointerLocation: NSPoint?
+    private var pendingHoverRow: Int?
+    private var pendingHoverTask: Task<Void, Never>?
 
     override var acceptsFirstResponder: Bool { false }
 
@@ -732,6 +737,8 @@ private final class ClipboardTableView: NSTableView {
 
     func clearHover() {
         hoveredRow = nil
+        lastPointerLocation = nil
+        cancelPendingHover()
     }
 
     private func updateHover(at point: NSPoint) {
@@ -739,18 +746,106 @@ private final class ClipboardTableView: NSTableView {
             clearHover()
             return
         }
+        let previousPoint = lastPointerLocation
+        if pendingHoverRow == row(at: point),
+            let previousPoint,
+            abs(previousPoint.x - point.x) < 0.5,
+            abs(previousPoint.y - point.y) < 0.5
+        {
+            return
+        }
+        lastPointerLocation = point
+
         let row = row(at: point)
         guard row >= 0,
             view(atColumn: 0, row: row, makeIfNecessary: false) is ClipboardItemCellView
         else {
-            hoveredRow = nil
+            cancelPendingHover()
+            return
+        }
+
+        // A click or keyboard command may have selected the row before the next pointer event.
+        // Fold that state back into hover tracking instead of starting an obsolete intent delay.
+        if selectedRow == row {
+            hoveredRow = row
+            cancelPendingHover()
             return
         }
         guard hoveredRow != row else { return }
+
+        if hoveredRow != nil,
+            let previousPoint,
+            isMovingTowardDetails(from: previousPoint, to: point)
+        {
+            scheduleHoverSelection(for: row)
+            return
+        }
+        activateHoverSelection(for: row, at: point)
+    }
+
+    /// The previous pointer position and the visible detail-facing edge form a menu-aim triangle.
+    /// Crossing sibling rows inside this corridor is treated as transit toward the preview, not as
+    /// an intent to select them.
+    private func isMovingTowardDetails(from start: NSPoint, to end: NSPoint) -> Bool {
+        guard end.x > start.x + 0.5, start.x < visibleRect.maxX else { return false }
+        let upperRight = NSPoint(x: visibleRect.maxX, y: visibleRect.minY)
+        let lowerRight = NSPoint(x: visibleRect.maxX, y: visibleRect.maxY)
+        return Self.point(end, isInsideTriangleWith: start, upperRight, lowerRight)
+    }
+
+    private static func point(
+        _ point: NSPoint, isInsideTriangleWith first: NSPoint, _ second: NSPoint, _ third: NSPoint
+    ) -> Bool {
+        func signedArea(_ lhs: NSPoint, _ rhs: NSPoint, _ anchor: NSPoint) -> CGFloat {
+            (lhs.x - anchor.x) * (rhs.y - anchor.y)
+                - (rhs.x - anchor.x) * (lhs.y - anchor.y)
+        }
+
+        let firstSign = signedArea(point, first, second)
+        let secondSign = signedArea(point, second, third)
+        let thirdSign = signedArea(point, third, first)
+        let hasNegative = firstSign < 0 || secondSign < 0 || thirdSign < 0
+        let hasPositive = firstSign > 0 || secondSign > 0 || thirdSign > 0
+        return !(hasNegative && hasPositive)
+    }
+
+    private func scheduleHoverSelection(for row: Int) {
+        pendingHoverTask?.cancel()
+        pendingHoverRow = row
+        let task = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.hoverIntentDelay)
+            guard !Task.isCancelled else { return }
+            self?.activatePendingHoverSelection(for: row)
+        }
+        pendingHoverTask = task
+    }
+
+    private func activatePendingHoverSelection(for row: Int) {
+        guard pendingHoverRow == row else { return }
+        pendingHoverRow = nil
+        pendingHoverTask = nil
+        guard hoverEnabled, let window else { return }
+
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard visibleRect.contains(point), pointerHitsTable(at: point), self.row(at: point) == row,
+            view(atColumn: 0, row: row, makeIfNecessary: false) is ClipboardItemCellView
+        else { return }
+        activateHoverSelection(for: row, at: point)
+    }
+
+    private func activateHoverSelection(for row: Int, at point: NSPoint) {
+        cancelPendingHover()
         hoveredRow = row
+        lastPointerLocation = point
         if selectedRow != row {
             selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
         }
+    }
+
+    private func cancelPendingHover() {
+        pendingHoverTask?.cancel()
+        pendingHoverTask = nil
+        pendingHoverRow = nil
     }
 
     /// Tracking areas receive movement even when a SwiftUI overlay is visually above this AppKit
@@ -767,7 +862,6 @@ private final class ClipboardTableView: NSTableView {
         }
         return false
     }
-
 }
 
 private final class ClipboardSectionCellView: NSTableCellView {
