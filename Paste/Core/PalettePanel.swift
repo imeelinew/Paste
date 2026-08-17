@@ -11,14 +11,24 @@ final class PalettePanel: NSPanel {
             paletteViewModel?.onMenuOpenChanged = { [weak self] open in
                 self?.setSearchCaretHidden(open)
             }
+            paletteViewModel?.onSearchFocusRequested = { [weak self] in
+                self?.requestSearchFocus()
+            }
         }
     }
+
+    private weak var searchField: NSTextField?
+    private weak var renameField: NSTextField?
+    private var pendingSearchFocusRequest: UUID?
 
     private static let relevantModifiers: NSEvent.ModifierFlags = [
         .command, .option, .control, .shift,
     ]
 
     override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown || event.type == .rightMouseDown {
+            commitRenameIfClickIsOutside(event)
+        }
         if event.type == .keyDown, route(event) { return }
         super.sendEvent(event)
     }
@@ -42,10 +52,6 @@ final class PalettePanel: NSPanel {
 
         if paletteViewModel.renamingID != nil {
             return routeRename(event, keyCode: keyCode, modifiers: modifiers)
-        }
-
-        if modifiers == .command, keyCode == kVK_ANSI_F {
-            return handleOnce(.focusSearch, event: event)
         }
 
         if modifiers == .command, keyCode == kVK_Delete {
@@ -96,7 +102,7 @@ final class PalettePanel: NSPanel {
                 }
                 // At an empty query, Space is a Quick Look gesture even when the selected item
                 // cannot be previewed. Swallow it instead of starting a useless blank search.
-                if paletteViewModel.inputMode == .browsing, paletteViewModel.queryIsEmpty {
+                if paletteViewModel.queryIsEmpty {
                     return true
                 }
             default:
@@ -138,6 +144,58 @@ final class PalettePanel: NSPanel {
     private func handleOnce(_ command: PaletteCommand, event: NSEvent) -> Bool {
         if event.isARepeat { return true }
         return paletteViewModel?.handle(command) ?? false
+    }
+
+    func registerSearchField(_ field: NSTextField) {
+        searchField = field
+        schedulePendingSearchFocus()
+    }
+
+    func registerRenameField(_ field: NSTextField) {
+        renameField = field
+    }
+
+    func requestSearchFocus() {
+        let request = UUID()
+        pendingSearchFocusRequest = request
+        scheduleSearchFocus(for: request)
+    }
+
+    private func schedulePendingSearchFocus() {
+        guard let request = pendingSearchFocusRequest else { return }
+        scheduleSearchFocus(for: request)
+    }
+
+    private func scheduleSearchFocus(for request: UUID) {
+        DispatchQueue.main.async { [weak self] in
+            _ = self?.focusSearch(for: request)
+        }
+    }
+
+    @discardableResult
+    private func focusSearch(for request: UUID) -> Bool {
+        guard pendingSearchFocusRequest == request, isVisible, isKeyWindow,
+            paletteViewModel?.renamingID == nil, let searchField, searchField.isEnabled
+        else { return false }
+        guard makeFirstResponder(searchField) else { return false }
+        pendingSearchFocusRequest = nil
+        return true
+    }
+
+    private func commitRenameIfClickIsOutside(_ event: NSEvent) {
+        guard let paletteViewModel, paletteViewModel.renamingID != nil,
+            let renameField
+        else { return }
+
+        let frameInWindow = renameField.convert(renameField.bounds, to: nil)
+        if !renameField.isHidden, frameInWindow.contains(event.locationInWindow) { return }
+
+        if renameField.currentEditor() != nil {
+            _ = makeFirstResponder(nil)
+        }
+        if paletteViewModel.renamingID != nil {
+            paletteViewModel.commitOpenRename(renameField.stringValue)
+        }
     }
 
     private func setSearchCaretHidden(_ hidden: Bool) {

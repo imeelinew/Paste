@@ -111,9 +111,7 @@ struct RootPaletteView: View {
         HStack(alignment: .center, spacing: Theme.Spacing.md) {
             PaletteSearchField(
                 text: $vm.query,
-                focused: vm.searchFocused,
-                enabled: !showRename,
-                onFocusChanged: vm.searchFocusChanged
+                enabled: !showRename
             )
             .frame(maxWidth: .infinity)
         }
@@ -188,16 +186,14 @@ struct RootPaletteView: View {
 
 private struct PaletteSearchField: NSViewRepresentable {
     @Binding var text: String
-    let focused: Bool
     let enabled: Bool
-    let onFocusChanged: (Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, onFocusChanged: onFocusChanged)
+        Coordinator(text: $text)
     }
 
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField(frame: .zero)
+        let field = PaletteSearchTextField(frame: .zero)
         field.delegate = context.coordinator
         field.isBezeled = false
         field.isBordered = false
@@ -214,8 +210,6 @@ private struct PaletteSearchField: NSViewRepresentable {
 
     func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.text = $text
-        context.coordinator.onFocusChanged = onFocusChanged
-        context.coordinator.wantsFocus = focused && enabled
 
         if field.stringValue != text {
             field.stringValue = text
@@ -229,31 +223,18 @@ private struct PaletteSearchField: NSViewRepresentable {
             ]
         )
 
-        if context.coordinator.wantsFocus {
-            guard field.currentEditor() == nil else { return }
-            DispatchQueue.main.async { [weak field, weak coordinator = context.coordinator] in
-                guard let field, coordinator?.wantsFocus == true, field.isEnabled else { return }
-                field.window?.makeFirstResponder(field)
-            }
-        } else if field.currentEditor() != nil {
-            // Only resign this search field. A delayed update must never clear the row editor.
+        if !enabled, field.currentEditor() != nil {
             field.window?.makeFirstResponder(nil)
         }
+        (field.window as? PalettePanel)?.registerSearchField(field)
     }
 
     @MainActor
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var text: Binding<String>
-        var onFocusChanged: (Bool) -> Void
-        var wantsFocus = false
 
-        init(text: Binding<String>, onFocusChanged: @escaping (Bool) -> Void) {
+        init(text: Binding<String>) {
             self.text = text
-            self.onFocusChanged = onFocusChanged
-        }
-
-        func controlTextDidBeginEditing(_ obj: Notification) {
-            onFocusChanged(true)
         }
 
         func controlTextDidChange(_ obj: Notification) {
@@ -262,10 +243,13 @@ private struct PaletteSearchField: NSViewRepresentable {
             else { return }
             text.wrappedValue = field.stringValue
         }
+    }
+}
 
-        func controlTextDidEndEditing(_ obj: Notification) {
-            onFocusChanged(false)
-        }
+private final class PaletteSearchTextField: NSTextField {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        (window as? PalettePanel)?.registerSearchField(self)
     }
 }
 

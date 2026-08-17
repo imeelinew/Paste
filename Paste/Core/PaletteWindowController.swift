@@ -29,9 +29,11 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(nil)
         panel.orderFrontRegardless()
+        panel.requestSearchFocus()
         DispatchQueue.main.async { [weak panel] in
             guard let panel, panel.isVisible, !panel.isKeyWindow else { return }
             panel.makeKeyAndOrderFront(nil)
+            panel.requestSearchFocus()
         }
     }
 

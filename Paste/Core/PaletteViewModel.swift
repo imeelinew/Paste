@@ -30,18 +30,11 @@ enum PaletteOverlay: Equatable {
     }
 }
 
-enum PaletteInputMode: Equatable {
-    case browsing
-    case searching
-    case renaming(ClipboardItem.ID)
-}
-
 enum PaletteCommand: Equatable {
     case move(Int)
     case activate
     case copy
     case rename
-    case focusSearch
     case cancel
     case toggleActions
     case pinToScreen
@@ -78,7 +71,7 @@ final class PaletteViewModel: ObservableObject {
     @Published private(set) var results: [ClipboardItem] = []
     @Published private(set) var selectedID: ClipboardItem.ID?
     @Published private(set) var searchReady = true
-    @Published private(set) var inputMode: PaletteInputMode = .browsing
+    @Published private(set) var renamingID: ClipboardItem.ID?
     @Published var resetToken = UUID()
     @Published var followToken = UUID()
     @Published var pasteTarget: PasteTarget?
@@ -98,6 +91,7 @@ final class PaletteViewModel: ObservableObject {
     private(set) var renameDraft = ""
 
     var onMenuOpenChanged: ((Bool) -> Void)?
+    var onSearchFocusRequested: (() -> Void)?
 
     private unowned let core: AppCore
     private var searchTask: Task<Void, Never>?
@@ -115,16 +109,9 @@ final class PaletteViewModel: ObservableObject {
 
     var menuOpen: Bool { overlay.isMenu }
 
-    var renamingID: ClipboardItem.ID? {
-        guard case .renaming(let id) = inputMode else { return nil }
-        return id
-    }
-
-    var searchFocused: Bool { inputMode == .searching }
-
-    /// Space opens Quick Look for a selected image while the palette is not searching.
+    /// At an empty query, Space is reserved for Quick Look instead of starting blank search text.
     var canToggleQuickLook: Bool {
-        inputMode == .browsing && !menuOpen && queryIsEmpty && selectedItem?.kind == .image
+        !menuOpen && queryIsEmpty && selectedItem?.kind == .image
     }
 
     var selectionIndex: Int {
@@ -166,7 +153,7 @@ final class PaletteViewModel: ObservableObject {
     func prepare() {
         searchTask?.cancel()
         overlay = .none
-        inputMode = .browsing
+        renamingID = nil
         menuSelection = 0
         selectedID = nil
         imageQuickLookOpen = false
@@ -183,15 +170,6 @@ final class PaletteViewModel: ObservableObject {
         selectedID = id
         imageQuickLookOpen = false
         if follow { followToken = UUID() }
-    }
-
-    func searchFocusChanged(_ focused: Bool) {
-        if focused {
-            guard renamingID == nil, !menuOpen else { return }
-            if inputMode != .searching { inputMode = .searching }
-        } else if inputMode == .searching {
-            inputMode = .browsing
-        }
     }
 
     func openActions(for id: ClipboardItem.ID) {
@@ -243,21 +221,18 @@ final class PaletteViewModel: ObservableObject {
         case .rename:
             guard searchReady, let item = actionTarget else { return true }
             beginRename(item)
-        case .focusSearch:
-            guard renamingID == nil, !menuOpen else { return true }
-            inputMode = .searching
         case .cancel:
             if imageQuickLookOpen {
                 imageQuickLookOpen = false
                 ImageQuickLook.close()
             } else if renamingID != nil {
-                inputMode = .browsing
+                endRename()
             } else if menuOpen {
                 overlay = .none
                 menuSelection = 0
-            } else if inputMode == .searching {
-                inputMode = .browsing
-                if !queryIsEmpty { query = "" }
+            } else if !queryIsEmpty {
+                query = ""
+                onSearchFocusRequested?()
             } else {
                 core.hidePalette()
             }
@@ -373,7 +348,7 @@ final class PaletteViewModel: ObservableObject {
         renameDraft = item.displayTitle(locale: core.settings.language.locale)
         if overlay != .none { overlay = .none }
         if selectedID != item.id { selectedID = item.id }
-        inputMode = .renaming(item.id)
+        renamingID = item.id
     }
 
     func commitOpenRename(_ title: String) {
@@ -383,8 +358,15 @@ final class PaletteViewModel: ObservableObject {
 
     private func commitRename() {
         guard let id = renamingID else { return }
-        inputMode = .browsing
+        renamingID = nil
         core.clipboardStore.setCustomTitle(renameDraft, for: id)
+        onSearchFocusRequested?()
+    }
+
+    private func endRename() {
+        guard renamingID != nil else { return }
+        renamingID = nil
+        onSearchFocusRequested?()
     }
 
     private func queryChanged() {
@@ -436,7 +418,7 @@ final class PaletteViewModel: ObservableObject {
         guard !newResults.isEmpty else {
             selectedID = nil
             overlay = .none
-            if renamingID != nil { inputMode = .browsing }
+            if renamingID != nil { endRename() }
             return
         }
         if !resetSelection, let priorID,
@@ -460,7 +442,7 @@ final class PaletteViewModel: ObservableObject {
             break
         }
         if let renamingID, !newResults.contains(where: { $0.id == renamingID }) {
-            inputMode = .browsing
+            endRename()
         }
     }
 

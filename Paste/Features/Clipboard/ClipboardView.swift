@@ -239,10 +239,17 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             self.query = query
             self.locale = locale
 
-            if contentChanged || titleChanged || appearanceChanged {
+            let reloadRequired = contentChanged || titleChanged || appearanceChanged
+            let wasApplyingSelection = applyingSelection
+            if reloadRequired {
+                // `allowsEmptySelection == false` makes AppKit temporarily choose the first
+                // selectable row during reload. Suppress that implementation-detail callback
+                // until the model's selected ID has been restored below.
+                applyingSelection = true
                 tableView.reloadData()
             }
             applySelection(selectedID, to: tableView)
+            applyingSelection = wasApplyingSelection
 
             if lastScroll != scroll {
                 lastScroll = scroll
@@ -474,13 +481,14 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
                 if case .item(let item) = $0 { return item.id == id }
                 return false
             }
+            let wasApplyingSelection = applyingSelection
             applyingSelection = true
             if let row {
                 tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
             } else {
                 tableView.deselectAll(nil)
             }
-            applyingSelection = false
+            applyingSelection = wasApplyingSelection
             updateVisibleSelection(in: tableView)
         }
 
@@ -616,6 +624,11 @@ private final class ClipboardTableContainerView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        (window as? PalettePanel)?.registerRenameField(renameField)
+    }
 
     override func layout() {
         super.layout()
