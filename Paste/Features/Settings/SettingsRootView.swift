@@ -28,14 +28,14 @@ enum SettingsTab: Int, CaseIterable, Hashable, Identifiable {
         }
     }
 
-    var systemImage: String {
+    var lucideIcon: LucideIconName {
         switch self {
-        case .general: return "gearshape"
-        case .shortcuts: return "keyboard"
-        case .appearance: return "eyeglasses"
-        case .clipboard: return "doc.on.clipboard"
-        case .history: return "clock"
-        case .about: return "info.circle"
+        case .general: return .settings
+        case .shortcuts: return .keyboard
+        case .appearance: return .glasses
+        case .clipboard: return .clipboard
+        case .history: return .clock
+        case .about: return .info
         }
     }
 

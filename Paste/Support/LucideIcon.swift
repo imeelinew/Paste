@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import SwiftUI
 
@@ -15,6 +16,10 @@ public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
     case info
     case refreshCw = "refresh-cw"
     case settings
+    case keyboard
+    case glasses
+    case clipboard
+    case clock
     case power
     case pictureInPicture2 = "picture-in-picture-2"
 
@@ -61,6 +66,28 @@ public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
         case .settings:
             SVGPathParser.addPath("M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915", to: cgPath)
             cgPath.addEllipse(in: CGRect(x: 9, y: 9, width: 6, height: 6))
+        case .keyboard:
+            SVGPathParser.addPath("M10 8h.01", to: cgPath)
+            SVGPathParser.addPath("M12 12h.01", to: cgPath)
+            SVGPathParser.addPath("M14 8h.01", to: cgPath)
+            SVGPathParser.addPath("M16 12h.01", to: cgPath)
+            SVGPathParser.addPath("M18 8h.01", to: cgPath)
+            SVGPathParser.addPath("M6 8h.01", to: cgPath)
+            SVGPathParser.addPath("M7 16h10", to: cgPath)
+            SVGPathParser.addPath("M8 12h.01", to: cgPath)
+            cgPath.addRoundedRect(in: CGRect(x: 2, y: 4, width: 20, height: 16), cornerWidth: 2, cornerHeight: 2)
+        case .glasses:
+            cgPath.addEllipse(in: CGRect(x: 2, y: 11, width: 8, height: 8))
+            cgPath.addEllipse(in: CGRect(x: 14, y: 11, width: 8, height: 8))
+            SVGPathParser.addPath("M14 15a2 2 0 0 0-2-2 2 2 0 0 0-2 2", to: cgPath)
+            SVGPathParser.addPath("M2.5 13 5 7c.7-1.3 1.4-2 3-2", to: cgPath)
+            SVGPathParser.addPath("M21.5 13 19 7c-.7-1.3-1.5-2-3-2", to: cgPath)
+        case .clipboard:
+            cgPath.addRoundedRect(in: CGRect(x: 8, y: 2, width: 8, height: 4), cornerWidth: 1, cornerHeight: 1)
+            SVGPathParser.addPath("M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2", to: cgPath)
+        case .clock:
+            cgPath.addEllipse(in: CGRect(x: 2, y: 2, width: 20, height: 20))
+            SVGPathParser.addPath("M12 6v6l4 2", to: cgPath)
         case .power:
             SVGPathParser.addPath("M12 2v10", to: cgPath)
             SVGPathParser.addPath("M18.4 6.6a9 9 0 1 1-12.77.04", to: cgPath)
@@ -69,6 +96,37 @@ public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
             cgPath.addRoundedRect(in: CGRect(x: 12, y: 13, width: 10, height: 7), cornerWidth: 2, cornerHeight: 2)
         }
         return Path(cgPath)
+    }
+
+    /// Template image for the settings toolbar tabs.
+    /// The toolbar scales the 32pt image slot as a unit, while the centered 21pt artwork keeps the
+    /// glyph from filling the tab. `LucideIconShape.path(in:)` only consumes a rect's size, so the
+    /// canvas inset must be applied to the resulting path explicitly.
+    func settingsTabImage() -> NSImage {
+        let canvasSize: CGFloat = 32
+        let artworkSize: CGFloat = 21
+        let image = NSImage(
+            size: NSSize(width: canvasSize, height: canvasSize),
+            flipped: true
+        ) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            let artworkPath = LucideIconShape(name: self).path(
+                in: CGRect(x: 0, y: 0, width: artworkSize, height: artworkSize)
+            )
+            let canvasInset = (canvasSize - artworkSize) / 2
+            let centeredPath = artworkPath.applying(
+                CGAffineTransform(translationX: canvasInset, y: canvasInset)
+            )
+            ctx.setStrokeColor(NSColor.black.cgColor)
+            ctx.setLineWidth(LucideIcon.strokeWidth)
+            ctx.setLineCap(.round)
+            ctx.setLineJoin(.round)
+            ctx.addPath(centeredPath.cgPath)
+            ctx.strokePath()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 }
 
@@ -92,11 +150,18 @@ public struct LucideIconShape: Shape {
 
 /// SwiftUI view rendering a resolution-independent Lucide icon.
 public struct LucideIcon: View {
-    public let name: LucideIconName
-    public var size: CGFloat = 16
-    public var strokeWidth: CGFloat = 1.35
+    public static let size: CGFloat = 16
+    public static let strokeWidth: CGFloat = 1.35
 
-    public init(name: LucideIconName, size: CGFloat = 16, strokeWidth: CGFloat = 1.35) {
+    public let name: LucideIconName
+    public var size: CGFloat = LucideIcon.size
+    public var strokeWidth: CGFloat = LucideIcon.strokeWidth
+
+    public init(
+        name: LucideIconName,
+        size: CGFloat = LucideIcon.size,
+        strokeWidth: CGFloat = LucideIcon.strokeWidth
+    ) {
         self.name = name
         self.size = size
         self.strokeWidth = strokeWidth

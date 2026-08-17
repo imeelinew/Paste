@@ -221,7 +221,7 @@ private final class SwiftUISettingsPaneController: SettingsPaneViewController {
         self.paneHeight = tab.preferredPaneHeight
         super.init(nibName: nil, bundle: nil)
         tabName = String(localized: tab.localizationKey, locale: locale)
-        tabImage = NSImage(systemSymbolName: tab.systemImage, accessibilityDescription: nil)
+        tabImage = tab.lucideIcon.settingsTabImage()
         tabIdentifier = tab.tabIdentifier
         isResizableView = false
     }
