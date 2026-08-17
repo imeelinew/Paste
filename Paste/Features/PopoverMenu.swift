@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// A menu row's optional leading glyph: an SF Symbol, or a real app icon drawn from `IconCache`.
+/// A menu row's optional leading glyph: a Lucide vector icon, an SF Symbol fallback, or a real app icon drawn from `IconCache`.
 enum PopoverMenuIcon: Equatable {
+    case lucide(LucideIconName)
     case symbol(String)
     case file(path: String)
 
-    /// Target app icon for paste rows; `nil` when unknown so the row can keep a blank icon slot for alignment.
+    /// Target app icon for paste rows; returns nil when unknown without any fallback icon.
     static func paste(_ target: PasteTarget?) -> PopoverMenuIcon? {
-        guard let path = target?.iconPath else { return nil }
+        guard let path = target?.iconPath, FileManager.default.fileExists(atPath: path) else {
+            return nil
+        }
         return .file(path: path)
     }
 }
@@ -25,50 +28,50 @@ struct PopoverMenuItem {
         switch action {
         case .about:
             title = "About Paste"
-            icon = nil
+            icon = .lucide(.info)
         case .checkForUpdates:
             title = "Check for Updates"
-            icon = nil
+            icon = .lucide(.refreshCw)
             isEnabled = AppCore.shared.updateService.canCheckForUpdates
         case .settings:
             title = "Settings"
-            icon = nil
+            icon = .lucide(.settings)
             shortcut = "⌘,"
         case .quit:
             title = "Quit Paste"
-            icon = nil
+            icon = .lucide(.power)
             shortcut = "⌘Q"
             isDestructive = true
         case .paste:
             title = target?.pasteTitle ?? "Paste"
-            icon = .paste(target)
+            icon = PopoverMenuIcon.paste(target)
             shortcut = "↵"
         case .pasteKeepingOpen:
             title = "Paste & Keep Window Open"
-            icon = .paste(target)
+            icon = PopoverMenuIcon.paste(target)
         case .copy:
             title = "Copy to Clipboard"
-            icon = nil
+            icon = .lucide(.copy)
             shortcut = PaletteShortcut.copyToClipboard.displayString
         case .rename:
             title = "Rename"
-            icon = nil
+            icon = .lucide(.pencil)
             shortcut = PaletteShortcut.rename.displayString
         case .pinToScreen:
             title = "Pin to Screen"
-            icon = nil
+            icon = .lucide(.pin)
             shortcut = PaletteShortcut.pinToScreen.displayString
         case .togglePin(let item):
             title = item.isPinned ? "Unpin Entry" : "Pin Entry"
-            icon = .symbol(item.isPinned ? "pin.slash" : "pin")
+            icon = .lucide(item.isPinned ? .bookmarkMinus : .bookmark)
             shortcut = PaletteShortcut.togglePin.displayString
         case .revealInFinder:
             title = "Show in Finder"
-            icon = nil
+            icon = .lucide(.folder)
             shortcut = PaletteShortcut.showInFinder.displayString
         case .delete:
             title = "Delete Entry"
-            icon = .symbol("trash")
+            icon = .lucide(.trash2)
             isDestructive = true
         }
     }
@@ -119,6 +122,9 @@ private struct PopoverMenuRow: View {
             HStack(spacing: Theme.Spacing.sm) {
                 if let icon = item.icon {
                     switch icon {
+                    case .lucide(let name):
+                        LucideIcon(name: name)
+                            .foregroundStyle(item.isDestructive ? Color.red : Color.secondary)
                     case .symbol(let name):
                         Image(systemName: name)
                             .font(Theme.Typography.menuIcon)
@@ -160,31 +166,17 @@ private struct PopoverMenuRow: View {
     }
 }
 
-/// App icon for a menu row or bar control: seeds from the warm `IconCache` so the paste target
-/// paints on the first frame, decoding off-main only on a miss. Reloads whenever `path` changes —
-/// the bottom-bar instance stays mounted across palette shows, so @State must not keep a prior app's icon.
+/// App icon for a menu row or bar control: renders directly from `IconCache`
+/// so the paste target paints deterministically on the very first frame without flicker or async cancellation.
 struct MenuFileIcon: View {
     let path: String
-    @State private var image: NSImage?
 
     var body: some View {
-        Group {
-            if let image {
-                Image(nsImage: image).resizable()
-            } else {
-                Color.clear
-            }
-        }
-        .frame(width: Theme.Size.menuIcon, height: Theme.Size.menuIcon)
-        .task(id: path) {
-            if let cached = IconCache.cached(forFile: path) {
-                image = cached
-                return
-            }
-            image = nil
-            let loaded = await IconCache.loadAsync(forFile: path)
-            guard !Task.isCancelled else { return }
-            image = loaded
-        }
+        let image = IconCache.icon(forFile: path)
+        Image(nsImage: image)
+            .resizable()
+            .interpolation(.high)
+            .antialiased(true)
+            .frame(width: Theme.Size.menuIcon, height: Theme.Size.menuIcon)
     }
 }

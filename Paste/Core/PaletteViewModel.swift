@@ -7,9 +7,19 @@ struct PasteTarget: Equatable {
     let iconPath: String?
 
     init?(app: NSRunningApplication?) {
-        guard let app, let name = app.localizedName else { return nil }
+        guard let app, !app.isTerminated else { return nil }
+        guard let name = app.localizedName ?? app.executableURL?.lastPathComponent else { return nil }
         self.name = name
-        iconPath = app.bundleURL?.path
+        if let bundleURL = app.bundleURL {
+            iconPath = bundleURL.path
+        } else if let bundleID = app.bundleIdentifier,
+                  let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            iconPath = url.path
+        } else if let execURL = app.executableURL {
+            iconPath = execURL.path
+        } else {
+            iconPath = nil
+        }
     }
 
     var pasteTitle: LocalizedStringKey { "Paste to \(name)" }

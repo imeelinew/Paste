@@ -15,10 +15,20 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
 
     func show() {
         let frontmost = NSWorkspace.shared.frontmostApplication
-        if frontmost?.processIdentifier != NSRunningApplication.current.processIdentifier {
+        if let frontmost, frontmost.processIdentifier != NSRunningApplication.current.processIdentifier, !frontmost.isTerminated {
             previousApp = frontmost
+        } else if previousApp == nil || previousApp?.isTerminated == true {
+            previousApp = NSWorkspace.shared.runningApplications.first {
+                $0.activationPolicy == .regular
+                && $0.processIdentifier != NSRunningApplication.current.processIdentifier
+                && !$0.isTerminated
+            }
         }
-        core.palette.pasteTarget = PasteTarget(app: previousApp)
+        let target = PasteTarget(app: previousApp)
+        core.palette.pasteTarget = target
+        if let path = target?.iconPath {
+            _ = IconCache.icon(forFile: path)
+        }
 
         let panel = ensurePanel()
         position(panel)
