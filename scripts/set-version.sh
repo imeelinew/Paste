@@ -25,7 +25,7 @@ contents = File.binread(path)
 marketing_count = contents.scan(/MARKETING_VERSION = [^;]+;/).length
 build_count = contents.scan(/CURRENT_PROJECT_VERSION = [^;]+;/).length
 abort "Unexpected MARKETING_VERSION entry count: #{marketing_count}" unless marketing_count == 4
-abort "Unexpected CURRENT_PROJECT_VERSION entry count: #{build_count}" unless build_count == 2
+abort "Unexpected CURRENT_PROJECT_VERSION entry count: #{build_count}" unless build_count == 4
 contents.gsub!(/MARKETING_VERSION = [^;]+;/, "MARKETING_VERSION = #{version};")
 contents.gsub!(/CURRENT_PROJECT_VERSION = [^;]+;/, "CURRENT_PROJECT_VERSION = #{build};")
 File.binwrite(path, contents)
