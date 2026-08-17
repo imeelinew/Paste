@@ -211,6 +211,7 @@ final class PreviewTextScrollView: NSScrollView {
     private var styleObserver: NotificationToken?
     private var restoringScrollPosition = false
     private var desiredScrollPosition: CGPoint?
+    private var lastReportedScrollPosition: CGPoint?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -264,8 +265,20 @@ final class PreviewTextScrollView: NSScrollView {
     override func reflectScrolledClipView(_ clipView: NSClipView) {
         super.reflectScrolledClipView(clipView)
         guard clipView === contentView, !restoringScrollPosition else { return }
-        desiredScrollPosition = clipView.bounds.origin
-        onScroll?(clipView.bounds.origin)
+
+        // A trackpad can temporarily move the clip view beyond either edge for rubber-banding.
+        // Never persist those transient coordinates, and stop treating the last restored value as
+        // authoritative as soon as a native scroll begins. Otherwise SwiftUI echoes the transient
+        // value back through `setScrollPosition`, which fights AppKit's bounce on every frame.
+        desiredScrollPosition = nil
+        guard let position = clampedScrollPosition(clipView.bounds.origin) else { return }
+        if let lastReportedScrollPosition,
+            lastReportedScrollPosition.nearlyEquals(position)
+        {
+            return
+        }
+        lastReportedScrollPosition = position
+        onScroll?(position)
     }
 
     func updateDocumentGeometry() {
@@ -284,24 +297,40 @@ final class PreviewTextScrollView: NSScrollView {
     }
 
     func setScrollPosition(_ requested: CGPoint?) {
-        desiredScrollPosition = requested
-        if let requested {
-            restoreScrollPosition(requested)
+        guard let requested, let position = clampedScrollPosition(requested) else {
+            desiredScrollPosition = nil
+            return
         }
+
+        // Values reported above return through the SwiftUI binding during the same gesture. They
+        // acknowledge state; they are not a request to reposition the native scroll view.
+        if let lastReportedScrollPosition,
+            lastReportedScrollPosition.nearlyEquals(position)
+        {
+            return
+        }
+        desiredScrollPosition = requested
+        restoreScrollPosition(requested)
     }
 
     private func restoreScrollPosition(_ requested: CGPoint) {
-        guard requested.x.isFinite, requested.y.isFinite else { return }
-        let maximumY = max(textView.frame.height - contentView.bounds.height, 0)
-        let position = CGPoint(x: 0, y: min(max(requested.y, 0), maximumY))
+        guard let position = clampedScrollPosition(requested) else { return }
         let current = contentView.bounds.origin
         guard abs(current.x - position.x) > 0.5 || abs(current.y - position.y) > 0.5 else {
+            lastReportedScrollPosition = position
             return
         }
         restoringScrollPosition = true
         contentView.scroll(to: position)
         reflectScrolledClipView(contentView)
         restoringScrollPosition = false
+        lastReportedScrollPosition = position
+    }
+
+    private func clampedScrollPosition(_ requested: CGPoint) -> CGPoint? {
+        guard requested.x.isFinite, requested.y.isFinite else { return nil }
+        let maximumY = max(textView.frame.height - contentView.bounds.height, 0)
+        return CGPoint(x: 0, y: min(max(requested.y, 0), maximumY))
     }
 
     private func observeScrollerStyleChanges() {
@@ -323,6 +352,12 @@ final class PreviewTextScrollView: NSScrollView {
         autohidesScrollers = true
         hasVerticalScroller = true
         tile()
+    }
+}
+
+private extension CGPoint {
+    func nearlyEquals(_ other: CGPoint, tolerance: CGFloat = 0.5) -> Bool {
+        abs(x - other.x) <= tolerance && abs(y - other.y) <= tolerance
     }
 }
 

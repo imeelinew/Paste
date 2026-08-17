@@ -398,7 +398,12 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
         let storedPayload = sessionStore.writeTextPayload(
             text, itemID: itemID, kind: recordKind)
         let visibleFrame = targetVisibleFrame()
-        let initialSize = PinnedTextLayout.initialSize(text: text, visibleFrame: visibleFrame)
+        let initialSize = PinnedTextLayout.initialSize(
+            text: text,
+            style: style,
+            fontSize: AppCore.shared.settings.pinnedTextSize,
+            visibleFrame: visibleFrame
+        )
         let panel = makePanel(
             title: title,
             initialSize: initialSize,
@@ -482,7 +487,12 @@ final class PinnedImageWindowController: NSObject, NSWindowDelegate {
     private func restoreText(_ record: PinnedCardRecord, style: PinnedTextStyle) -> Bool {
         guard let text = sessionStore.text(for: record) else { return false }
         let visibleFrame = visibleFrame(for: record.frame.rect)
-        let initialSize = PinnedTextLayout.initialSize(text: text, visibleFrame: visibleFrame)
+        let initialSize = PinnedTextLayout.initialSize(
+            text: text,
+            style: style,
+            fontSize: AppCore.shared.settings.pinnedTextSize,
+            visibleFrame: visibleFrame
+        )
         let fallback =
             switch style {
             case .plain:
@@ -1230,18 +1240,58 @@ enum PinnedImageLayout {
 enum PinnedTextLayout {
     static let minimumSize = CGSize(width: 280, height: 160)
 
-    static func initialSize(text: String, visibleFrame: CGRect) -> CGSize {
-        let maxSize = CGSize(
-            width: max(visibleFrame.width - 48, 320),
-            height: max(visibleFrame.height - 48, 200)
-        )
-        var lines = 1
-        for character in text where character.isNewline {
-            lines += 1
+    static func initialSize(
+        text: String,
+        style: PinnedTextStyle,
+        fontSize: CGFloat,
+        visibleFrame: CGRect
+    ) -> CGSize {
+        let availableWidth = max(visibleFrame.width - 48, 1)
+        let availableHeight = max(visibleFrame.height - 48, 1)
+        let minimumWidth = min(minimumSize.width, availableWidth)
+        let maximumWidth = min(preferredMaximumWidth(for: style), availableWidth)
+        let lineWidths = sampledLineWidths(text: text, style: style, fontSize: fontSize)
+        let measuredWidth = (lineWidths.max() ?? 0) + 48
+        let width = min(max(measuredWidth, minimumWidth), max(maximumWidth, minimumWidth))
+
+        let contentWidth = max(width - 32, 1)
+        let wrappedLines = lineWidths.reduce(CGFloat.zero) { count, lineWidth in
+            count + max(ceil(lineWidth / contentWidth), 1)
         }
-        let width = min(max(440, maxSize.width * 0.36), 620)
-        let height = min(max(220, 72 + CGFloat(lines) * 18), maxSize.height * 0.72)
+        let lineHeight = max(fontSize * 1.4, 18)
+        let height = min(
+            max(220, 72 + wrappedLines * lineHeight),
+            max(availableHeight * 0.72, minimumSize.height)
+        )
         return CGSize(width: width.rounded(), height: height.rounded())
+    }
+
+    private static func preferredMaximumWidth(for style: PinnedTextStyle) -> CGFloat {
+        switch style {
+        case .plain: return 420
+        case .markdown: return 460
+        case .code: return 500
+        }
+    }
+
+    private static func sampledLineWidths(
+        text: String,
+        style: PinnedTextStyle,
+        fontSize: CGFloat
+    ) -> [CGFloat] {
+        let font =
+            style == .code
+            ? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            : NSFont.systemFont(ofSize: fontSize)
+        let sample = String(text.prefix(20_000))
+        let lines = sample.split(separator: "\n", omittingEmptySubsequences: false).prefix(200)
+        let widths = lines.map { line -> CGFloat in
+            let measuredLine = String(line.prefix(200))
+            return ceil(
+                (measuredLine as NSString).size(withAttributes: [.font: font]).width
+            )
+        }
+        return widths.isEmpty ? [0] : widths
     }
 }
 
