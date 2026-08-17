@@ -7,6 +7,7 @@ struct ClipboardList: View {
     let query: String
     /// Changes only when the list should scroll (keyboard nav / reset), so mouse selection never yanks the scroll position.
     let scroll: ScrollIntent
+    let hoverEnabled: Bool
     let onSelect: (ClipboardItem) -> Void
     let onActions: (ClipboardItem) -> Void
     let renamingID: ClipboardItem.ID?
@@ -22,6 +23,7 @@ struct ClipboardList: View {
             selectedID: selectedID,
             query: query,
             scroll: scroll,
+            hoverEnabled: hoverEnabled,
             store: store,
             onSelect: onSelect,
             onActions: onActions,
@@ -89,6 +91,7 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
     let selectedID: ClipboardItem.ID?
     let query: String
     let scroll: ScrollIntent
+    let hoverEnabled: Bool
     let store: ClipboardStore
     let onSelect: (ClipboardItem) -> Void
     let onActions: (ClipboardItem) -> Void
@@ -110,6 +113,7 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             selectedID: selectedID,
             query: query,
             scroll: scroll,
+            hoverEnabled: hoverEnabled,
             locale: context.environment.locale,
             store: store,
             onSelect: onSelect,
@@ -205,7 +209,7 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
 
         func update(
             results: [ClipboardItem], selectedID: ClipboardItem.ID?, query: String,
-            scroll: ScrollIntent, locale: Locale, store: ClipboardStore,
+            scroll: ScrollIntent, hoverEnabled: Bool, locale: Locale, store: ClipboardStore,
             onSelect: @escaping (ClipboardItem) -> Void,
             onActions: @escaping (ClipboardItem) -> Void,
             renamingID: ClipboardItem.ID?,
@@ -215,6 +219,9 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             onScrollActivity: @escaping () -> Void
         ) {
             guard let tableView = tableView else { return }
+            if !hoverEnabled {
+                tableView.hoverEnabled = false
+            }
             self.store = store
             self.onSelect = onSelect
             self.onActions = onActions
@@ -245,6 +252,7 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
                 // `allowsEmptySelection == false` makes AppKit temporarily choose the first
                 // selectable row during reload. Suppress that implementation-detail callback
                 // until the model's selected ID has been restored below.
+                tableView.clearHover()
                 applyingSelection = true
                 tableView.reloadData()
             }
@@ -256,6 +264,8 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
                 apply(scroll, selectedID: selectedID, to: tableView)
             }
             syncInlineRename(in: tableView)
+            tableView.hoverEnabled = hoverEnabled
+            tableView.refreshHover()
             reportGeometry(scrolling: false)
         }
 
@@ -565,6 +575,7 @@ private struct ClipboardTableRepresentable: NSViewRepresentable {
             let scrolling = lastBoundsOrigin.map { $0 != origin } ?? false
             lastBoundsOrigin = origin
             positionRenameEditor()
+            tableView?.refreshHover()
             reportGeometry(scrolling: scrolling)
         }
 
@@ -647,14 +658,116 @@ private final class ClipboardTableScrollView: NSScrollView {
 
 private final class ClipboardTableView: NSTableView {
     var onRightClick: ((Int) -> Void)?
+    var hoverEnabled = true {
+        didSet {
+            guard hoverEnabled != oldValue else { return }
+            if hoverEnabled {
+                refreshHover()
+            } else {
+                clearHover()
+            }
+        }
+    }
+
+    private var hoveredRow: Int?
+    private var hoverTrackingArea: NSTrackingArea?
 
     override var acceptsFirstResponder: Bool { false }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        updateHover(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        updateHover(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        clearHover()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            clearHover()
+        }
+    }
 
     override func rightMouseDown(with event: NSEvent) {
         let row = row(at: convert(event.locationInWindow, from: nil))
         guard row >= 0 else { return }
         onRightClick?(row)
     }
+
+    func refreshHover() {
+        guard hoverEnabled, let window else {
+            clearHover()
+            return
+        }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard visibleRect.contains(point) else {
+            clearHover()
+            return
+        }
+        updateHover(at: point)
+    }
+
+    func clearHover() {
+        hoveredRow = nil
+    }
+
+    private func updateHover(at point: NSPoint) {
+        guard hoverEnabled, pointerHitsTable(at: point) else {
+            clearHover()
+            return
+        }
+        let row = row(at: point)
+        guard row >= 0,
+            view(atColumn: 0, row: row, makeIfNecessary: false) is ClipboardItemCellView
+        else {
+            hoveredRow = nil
+            return
+        }
+        guard hoveredRow != row else { return }
+        hoveredRow = row
+        if selectedRow != row {
+            selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        }
+    }
+
+    /// Tracking areas receive movement even when a SwiftUI overlay is visually above this AppKit
+    /// view. Verify the window's real hit-test target so menus and rename controls cannot leak
+    /// hover into rows underneath them.
+    private func pointerHitsTable(at point: NSPoint) -> Bool {
+        guard let contentView = window?.contentView else { return false }
+        let pointInWindow = convert(point, to: nil)
+        let pointInContent = contentView.convert(pointInWindow, from: nil)
+        var hitView = contentView.hitTest(pointInContent)
+        while let view = hitView {
+            if view === self { return true }
+            hitView = view.superview
+        }
+        return false
+    }
+
 }
 
 private final class ClipboardSectionCellView: NSTableCellView {

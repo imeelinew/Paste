@@ -40,6 +40,7 @@ struct RootPaletteView: View {
                         selectedID: vm.selectedID,
                         query: vm.query,
                         scroll: scroll,
+                        hoverEnabled: !vm.menuOpen && !showRename,
                         onSelect: { vm.select($0.id) },
                         onActions: { item in
                             vm.openActions(for: item.id)
