@@ -29,6 +29,7 @@
 "Dimensions" = "尺寸";
 "Disabled Applications" = "排除的应用";
 "Disable System Clipboard" = "禁用系统剪贴板";
+"Enable Sound Effects" = "开启音效";
 "Earlier" = "更早";
 "English" = "English";
 "Follow System" = "跟随系统";
@@ -36,6 +37,7 @@
 "General" = "通用";
 "History" = "历史记录";
 "Image" = "图像";
+"Icon Animation" = "图标动画";
 "Information" = "信息";
 "Input Method" = "输入法";
 "Keep history for" = "历史保留时长";
@@ -69,6 +71,7 @@
 "Rename" = "重命名";
 "Small" = "小";
 "Medium" = "中";
+"Menu Bar" = "菜单栏";
 "Large" = "大";
 "Close Pinned Image" = "关闭钉选图片";
 "Close Pinned Item" = "关闭钉选内容";
@@ -92,8 +95,11 @@
 "Shortcut" = "快捷键";
 "Shortcuts" = "快捷键";
 "Show in Finder" = "在 Finder 中显示";
+"Show Menu Bar Icon" = "显示菜单栏图标";
 "Simplified Chinese" = "简体中文";
 "Size" = "大小";
+"Sound" = "声音";
+"Sound Effect" = "音效";
 "Source" = "来源";
 "Startup" = "启动";
 "System Clipboard" = "系统剪贴板";
@@ -115,3 +121,7 @@
 "1 Year" = "1 年";
 "3 Months" = "3 个月";
 "6 Months" = "6 个月";
+"音效1" = "音效1";
+"音效2" = "音效2";
+"音效3" = "音效3";
+"音效4" = "音效4";

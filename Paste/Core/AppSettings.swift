@@ -85,6 +85,19 @@ enum PinnedTextSize {
     }
 }
 
+enum CopySoundEffect: Int, CaseIterable, Identifiable {
+    case one = 1
+    case two = 2
+    case three = 3
+    case four = 4
+
+    var id: Int { rawValue }
+
+    var title: String { "音效\(rawValue)" }
+
+    var resourceName: String { "sound-effect-\(rawValue)" }
+}
+
 enum PinnedWindowOpacity {
     static let minimum: Double = 50
     static let maximum: Double = 100
@@ -116,6 +129,10 @@ final class AppSettings: ObservableObject {
         static let pinnedTextSize = "pinnedTextSize"
         static let pinnedWindowOpacity = "pinnedWindowOpacity"
         static let pinnedWindowBlur = "pinnedWindowBlur"
+        static let showMenuBarIcon = "showMenuBarIcon"
+        static let animateMenuBarIconOnCopy = "animateMenuBarIconOnCopy"
+        static let soundEffectsEnabled = "soundEffectsEnabled"
+        static let copySoundEffect = "copySoundEffect"
     }
 
     @Published var clipboardRetention: ClipboardRetention {
@@ -177,6 +194,22 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(pinnedWindowBlur, forKey: Key.pinnedWindowBlur) }
     }
 
+    @Published var showMenuBarIcon: Bool {
+        didSet { defaults.set(showMenuBarIcon, forKey: Key.showMenuBarIcon) }
+    }
+
+    @Published var animateMenuBarIconOnCopy: Bool {
+        didSet { defaults.set(animateMenuBarIconOnCopy, forKey: Key.animateMenuBarIconOnCopy) }
+    }
+
+    @Published var soundEffectsEnabled: Bool {
+        didSet { defaults.set(soundEffectsEnabled, forKey: Key.soundEffectsEnabled) }
+    }
+
+    @Published var copySoundEffect: CopySoundEffect {
+        didSet { defaults.set(copySoundEffect.rawValue, forKey: Key.copySoundEffect) }
+    }
+
     var pinnedWindowAlpha: CGFloat {
         PinnedWindowOpacity.alpha(from: pinnedWindowOpacity)
     }
@@ -210,5 +243,13 @@ final class AppSettings: ObservableObject {
                 : defaults.double(forKey: Key.pinnedWindowOpacity)
         )
         pinnedWindowBlur = defaults.bool(forKey: Key.pinnedWindowBlur)
+        showMenuBarIcon = defaults.object(forKey: Key.showMenuBarIcon) as? Bool ?? true
+        animateMenuBarIconOnCopy =
+            defaults.object(forKey: Key.animateMenuBarIconOnCopy) as? Bool ?? true
+        soundEffectsEnabled = defaults.object(forKey: Key.soundEffectsEnabled) as? Bool ?? true
+        copySoundEffect =
+            defaults.object(forKey: Key.copySoundEffect) == nil
+            ? .one
+            : CopySoundEffect(rawValue: defaults.integer(forKey: Key.copySoundEffect)) ?? .one
     }
 }

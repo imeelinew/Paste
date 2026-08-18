@@ -115,6 +115,8 @@ final class PasteSettingsWindowController {
                     ShortcutsSettingsView()
                 case .appearance:
                     AppearanceSettingsView()
+                case .sound:
+                    SoundSettingsView()
                 case .clipboard:
                     ClipboardSettingsView()
                 case .history:

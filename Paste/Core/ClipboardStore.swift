@@ -314,6 +314,8 @@ final class ClipboardStore: ObservableObject {
         }
     }
     @Published private(set) var revision: UInt64 = 0
+    /// Fired after a new history row is inserted, not on recopy-of-top or image refresh.
+    var onItemInserted: (() -> Void)?
     private(set) var captureGeneration: UInt64 = 0
     var maxAge: TimeInterval = ClipboardRetention.threeMonths.maxAge
 
@@ -842,6 +844,7 @@ final class ClipboardStore: ObservableObject {
         trimWindow()
         prune()
         scheduleSearchMetadataUpdate(for: item)
+        onItemInserted?()
         return true
     }
 

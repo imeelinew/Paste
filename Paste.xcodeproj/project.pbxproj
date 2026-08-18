@@ -65,6 +65,11 @@
 		AA3100000000000000000007 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3100000000000000000003 /* main.swift */; };
 		AA3100000000000000000008 /* PasteControllerProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3100000000000000000001 /* PasteControllerProtocol.swift */; };
 		AA3100000000000000000012 /* paste-cli in CopyFiles */ = {isa = PBXBuildFile; fileRef = AA3100000000000000000004 /* paste-cli */; };
+		BB41A0000000000000000002 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB41A0000000000000000001 /* MenuBarController.swift */; };
+		BB41B0000000000000000002 /* sound-effect-1.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = BB41B0000000000000000001 /* sound-effect-1.mp3 */; };
+		BB41B0000000000000000004 /* sound-effect-2.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = BB41B0000000000000000003 /* sound-effect-2.mp3 */; };
+		BB41B0000000000000000006 /* sound-effect-3.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = BB41B0000000000000000005 /* sound-effect-3.mp3 */; };
+		BB41B0000000000000000008 /* sound-effect-4.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = BB41B0000000000000000007 /* sound-effect-4.mp3 */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -125,6 +130,11 @@
 		AA3100000000000000000002 /* PasteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteController.swift; sourceTree = "<group>"; };
 		AA3100000000000000000003 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		AA3100000000000000000004 /* paste-cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "paste-cli"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB41A0000000000000000001 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		BB41B0000000000000000001 /* sound-effect-1.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "sound-effect-1.mp3"; sourceTree = "<group>"; };
+		BB41B0000000000000000003 /* sound-effect-2.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "sound-effect-2.mp3"; sourceTree = "<group>"; };
+		BB41B0000000000000000005 /* sound-effect-3.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "sound-effect-3.mp3"; sourceTree = "<group>"; };
+		BB41B0000000000000000007 /* sound-effect-4.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "sound-effect-4.mp3"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -173,6 +183,7 @@
 				AF2FD6AB5017BBFF5EE420A4 /* ImageThumbnail.swift */,
 				D22A18A2E99B807E7716432E /* InputSourceSwitcher.swift */,
 				A490C2CECA4C191B712DB9F2 /* LaunchAtLogin.swift */,
+				BB41A0000000000000000001 /* MenuBarController.swift */,
 				F56E6A15E84064E62E40BD93 /* NotificationToken.swift */,
 				123A20E6FCB60D259A0CC145 /* PalettePanel.swift */,
 				11927303CFC909AE918568B6 /* PaletteViewModel.swift */,
@@ -266,6 +277,7 @@
 			isa = PBXGroup;
 			children = (
 				6BEA613924C038C772F06018 /* Fonts */,
+				BB41B0000000000000000009 /* Sounds */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -305,6 +317,17 @@
 				AA3100000000000000000003 /* main.swift */,
 			);
 			path = PasteCLI;
+			sourceTree = "<group>";
+		};
+		BB41B0000000000000000009 /* Sounds */ = {
+			isa = PBXGroup;
+			children = (
+				BB41B0000000000000000001 /* sound-effect-1.mp3 */,
+				BB41B0000000000000000003 /* sound-effect-2.mp3 */,
+				BB41B0000000000000000005 /* sound-effect-3.mp3 */,
+				BB41B0000000000000000007 /* sound-effect-4.mp3 */,
+			);
+			path = Sounds;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -424,6 +447,10 @@
 				C4F6DA55540713BDACAC260D /* Localizable.strings in Resources */,
 				D39624F103CC42692585154F /* NerdFontsSymbolsOnly-LICENSE.txt in Resources */,
 				E46B1E8BC06FFD19A99AA8A3 /* README.md in Resources */,
+				BB41B0000000000000000002 /* sound-effect-1.mp3 in Resources */,
+				BB41B0000000000000000004 /* sound-effect-2.mp3 in Resources */,
+				BB41B0000000000000000006 /* sound-effect-3.mp3 in Resources */,
+				BB41B0000000000000000008 /* sound-effect-4.mp3 in Resources */,
 				548476F13FAEFBC9FE5F0632 /* SymbolsNerdFontMono-Regular.ttf in Resources */,
 				E8EB228A4D377029F8905182 /* Paste.icon in Resources */,
 			);
@@ -472,6 +499,7 @@
 				F1E4B87385492A86C5F5CDFE /* ImageThumbnail.swift in Sources */,
 				EE9F57DEDBD7C12EA72E7D9E /* InputSourceSwitcher.swift in Sources */,
 				2637AC2FB6592F5FCA9ADA7C /* LaunchAtLogin.swift in Sources */,
+				BB41A0000000000000000002 /* MenuBarController.swift in Sources */,
 				5F74A5E6F4687BA1EDA15D8F /* NerdSymbolsFont.swift in Sources */,
 				9D0896797DC58B6F1EFD765F /* NotificationToken.swift in Sources */,
 				07650D1993A6D4C0D5B7ACD8 /* PalettePanel.swift in Sources */,

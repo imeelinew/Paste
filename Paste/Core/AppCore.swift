@@ -19,6 +19,8 @@ final class AppCore: ObservableObject {
     private lazy var settingsWindowController = PasteSettingsWindowController(
         activationPolicy: activationPolicy
     )
+    private lazy var menuBarController = MenuBarController(settings: settings)
+    private let copySoundPlayer = CopySoundPlayer()
     private var controller: PasteController?
     private var transferTask: Task<Void, Never>?
     private var transferGeneration = UUID()
@@ -34,8 +36,12 @@ final class AppCore: ObservableObject {
         updateService.start()
         clipboardStore.maxAge = settings.clipboardRetention.maxAge
         clipboardStore.load()
+        clipboardStore.onItemInserted = { [weak self] in
+            self?.handleClipboardItemInserted()
+        }
         pinnedImageWindows.restore()
         clipboardManager.start()
+        menuBarController.start()
         let controller = PasteController(core: self, cards: pinnedImageWindows)
         controller.start()
         self.controller = controller
@@ -98,6 +104,11 @@ final class AppCore: ObservableObject {
 
     func showAbout() {
         showSettings(tab: .about)
+    }
+
+    func previewCopySound() {
+        guard settings.soundEffectsEnabled else { return }
+        copySoundPlayer.play(settings.copySoundEffect)
     }
 
     func checkForUpdates() {
@@ -209,6 +220,15 @@ final class AppCore: ObservableObject {
                 style: style,
                 title: title
             )
+        }
+    }
+
+    private func handleClipboardItemInserted() {
+        if settings.soundEffectsEnabled {
+            copySoundPlayer.play(settings.copySoundEffect)
+        }
+        if settings.showMenuBarIcon && settings.animateMenuBarIconOnCopy {
+            menuBarController.spin()
         }
     }
 

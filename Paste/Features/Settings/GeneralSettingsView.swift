@@ -70,6 +70,21 @@ struct AppearanceSettingsView: View {
 
             PreferencesDivider()
 
+            PreferencesSectionHeader(title: "Menu Bar")
+
+            PreferencesCheckboxRow(
+                title: "Show Menu Bar Icon",
+                isOn: $settings.showMenuBarIcon
+            )
+
+            PreferencesCheckboxRow(
+                title: "Icon Animation",
+                isOn: $settings.animateMenuBarIconOnCopy,
+                disabled: !settings.showMenuBarIcon
+            )
+
+            PreferencesDivider()
+
             PreferencesSectionHeader(title: "Pinned Cards")
 
             PreferencesRow(label: "Pinned Image Size") {
@@ -110,10 +125,41 @@ struct AppearanceSettingsView: View {
                 }
             }
 
-            PreferencesRow(label: "Background Blur", alignment: .firstTextBaseline) {
-                Toggle("Blur Card Background", isOn: $settings.pinnedWindowBlur)
+            PreferencesCheckboxRow(
+                title: "Background Blur",
+                isOn: $settings.pinnedWindowBlur
+            )
+        }
+    }
+}
+
+struct SoundSettingsView: View {
+    @ObservedObject private var settings = AppCore.shared.settings
+
+    var body: some View {
+        PreferencesForm {
+            PreferencesRow(label: "Enable Sound Effects", alignment: .firstTextBaseline) {
+                Toggle("Enable Sound Effects", isOn: $settings.soundEffectsEnabled)
                     .toggleStyle(.checkbox)
+                    .labelsHidden()
+                    .accessibilityLabel("Enable Sound Effects")
             }
+
+            PreferencesRow(label: "Sound Effect") {
+                Picker("Sound Effect", selection: $settings.copySoundEffect) {
+                    ForEach(CopySoundEffect.allCases) { option in
+                        Text(LocalizedStringKey(option.title)).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+                .disabled(!settings.soundEffectsEnabled)
+                .accessibilityLabel("Sound Effect")
+            }
+        }
+        .onChange(of: settings.copySoundEffect) {
+            AppCore.shared.previewCopySound()
         }
     }
 }

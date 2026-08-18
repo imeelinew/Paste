@@ -18,6 +18,7 @@ public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
     case settings
     case keyboard
     case glasses
+    case volume2 = "volume-2"
     case clipboard
     case clock
     case power
@@ -82,6 +83,12 @@ public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
             SVGPathParser.addPath("M14 15a2 2 0 0 0-2-2 2 2 0 0 0-2 2", to: cgPath)
             SVGPathParser.addPath("M2.5 13 5 7c.7-1.3 1.4-2 3-2", to: cgPath)
             SVGPathParser.addPath("M21.5 13 19 7c-.7-1.3-1.5-2-3-2", to: cgPath)
+        case .volume2:
+            SVGPathParser.addPath(
+                "M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z",
+                to: cgPath)
+            SVGPathParser.addPath("M16 9a5 5 0 0 1 0 6", to: cgPath)
+            SVGPathParser.addPath("M19.364 18.364a9 9 0 0 0 0-12.728", to: cgPath)
         case .clipboard:
             cgPath.addRoundedRect(in: CGRect(x: 8, y: 2, width: 8, height: 4), cornerWidth: 1, cornerHeight: 1)
             SVGPathParser.addPath("M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2", to: cgPath)

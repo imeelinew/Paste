@@ -44,6 +44,33 @@ struct PreferencesRow<Content: View>: View {
     }
 }
 
+/// Checkbox in the label column, title in the control column, sharing the same gutter as `PreferencesRow`.
+struct PreferencesCheckboxRow: View {
+    let title: LocalizedStringKey
+    @Binding var isOn: Bool
+    var disabled: Bool = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: PreferencesMetrics.gutter) {
+            Toggle(title, isOn: $isOn)
+                .toggleStyle(.checkbox)
+                .labelsHidden()
+                .frame(width: PreferencesMetrics.labelWidth, alignment: .trailing)
+                .disabled(disabled)
+
+            Text(title)
+                .font(.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    guard !disabled else { return }
+                    isOn.toggle()
+                }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct PreferencesDivider: View {
     var body: some View {
         Divider()

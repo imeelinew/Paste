@@ -29,6 +29,7 @@
 "Dimensions" = "Dimensions";
 "Disabled Applications" = "Disabled Applications";
 "Disable System Clipboard" = "Disable System Clipboard";
+"Enable Sound Effects" = "Enable Sound Effects";
 "Earlier" = "Earlier";
 "English" = "English";
 "Follow System" = "Follow System";
@@ -36,6 +37,7 @@
 "General" = "General";
 "History" = "History";
 "Image" = "Image";
+"Icon Animation" = "Icon Animation";
 "Information" = "Information";
 "Input Method" = "Input Method";
 "Keep history for" = "Keep history for";
@@ -69,6 +71,7 @@
 "Rename" = "Rename";
 "Small" = "Small";
 "Medium" = "Medium";
+"Menu Bar" = "Menu Bar";
 "Large" = "Large";
 "Close Pinned Image" = "Close Pinned Image";
 "Close Pinned Item" = "Close Pinned Item";
@@ -92,8 +95,11 @@
 "Shortcut" = "Shortcut";
 "Shortcuts" = "Shortcuts";
 "Show in Finder" = "Show in Finder";
+"Show Menu Bar Icon" = "Show Menu Bar Icon";
 "Simplified Chinese" = "Simplified Chinese";
 "Size" = "Size";
+"Sound" = "Sound";
+"Sound Effect" = "Sound Effect";
 "Source" = "Source";
 "Startup" = "Startup";
 "System Clipboard" = "System Clipboard";
@@ -115,3 +121,7 @@
 "1 Year" = "1 Year";
 "3 Months" = "3 Months";
 "6 Months" = "6 Months";
+"音效1" = "音效1";
+"音效2" = "音效2";
+"音效3" = "音效3";
+"音效4" = "音效4";
