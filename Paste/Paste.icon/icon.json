@@ -1,5 +1,17 @@
 {
-  "fill" : "automatic",
+  "fill" : {
+    "automatic-gradient" : "display-p3:0.97647,0.77647,0.00000,1.00000",
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 1
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0
+      }
+    }
+  },
   "groups" : [
     {
       "layers" : [
@@ -102,6 +114,7 @@
     {
       "layers" : [
         {
+          "hidden" : true,
           "image-name" : "arrow.trianglehead.clockwise.svg",
           "name" : "arrow.trianglehead.clockwise",
           "position" : {
@@ -109,6 +122,54 @@
             "translation-in-points" : [
               0,
               0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    },
+    {
+      "layers" : [
+        {
+          "hidden" : true,
+          "image-name" : "arrow.clockwise.svg",
+          "name" : "arrow.clockwise",
+          "position" : {
+            "scale" : 33,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    },
+    {
+      "layers" : [
+        {
+          "hidden" : false,
+          "image-name" : "arrow.clockwise 2.svg",
+          "name" : "arrow.clockwise 2",
+          "position" : {
+            "scale" : 35,
+            "translation-in-points" : [
+              0,
+              23.27150000000006
             ]
           }
         }

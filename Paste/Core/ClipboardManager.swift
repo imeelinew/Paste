@@ -56,21 +56,19 @@ final class ClipboardManager {
         let sourceBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         if let sourceBundleID, settings.clipboardDisabledApps.contains(sourceBundleID) { return }
 
-        let imageType: NSPasteboard.PasteboardType?
-        if types.contains(.png) {
-            imageType = .png
-        } else if types.contains(.tiff) {
-            imageType = .tiff
-        } else {
-            imageType = types.first {
-                UTType($0.rawValue)?.conforms(to: .image) == true
-            }
+        // A browser may advertise several representations while only some of them are readable.
+        // Keep every image type so a missing promised PNG can fall through to TIFF or another
+        // bitmap representation instead of losing the copy altogether.
+        let preferredImageTypes = [NSPasteboard.PasteboardType.png, .tiff].filter(types.contains)
+        let imageTypes = preferredImageTypes + types.filter {
+            !preferredImageTypes.contains($0)
+                && UTType($0.rawValue)?.conforms(to: .image) == true
         }
         let generation = store.captureGeneration
         let previous = captureTail
         let readTask = Task.detached(priority: .utility) {
             Self.readSnapshot(
-                changeCount: changeCount, imageType: imageType,
+                changeCount: changeCount, imageTypes: imageTypes,
                 sourceBundleID: sourceBundleID, generation: generation)
         }
 
@@ -110,22 +108,42 @@ final class ClipboardManager {
     }
 
     private nonisolated static func readSnapshot(
-        changeCount: Int, imageType: NSPasteboard.PasteboardType?,
+        changeCount: Int, imageTypes: [NSPasteboard.PasteboardType],
         sourceBundleID: String?, generation: UInt64
     ) -> PasteboardSnapshot? {
         guard !Task.isCancelled else { return nil }
         let pasteboard = NSPasteboard.general
         guard pasteboard.changeCount == changeCount else { return nil }
         let text = pasteboard.string(forType: .string)
-        let imageData = imageType.flatMap { pasteboard.data(forType: $0) }
         let fileURLs =
             (pasteboard.readObjects(
                 forClasses: [NSURL.self],
                 options: [.urlReadingFileURLsOnly: true]
             ) as? [NSURL])?.map { $0 as URL } ?? []
+
+        var imageData: Data?
+        var imageIsPNG = false
+        for type in imageTypes {
+            guard !Task.isCancelled, pasteboard.changeCount == changeCount else { return nil }
+            guard let data = pasteboard.data(forType: type), !data.isEmpty else { continue }
+            imageData = data
+            imageIsPNG = type == .png
+            break
+        }
+
+        // `NSImage` understands additional browser and AppKit representations (including
+        // promised data) that are not necessarily declared as a UTI conforming to `public.image`.
+        // Avoid this fallback for copied files so Finder icons cannot replace file contents.
+        if imageData == nil, fileURLs.isEmpty,
+            let image = (pasteboard.readObjects(forClasses: [NSImage.self], options: nil)
+                as? [NSImage])?.first,
+            let tiff = image.tiffRepresentation, !tiff.isEmpty
+        {
+            imageData = tiff
+        }
         guard !Task.isCancelled, pasteboard.changeCount == changeCount else { return nil }
         return PasteboardSnapshot(
-            text: text, imageData: imageData, imageIsPNG: imageType == .png, fileURLs: fileURLs,
+            text: text, imageData: imageData, imageIsPNG: imageIsPNG, fileURLs: fileURLs,
             sourceBundleID: sourceBundleID, generation: generation)
     }
 }
