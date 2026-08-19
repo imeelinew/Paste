@@ -5,6 +5,8 @@ import SwiftUI
 /// Semantic names for Lucide vector icons used across the palette interface.
 /// Sourced directly from https://lucide.dev/icons
 public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
+    static let size: CGFloat = 16
+    static let strokeWidth: CGFloat = 1.35
     case copy
     case pencil
     case pin
@@ -27,6 +29,7 @@ public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
     case chevronDown = "chevron-down"
     case check
     case type
+    case hash
     case code
     case link
     case image
@@ -123,6 +126,11 @@ public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
             SVGPathParser.addPath("M12 4v16", to: cgPath)
             SVGPathParser.addPath("M4 7V4h16v3", to: cgPath)
             SVGPathParser.addPath("M9 20h6", to: cgPath)
+        case .hash:
+            SVGPathParser.addPath("M4 9h16", to: cgPath)
+            SVGPathParser.addPath("M4 15h16", to: cgPath)
+            SVGPathParser.addPath("M10 3 8 21", to: cgPath)
+            SVGPathParser.addPath("M16 3l-2 18", to: cgPath)
         case .code:
             SVGPathParser.addPath("m16 18 6-6-6-6", to: cgPath)
             SVGPathParser.addPath("m8 6-6 6 6 6", to: cgPath)
@@ -160,10 +168,29 @@ public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
                 CGAffineTransform(translationX: canvasInset, y: canvasInset)
             )
             ctx.setStrokeColor(NSColor.black.cgColor)
-            ctx.setLineWidth(LucideIcon.strokeWidth)
+            ctx.setLineWidth(LucideIconName.strokeWidth)
             ctx.setLineCap(.round)
             ctx.setLineJoin(.round)
             ctx.addPath(centeredPath.cgPath)
+            ctx.strokePath()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    func templateImage(pointSize: CGFloat) -> NSImage {
+        let stroke = LucideIconName.strokeWidth * (pointSize / LucideIconName.size)
+        let image = NSImage(
+            size: NSSize(width: pointSize, height: pointSize),
+            flipped: true
+        ) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            ctx.setStrokeColor(NSColor.black.cgColor)
+            ctx.setLineWidth(stroke)
+            ctx.setLineCap(.round)
+            ctx.setLineJoin(.round)
+            ctx.addPath(LucideIconShape(name: self).path(in: rect).cgPath)
             ctx.strokePath()
             return true
         }
@@ -192,8 +219,8 @@ public struct LucideIconShape: Shape {
 
 /// SwiftUI view rendering a resolution-independent Lucide icon.
 public struct LucideIcon: View {
-    public static let size: CGFloat = 16
-    public static let strokeWidth: CGFloat = 1.35
+    public static let size: CGFloat = LucideIconName.size
+    public static let strokeWidth: CGFloat = LucideIconName.strokeWidth
 
     public let name: LucideIconName
     public var size: CGFloat = LucideIcon.size

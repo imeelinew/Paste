@@ -1006,16 +1006,14 @@ private final class ClipboardThumbnailView: NSView {
     private static let markdownCache = NSCache<NSUUID, NSNumber>()
 
     private enum Placeholder {
-        case symbol(String)
-        case markdown
+        case lucide(LucideIconName)
     }
 
     private let symbolView = NSImageView()
-    private let markdownLabel = NSTextField(labelWithString: "")
     private var representedID: ClipboardItem.ID?
     private var loadTask: Task<Void, Never>?
     private var displayedImage: NSImage?
-    private var placeholder = Placeholder.symbol("photo")
+    private var placeholder = Placeholder.lucide(.image)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1030,28 +1028,11 @@ private final class ClipboardThumbnailView: NSView {
         symbolView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(symbolView)
 
-        if let iconFont = NerdSymbolsFont.nsFont(ofSize: 13) {
-            markdownLabel.stringValue = "\u{F48A}"
-            markdownLabel.font = iconFont
-        } else {
-            markdownLabel.stringValue = "MD"
-            markdownLabel.font = .systemFont(ofSize: 8, weight: .bold)
-        }
-        markdownLabel.textColor = .secondaryLabelColor
-        markdownLabel.alignment = .center
-        markdownLabel.isHidden = true
-        markdownLabel.translatesAutoresizingMaskIntoConstraints = false
-        markdownLabel.setAccessibilityLabel("Markdown")
-        addSubview(markdownLabel)
-
         NSLayoutConstraint.activate([
             symbolView.centerXAnchor.constraint(equalTo: centerXAnchor),
             symbolView.centerYAnchor.constraint(equalTo: centerYAnchor),
             symbolView.widthAnchor.constraint(equalToConstant: 14),
             symbolView.heightAnchor.constraint(equalToConstant: 14),
-
-            markdownLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            markdownLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
 
@@ -1095,43 +1076,15 @@ private final class ClipboardThumbnailView: NSView {
 
         switch item.kind {
         case .text:
-            showSymbol("text.menu")
-            guard let source = item.text, !source.isEmpty else { return }
-            let cacheKey = item.id as NSUUID
-            if let cached = Self.markdownCache.object(forKey: cacheKey) {
-                if cached.boolValue { showMarkdownSymbol() }
-                return
-            }
-            let id = item.id
-            loadTask = Task { @MainActor [weak self] in
-                let isMarkdown = await Task.detached(priority: .utility) {
-                    MarkdownAttributedRenderer.isMarkdown(source)
-                }.value
-                Self.markdownCache.setObject(NSNumber(value: isMarkdown), forKey: cacheKey)
-                guard !Task.isCancelled, let self, representedID == id else { return }
-                if isMarkdown { showMarkdownSymbol() }
-            }
+            showDisplayKind(.text)
+            loadMarkdownIfNeeded(item, stored: .text)
         case .code:
-            showSymbol("chevron.left.forwardslash.chevron.right")
-            guard let source = item.text, !source.isEmpty else { return }
-            let cacheKey = item.id as NSUUID
-            if let cached = Self.markdownCache.object(forKey: cacheKey) {
-                if cached.boolValue { showMarkdownSymbol() }
-                return
-            }
-            let id = item.id
-            loadTask = Task { @MainActor [weak self] in
-                let isMarkdown = await Task.detached(priority: .utility) {
-                    ClipboardTextClassifier.isMarkdownArticle(source)
-                }.value
-                Self.markdownCache.setObject(NSNumber(value: isMarkdown), forKey: cacheKey)
-                guard !Task.isCancelled, let self, representedID == id else { return }
-                if isMarkdown { showMarkdownSymbol() }
-            }
+            showDisplayKind(.code)
+            loadMarkdownIfNeeded(item, stored: .code)
         case .link:
-            showSymbol("link")
+            showDisplayKind(.link)
         case .image:
-            showSymbol("photo")
+            showDisplayKind(.image)
             guard let imageURL else { return }
             if let cached = ImageThumbnail.cached(
                 imageURL, maxPixel: Self.imageMaxPixel)
@@ -1155,49 +1108,54 @@ private final class ClipboardThumbnailView: NSView {
         loadTask = nil
         representedID = nil
         displayedImage = nil
-        showSymbol("photo")
+        showDisplayKind(.image)
     }
 
     func refreshAppearance() {
         guard let displayedImage else {
             switch placeholder {
-            case .symbol(let name): showSymbol(name)
-            case .markdown: showMarkdownSymbol()
+            case .lucide(let name): showLucide(name)
             }
             return
         }
         showImage(displayedImage)
     }
 
-    private func showSymbol(_ name: String) {
-        placeholder = .symbol(name)
-        displayedImage = nil
-        layer?.contents = nil
-        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
-        needsDisplay = true
-        markdownLabel.isHidden = true
-        symbolView.isHidden = false
-        let pointSize = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
-        let hierarchy = NSImage.SymbolConfiguration(hierarchicalColor: .secondaryLabelColor)
-        symbolView.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(pointSize.applying(hierarchy))
+    private func loadMarkdownIfNeeded(_ item: ClipboardItem, stored: ClipboardItem.DisplayKind) {
+        guard let source = item.text, !source.isEmpty else { return }
+        let cacheKey = item.id as NSUUID
+        if let cached = Self.markdownCache.object(forKey: cacheKey) {
+            if cached.boolValue { showDisplayKind(.markdown) }
+            return
+        }
+        let id = item.id
+        loadTask = Task { @MainActor [weak self] in
+            let kind = await Task.detached(priority: .utility) {
+                ClipboardItem.DisplayKind.classify(kind: item.kind, text: source)
+            }.value
+            Self.markdownCache.setObject(NSNumber(value: kind == .markdown), forKey: cacheKey)
+            guard !Task.isCancelled, let self, representedID == id else { return }
+            showDisplayKind(kind == .markdown ? .markdown : stored)
+        }
     }
 
-    private func showMarkdownSymbol() {
-        placeholder = .markdown
+    private func showDisplayKind(_ kind: ClipboardItem.DisplayKind) {
+        showLucide(kind.lucideIcon)
+    }
+
+    private func showLucide(_ name: LucideIconName) {
+        placeholder = .lucide(name)
         displayedImage = nil
         layer?.contents = nil
         layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
         needsDisplay = true
-        symbolView.isHidden = true
-        markdownLabel.textColor = .secondaryLabelColor
-        markdownLabel.isHidden = false
+        symbolView.isHidden = false
+        symbolView.image = name.templateImage(pointSize: 14)
     }
 
     private func showImage(_ image: NSImage) {
         displayedImage = image
         symbolView.isHidden = true
-        markdownLabel.isHidden = true
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.contents = nil
         needsDisplay = true
@@ -1341,9 +1299,9 @@ private struct ClipboardInfoSection: View {
     @ObservedObject private var settings = AppCore.shared.settings
 
     private struct Details: Equatable, Sendable {
+        var typeLabel: String?
         var characters: Int?
         var words: Int?
-        var isMarkdown = false
         var pixelSize: CGSize?
         var fileBytes: Int?
     }
@@ -1406,10 +1364,13 @@ private struct ClipboardInfoSection: View {
         if let source {
             rows.append(InfoRow(label: "Source", value: source.name, icon: source.icon))
         }
+        rows.append(
+            InfoRow(
+                label: "Type",
+                value: details.typeLabel ?? item.kind.typeLabel,
+                localizesValue: true))
         switch item.kind {
         case .text, .code, .link:
-            let typeLabel = details.isMarkdown ? "Markdown" : item.kind.typeLabel
-            rows.append(InfoRow(label: "Type", value: typeLabel, localizesValue: true))
             if let characters = details.characters {
                 rows.append(
                     InfoRow(
@@ -1424,7 +1385,6 @@ private struct ClipboardInfoSection: View {
                         value: words.formatted(.number.locale(settings.language.locale))))
             }
         case .image:
-            rows.append(InfoRow(label: "Type", value: item.kind.typeLabel, localizesValue: true))
             if let size = details.pixelSize {
                 rows.append(
                     InfoRow(label: "Dimensions", value: "\(Int(size.width))×\(Int(size.height))"))
@@ -1456,14 +1416,12 @@ private struct ClipboardInfoSection: View {
         let url = imageURL
         let loaded = await Task.detached(priority: .userInitiated) {
             var details = Details()
+            details.typeLabel = ClipboardItem.DisplayKind.classify(
+                kind: item.kind, text: text
+            ).typeLabel
             if let text {
                 details.characters = text.count
                 details.words = Self.wordCount(text)
-                if item.kind == .text {
-                    details.isMarkdown = MarkdownAttributedRenderer.isMarkdown(text)
-                } else if item.kind == .code {
-                    details.isMarkdown = ClipboardTextClassifier.isMarkdownArticle(text)
-                }
             }
             if let url {
                 details.pixelSize = ImageThumbnail.pixelSize(of: url)

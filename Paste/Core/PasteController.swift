@@ -57,8 +57,9 @@ final class PasteController {
             }
             Task { @MainActor in
                 let response = await AppCore.shared.handleControllerRequest(requestData)
+                let data = try? PasteControllerIPC.encode(response)
                 DispatchQueue.global(qos: .userInitiated).async {
-                    if let data = try? PasteControllerIPC.encode(response) {
+                    if let data {
                         try? PasteControllerTransport.writeMessage(data, to: client)
                     }
                     Darwin.close(client)

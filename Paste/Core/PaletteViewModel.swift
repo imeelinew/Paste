@@ -73,36 +73,41 @@ enum PaletteMenuAction: Equatable {
     case setKindFilter(ClipboardKindFilter)
 }
 
-enum ClipboardKindFilter: Equatable, CaseIterable {
-    case all, text, code, link, image
-
-    var title: LocalizedStringKey {
+extension ClipboardItem.DisplayKind {
+    var lucideIcon: LucideIconName {
         switch self {
-        case .all: "All Types"
-        case .text: "Plain Text"
-        case .code: "Code"
-        case .link: "Link"
-        case .image: "Image"
-        }
-    }
-
-    var icon: LucideIconName {
-        switch self {
-        case .all: .list
         case .text: .type
+        case .markdown: .hash
         case .code: .code
         case .link: .link
         case .image: .image
         }
     }
+}
+
+enum ClipboardKindFilter: Equatable, CaseIterable {
+    case all, text, markdown, code, link, image
+
+    var title: LocalizedStringKey {
+        LocalizedStringKey(displayKind?.typeLabel ?? "All Types")
+    }
+
+    var icon: LucideIconName {
+        displayKind?.lucideIcon ?? .list
+    }
 
     func includes(_ item: ClipboardItem) -> Bool {
+        displayKind.map { item.displayKind == $0 } ?? true
+    }
+
+    private var displayKind: ClipboardItem.DisplayKind? {
         switch self {
-        case .all: true
-        case .text: item.kind == .text
-        case .code: item.kind == .code
-        case .link: item.kind == .link
-        case .image: item.kind == .image
+        case .all: nil
+        case .text: .text
+        case .markdown: .markdown
+        case .code: .code
+        case .link: .link
+        case .image: .image
         }
     }
 }

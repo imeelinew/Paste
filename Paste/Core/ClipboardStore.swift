@@ -7,13 +7,44 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
     enum Kind: String, Sendable {
         case text, code, link, image
 
-        /// Localization key for the Information "Type" row.
+        /// Localization key for the stored kind. The Information panel uses `displayKind`.
         var typeLabel: String {
             switch self {
             case .text: "Plain Text"
             case .code: "Code"
             case .link: "Link"
             case .image: "Image"
+            }
+        }
+    }
+
+    /// User-visible type, including Markdown detected by the existing classifiers.
+    enum DisplayKind: Equatable, Sendable {
+        case text, markdown, code, link, image
+
+        var typeLabel: String {
+            switch self {
+            case .text: Kind.text.typeLabel
+            case .markdown: "Markdown"
+            case .code: Kind.code.typeLabel
+            case .link: Kind.link.typeLabel
+            case .image: Kind.image.typeLabel
+            }
+        }
+
+        /// Same rules as the Information "Type" row: stored kind, with Markdown overlay for text/code.
+        static func classify(kind: Kind, text: String?) -> DisplayKind {
+            switch kind {
+            case .image:
+                return .image
+            case .link:
+                return .link
+            case .text:
+                if let text, MarkdownAttributedRenderer.isMarkdown(text) { return .markdown }
+                return .text
+            case .code:
+                if let text, ClipboardTextClassifier.isMarkdownArticle(text) { return .markdown }
+                return .code
             }
         }
     }
@@ -34,6 +65,11 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
     let customTitle: String?
 
     var isPinned: Bool { pinnedAt != nil }
+
+    /// User-visible type shown in the Information panel and used by the type filter.
+    var displayKind: DisplayKind {
+        DisplayKind.classify(kind: kind, text: text)
+    }
 
     init(text: String, sourceBundleID: String?) {
         self.init(
