@@ -23,6 +23,13 @@ public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
     case clock
     case power
     case pictureInPicture2 = "picture-in-picture-2"
+    case list
+    case chevronDown = "chevron-down"
+    case check
+    case type
+    case code
+    case link
+    case image
 
     /// Generates the vector path on Lucide's standard 24x24 coordinate grid.
     public var path: Path {
@@ -101,6 +108,34 @@ public enum LucideIconName: String, CaseIterable, Equatable, Sendable {
         case .pictureInPicture2:
             SVGPathParser.addPath("M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4", to: cgPath)
             cgPath.addRoundedRect(in: CGRect(x: 12, y: 13, width: 10, height: 7), cornerWidth: 2, cornerHeight: 2)
+        case .list:
+            SVGPathParser.addPath("M3 12h.01", to: cgPath)
+            SVGPathParser.addPath("M3 18h.01", to: cgPath)
+            SVGPathParser.addPath("M3 6h.01", to: cgPath)
+            SVGPathParser.addPath("M8 12h13", to: cgPath)
+            SVGPathParser.addPath("M8 18h13", to: cgPath)
+            SVGPathParser.addPath("M8 6h13", to: cgPath)
+        case .chevronDown:
+            SVGPathParser.addPath("m6 9 6 6 6-6", to: cgPath)
+        case .check:
+            SVGPathParser.addPath("M20 6 9 17l-5-5", to: cgPath)
+        case .type:
+            SVGPathParser.addPath("M12 4v16", to: cgPath)
+            SVGPathParser.addPath("M4 7V4h16v3", to: cgPath)
+            SVGPathParser.addPath("M9 20h6", to: cgPath)
+        case .code:
+            SVGPathParser.addPath("m16 18 6-6-6-6", to: cgPath)
+            SVGPathParser.addPath("m8 6-6 6 6 6", to: cgPath)
+        case .link:
+            SVGPathParser.addPath(
+                "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71", to: cgPath)
+            SVGPathParser.addPath(
+                "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71", to: cgPath)
+        case .image:
+            cgPath.addRoundedRect(
+                in: CGRect(x: 3, y: 3, width: 18, height: 18), cornerWidth: 2, cornerHeight: 2)
+            cgPath.addEllipse(in: CGRect(x: 7, y: 7, width: 4, height: 4))
+            SVGPathParser.addPath("m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21", to: cgPath)
         }
         return Path(cgPath)
     }

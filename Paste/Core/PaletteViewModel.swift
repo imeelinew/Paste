@@ -29,12 +29,13 @@ enum PaletteOverlay: Equatable {
     case none
     case actions(ClipboardItem.ID)
     case appMenu
+    case typeFilter
 
     var isOpen: Bool { self != .none }
 
     var isMenu: Bool {
         switch self {
-        case .actions, .appMenu: return true
+        case .actions, .appMenu, .typeFilter: return true
         default: return false
         }
     }
@@ -69,6 +70,41 @@ enum PaletteMenuAction: Equatable {
     case togglePin(ClipboardItem)
     case revealInFinder(ClipboardItem)
     case delete(ClipboardItem)
+    case setKindFilter(ClipboardKindFilter)
+}
+
+enum ClipboardKindFilter: Equatable, CaseIterable {
+    case all, text, code, link, image
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .all: "All Types"
+        case .text: "Plain Text"
+        case .code: "Code"
+        case .link: "Link"
+        case .image: "Image"
+        }
+    }
+
+    var icon: LucideIconName {
+        switch self {
+        case .all: .list
+        case .text: .type
+        case .code: .code
+        case .link: .link
+        case .image: .image
+        }
+    }
+
+    func includes(_ item: ClipboardItem) -> Bool {
+        switch self {
+        case .all: true
+        case .text: item.kind == .text
+        case .code: item.kind == .code
+        case .link: item.kind == .link
+        case .image: item.kind == .image
+        }
+    }
 }
 
 /// The palette's single interaction state machine. AppKit keyboard events and SwiftUI mouse
@@ -78,6 +114,7 @@ final class PaletteViewModel: ObservableObject {
     @Published var query = "" {
         didSet { queryChanged() }
     }
+    @Published private(set) var kindFilter: ClipboardKindFilter = .all
     @Published private(set) var results: [ClipboardItem] = []
     @Published private(set) var selectedID: ClipboardItem.ID?
     @Published private(set) var searchReady = true
@@ -157,6 +194,8 @@ final class PaletteViewModel: ObservableObject {
             }
             actions.append(.delete(item))
             return actions
+        case .typeFilter:
+            return ClipboardKindFilter.allCases.map(PaletteMenuAction.setKindFilter)
         }
     }
 
@@ -188,6 +227,16 @@ final class PaletteViewModel: ObservableObject {
     func toggleAppMenu() {
         overlay = overlay == .appMenu ? .none : .appMenu
         menuSelection = 0
+    }
+
+    func toggleTypeFilter() {
+        if overlay == .typeFilter {
+            overlay = .none
+            menuSelection = 0
+        } else {
+            overlay = .typeFilter
+            menuSelection = ClipboardKindFilter.allCases.firstIndex(of: kindFilter) ?? 0
+        }
     }
 
     func closeMenu() {
@@ -284,7 +333,7 @@ final class PaletteViewModel: ObservableObject {
             return item(withID: id)
         case .none:
             return selectedItem
-        case .appMenu:
+        case .appMenu, .typeFilter:
             return nil
         }
     }
@@ -347,7 +396,19 @@ final class PaletteViewModel: ObservableObject {
             } else {
                 selectedID = results[min(removedIndex, results.count - 1)].id
             }
+        case .setKindFilter(let filter):
+            applyKindFilter(filter)
+            onSearchFocusRequested?()
         }
+    }
+
+    private func applyKindFilter(_ filter: ClipboardKindFilter) {
+        guard kindFilter != filter else { return }
+        kindFilter = filter
+        imageQuickLookOpen = false
+        ImageQuickLook.close()
+        resetToken = UUID()
+        refreshResults(resetSelection: true, blockCommands: false)
     }
 
     private func togglePin(_ item: ClipboardItem) {
@@ -398,25 +459,31 @@ final class PaletteViewModel: ObservableObject {
 
         if query.isEmpty {
             applyResults(
-                core.clipboardStore.displayItems,
+                itemsMatchingFilter(core.clipboardStore.displayItems),
                 resetSelection: resetSelection,
                 priorID: priorID,
                 priorIndex: priorIndex)
             return
         }
 
+        let filter = kindFilter
         searchTask = Task { [weak self] in
             guard let self else { return }
             let matches = await core.clipboardStore.searchAsync(query)
             guard !Task.isCancelled,
-                self.query.trimmingCharacters(in: .whitespacesAndNewlines) == query
+                self.query.trimmingCharacters(in: .whitespacesAndNewlines) == query,
+                self.kindFilter == filter
             else { return }
             applyResults(
-                matches,
+                matches.filter { filter.includes($0) },
                 resetSelection: resetSelection,
                 priorID: priorID,
                 priorIndex: priorIndex)
         }
+    }
+
+    private func itemsMatchingFilter(_ items: [ClipboardItem]) -> [ClipboardItem] {
+        items.filter { kindFilter.includes($0) }
     }
 
     private func applyResults(
@@ -448,7 +515,7 @@ final class PaletteViewModel: ObservableObject {
             if !newResults.contains(where: { $0.id == id }) {
                 overlay = .none
             }
-        case .none, .appMenu:
+        case .none, .appMenu, .typeFilter:
             break
         }
         if let renamingID, !newResults.contains(where: { $0.id == renamingID }) {

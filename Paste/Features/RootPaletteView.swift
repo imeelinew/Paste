@@ -18,11 +18,15 @@ struct RootPaletteView: View {
 
     private var showAppMenu: Bool { vm.overlay == .appMenu }
 
+    private var showTypeFilter: Bool { vm.overlay == .typeFilter }
+
     private var showRename: Bool { vm.renamingID != nil }
 
     @MainActor
     private var menuItems: [PopoverMenuItem] {
-        vm.menuActions.map { PopoverMenuItem(action: $0, target: vm.pasteTarget) }
+        vm.menuActions.map {
+            PopoverMenuItem(action: $0, target: vm.pasteTarget, kindFilter: vm.kindFilter)
+        }
     }
 
     var body: some View {
@@ -32,7 +36,8 @@ struct RootPaletteView: View {
         return Group {
             if clips.isEmpty {
                 EmptyResults(
-                    text: isQueryEmpty ? "Clipboard history is empty" : "No matching entries")
+                    text: isQueryEmpty && vm.kindFilter == .all
+                        ? "Clipboard history is empty" : "No matching entries")
             } else {
                 HStack(spacing: 0) {
                     ClipboardList(
@@ -93,6 +98,18 @@ struct RootPaletteView: View {
                 .transition(Self.menuTransition(.bottomTrailing))
             }
         }
+        .overlay(alignment: .topTrailing) {
+            if showTypeFilter {
+                PopoverMenu(
+                    items: menuItems,
+                    selection: $vm.menuSelection,
+                    onActivate: activateMenuItem
+                )
+                .padding(.top, Theme.Size.headerPadding + Theme.Size.headerHeight)
+                .padding(.trailing, Theme.Spacing.md * 2)
+                .transition(Self.menuTransition(.topTrailing))
+            }
+        }
         // Animate the state transition, not individual input paths. Mouse, keyboard, and future
         // commands all receive the same menu entrance and exit automatically.
         .animation(Self.menuAnimation, value: vm.overlay)
@@ -115,11 +132,42 @@ struct RootPaletteView: View {
                 enabled: !showRename
             )
             .frame(maxWidth: .infinity)
+            typeFilterControl
+                .allowsHitTesting(!showRename)
         }
         .padding(.horizontal, Theme.Spacing.md * 2)
         .frame(height: Theme.Size.headerHeight)
         .padding(.top, Theme.Size.headerPadding)
         .frame(maxWidth: .infinity)
+    }
+
+    private var typeFilterControl: some View {
+        BarButton(pressed: showTypeFilter, action: { vm.toggleTypeFilter() }) {
+            HStack(spacing: Theme.Spacing.sm) {
+                LucideIconShape(name: vm.kindFilter.icon)
+                    .stroke(
+                        style: StrokeStyle(
+                            lineWidth: LucideIcon.strokeWidth, lineCap: .round, lineJoin: .round)
+                    )
+                    .frame(width: LucideIcon.size, height: LucideIcon.size)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                Text(vm.kindFilter.title)
+                    .font(Theme.Typography.bar)
+                    .foregroundStyle(.primary)
+                LucideIconShape(name: .chevronDown)
+                    .stroke(
+                        style: StrokeStyle(
+                            lineWidth: LucideIcon.strokeWidth, lineCap: .round, lineJoin: .round)
+                    )
+                    .frame(width: 12, height: 12)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+        }
+        .padding(Theme.Spacing.xs)
+        .frosted(in: Capsule())
+        .fixedSize()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(vm.kindFilter.title)
     }
 
     private func bottomBar(showActionGroup: Bool) -> some View {

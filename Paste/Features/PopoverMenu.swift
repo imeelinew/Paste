@@ -22,9 +22,10 @@ struct PopoverMenuItem {
     var shortcut: String? = nil
     var isDestructive: Bool = false
     var isEnabled = true
+    var isChecked = false
 
     @MainActor
-    init(action: PaletteMenuAction, target: PasteTarget?) {
+    init(action: PaletteMenuAction, target: PasteTarget?, kindFilter: ClipboardKindFilter = .all) {
         switch action {
         case .about:
             title = "About Paste"
@@ -73,11 +74,15 @@ struct PopoverMenuItem {
             title = "Delete Entry"
             icon = .lucide(.trash2)
             isDestructive = true
+        case .setKindFilter(let filter):
+            title = filter.title
+            icon = .lucide(filter.icon)
+            isChecked = filter == kindFilter
         }
     }
 }
 
-/// In-window overlay menu (not a system popover), anchored to a bottom corner so it stays clipped inside the palette, with a stock Liquid Glass surface. Data-driven so `selection` can highlight a row for keyboard navigation; `onActivate(index)` is the single path fired by both a click and Return.
+/// In-window overlay menu (not a system popover), anchored to a palette corner so it stays clipped inside the panel, with a stock Liquid Glass surface. Data-driven so `selection` can highlight a row for keyboard navigation; `onActivate(index)` is the single path fired by both a click and Return.
 struct PopoverMenu: View {
     let items: [PopoverMenuItem]
     @Binding var selection: Int
@@ -142,7 +147,10 @@ private struct PopoverMenuRow: View {
                     .font(Theme.Typography.menuRow)
                     .foregroundStyle(item.isDestructive ? Color.red : Color.primary)
                 Spacer(minLength: Theme.Spacing.sm)
-                if let shortcut = item.shortcut {
+                if item.isChecked {
+                    LucideIcon(name: .check)
+                        .foregroundStyle(.secondary)
+                } else if let shortcut = item.shortcut {
                     HStack(spacing: Theme.Spacing.xxs) {
                         ForEach(Array(shortcut.enumerated()), id: \.offset) { _, glyph in
                             KeyCapChip(text: String(glyph), style: .outline)
