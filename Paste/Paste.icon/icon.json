@@ -52,6 +52,7 @@
           }
         }
       ],
+      "name" : "Group",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.6
@@ -162,7 +163,7 @@
     {
       "layers" : [
         {
-          "hidden" : false,
+          "hidden" : true,
           "image-name" : "arrow.clockwise 2.svg",
           "name" : "arrow.clockwise 2",
           "position" : {
@@ -170,6 +171,29 @@
             "translation-in-points" : [
               0,
               23.27150000000006
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    },
+    {
+      "layers" : [
+        {
+          "image-name" : "arrow.trianglehead.clockwise 2.svg",
+          "name" : "arrow.trianglehead.clockwise 2",
+          "position" : {
+            "scale" : 35,
+            "translation-in-points" : [
+              0,
+              31.177999999999997
             ]
           }
         }
