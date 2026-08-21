@@ -6,6 +6,15 @@
         <description>Sparkle appcast for Paste</description>
         <language>en</language>
         <item>
+            <title>0.1.8</title>
+            <pubDate>Fri, 21 Aug 2026 15:36:08 +0000</pubDate>
+            <link>https://github.com/imeelinew/Paste</link>
+            <sparkle:version>40</sparkle:version>
+            <sparkle:shortVersionString>0.1.8</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/imeelinew/Paste/releases/download/v0.1.8/Paste-0.1.8.zip" length="6587017" type="application/octet-stream" sparkle:edSignature="cz+JNF9MzxLjAb9VBehc83PMcD0Ps9wO8RYndi6a9WqpzNzxF77E7xMlCLiOsOH7AzoPXD+tNupM2s6O+AH7AA=="/>
+        </item>
+        <item>
             <title>0.1.7</title>
             <pubDate>Tue, 18 Aug 2026 01:54:52 +0000</pubDate>
             <link>https://github.com/imeelinew/Paste</link>
