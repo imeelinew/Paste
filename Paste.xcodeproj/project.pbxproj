@@ -70,6 +70,32 @@
 		BB41B0000000000000000004 /* sound-effect-2.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = BB41B0000000000000000003 /* sound-effect-2.mp3 */; };
 		BB41B0000000000000000006 /* sound-effect-3.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = BB41B0000000000000000005 /* sound-effect-3.mp3 */; };
 		BB41B0000000000000000008 /* sound-effect-4.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = BB41B0000000000000000007 /* sound-effect-4.mp3 */; };
+		AA3200000000000000000021 /* ClipboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCFFE5C6B9CC83C972FD0B0D /* ClipboardStore.swift */; };
+		AA3200000000000000000022 /* ClipboardCapturePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FB3EB883C67D7DA6D8FEAF /* ClipboardCapturePipeline.swift */; };
+		AA3200000000000000000023 /* PasteControllerProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3100000000000000000001 /* PasteControllerProtocol.swift */; };
+		AA3200000000000000000024 /* MarkdownAttributedRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81D51FA4C7914F68805A9D72 /* MarkdownAttributedRenderer.swift */; };
+		AA3200000000000000000025 /* CodeSyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420946D50A22D4D3CDA26B77 /* CodeSyntaxHighlighter.swift */; };
+		AA3200000000000000000026 /* SearchHighlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2953B3533B91377E5CD791 /* SearchHighlight.swift */; };
+		AA3200000000000000000027 /* NerdSymbolsFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908045C0E8EF72DB68603149 /* NerdSymbolsFont.swift */; };
+		AA3200000000000000000028 /* ImageThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2FD6AB5017BBFF5EE420A4 /* ImageThumbnail.swift */; };
+		AA3200000000000000000029 /* CopySelectionOnSelect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66BA1300B2872471FA6010D4 /* CopySelectionOnSelect.swift */; };
+		AA320000000000000000002A /* NotificationToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = F56E6A15E84064E62E40BD93 /* NotificationToken.swift */; };
+		AA320000000000000000002B /* Paster.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC678FC84A80AE731726D744 /* Paster.swift */; };
+		AA320000000000000000002C /* Permissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA577CC2AE8EBDA99C731955 /* Permissions.swift */; };
+		AA320000000000000000002D /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A08EBA3DF42E6A3D8518C909 /* ClipboardManager.swift */; };
+		AA320000000000000000002E /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67393F83039423D6A2A4C9B5 /* AppSettings.swift */; };
+		AA320000000000000000002F /* PasteTransaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = B83EBAE1FB329C0318507DFB /* PasteTransaction.swift */; };
+		AA3200000000000000000030 /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A490C2CECA4C191B712DB9F2 /* LaunchAtLogin.swift */; };
+		AA3200000000000000000039 /* AppCoreStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3200000000000000000019 /* AppCoreStub.swift */; };
+		AA3200000000000000000031 /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3200000000000000000011 /* TestHelpers.swift */; };
+		AA3200000000000000000032 /* PinyinTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3200000000000000000012 /* PinyinTests.swift */; };
+		AA3200000000000000000033 /* ClipboardTextClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3200000000000000000013 /* ClipboardTextClassifierTests.swift */; };
+		AA3200000000000000000034 /* ClipboardItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3200000000000000000014 /* ClipboardItemTests.swift */; };
+		AA3200000000000000000035 /* ClipboardRetentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3200000000000000000015 /* ClipboardRetentionTests.swift */; };
+		AA3200000000000000000036 /* ClipboardStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3200000000000000000016 /* ClipboardStoreTests.swift */; };
+		AA3200000000000000000037 /* ClipboardCapturePipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3200000000000000000017 /* ClipboardCapturePipelineTests.swift */; };
+		AA3200000000000000000038 /* IPCTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3200000000000000000018 /* IPCTests.swift */; };
+		AA3200000000000000000041 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 36DB9A864D8D41DDA74C4DC7 /* Markdown */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -135,6 +161,16 @@
 		BB41B0000000000000000003 /* sound-effect-2.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "sound-effect-2.mp3"; sourceTree = "<group>"; };
 		BB41B0000000000000000005 /* sound-effect-3.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "sound-effect-3.mp3"; sourceTree = "<group>"; };
 		BB41B0000000000000000007 /* sound-effect-4.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "sound-effect-4.mp3"; sourceTree = "<group>"; };
+		AA3200000000000000000002 /* PasteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PasteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA3200000000000000000011 /* TestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHelpers.swift; sourceTree = "<group>"; };
+		AA3200000000000000000019 /* AppCoreStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoreStub.swift; sourceTree = "<group>"; };
+		AA3200000000000000000012 /* PinyinTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinyinTests.swift; sourceTree = "<group>"; };
+		AA3200000000000000000013 /* ClipboardTextClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardTextClassifierTests.swift; sourceTree = "<group>"; };
+		AA3200000000000000000014 /* ClipboardItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardItemTests.swift; sourceTree = "<group>"; };
+		AA3200000000000000000015 /* ClipboardRetentionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardRetentionTests.swift; sourceTree = "<group>"; };
+		AA3200000000000000000016 /* ClipboardStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardStoreTests.swift; sourceTree = "<group>"; };
+		AA3200000000000000000017 /* ClipboardCapturePipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardCapturePipelineTests.swift; sourceTree = "<group>"; };
+		AA3200000000000000000018 /* IPCTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPCTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -153,6 +189,14 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA3200000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA3200000000000000000041 /* Markdown in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -260,6 +304,7 @@
 			children = (
 				D4D9055FFD80C01DC26C2056 /* Paste */,
 				AA310000000000000000000A /* PasteCLI */,
+				AA320000000000000000000A /* PasteTests */,
 				B768B677384035BB57EEA712 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -269,6 +314,7 @@
 			children = (
 				E1C61CC3EAF30E7A03C2A141 /* Paste.app */,
 				AA3100000000000000000004 /* paste-cli */,
+				AA3200000000000000000002 /* PasteTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -330,6 +376,22 @@
 			path = Sounds;
 			sourceTree = "<group>";
 		};
+		AA320000000000000000000A /* PasteTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA3200000000000000000011 /* TestHelpers.swift */,
+				AA3200000000000000000019 /* AppCoreStub.swift */,
+				AA3200000000000000000012 /* PinyinTests.swift */,
+				AA3200000000000000000013 /* ClipboardTextClassifierTests.swift */,
+				AA3200000000000000000014 /* ClipboardItemTests.swift */,
+				AA3200000000000000000015 /* ClipboardRetentionTests.swift */,
+				AA3200000000000000000016 /* ClipboardStoreTests.swift */,
+				AA3200000000000000000017 /* ClipboardCapturePipelineTests.swift */,
+				AA3200000000000000000018 /* IPCTests.swift */,
+			);
+			path = PasteTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -374,6 +436,25 @@
 			productReference = AA3100000000000000000004 /* paste-cli */;
 			productType = "com.apple.product-type.tool";
 		};
+		AA3200000000000000000001 /* PasteTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA3200000000000000000007 /* Build configuration list for PBXNativeTarget "PasteTests" */;
+			buildPhases = (
+				AA3200000000000000000003 /* Sources */,
+				AA3200000000000000000004 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PasteTests;
+			packageProductDependencies = (
+				36DB9A864D8D41DDA74C4DC7 /* Markdown */,
+			);
+			productName = PasteTests;
+			productReference = AA3200000000000000000002 /* PasteTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXContainerItemProxy section */
@@ -409,6 +490,10 @@
 						DevelopmentTeam = 5Q5QT76MJU;
 						ProvisioningStyle = Automatic;
 					};
+					AA3200000000000000000001 = {
+						DevelopmentTeam = 5Q5QT76MJU;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = 6D9D3EC1D512C4FF5F237E0B /* Build configuration list for PBXProject "Paste" */;
@@ -434,6 +519,7 @@
 			targets = (
 				3BDB676D0A88A545F238711A /* Paste */,
 				AA310000000000000000000B /* paste-cli */,
+				AA3200000000000000000001 /* PasteTests */,
 			);
 		};
 /* End PBXProject section */
@@ -532,6 +618,38 @@
 			files = (
 				AA3100000000000000000007 /* main.swift in Sources */,
 				AA3100000000000000000008 /* PasteControllerProtocol.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA3200000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA3200000000000000000021 /* ClipboardStore.swift in Sources */,
+				AA3200000000000000000022 /* ClipboardCapturePipeline.swift in Sources */,
+				AA3200000000000000000023 /* PasteControllerProtocol.swift in Sources */,
+				AA3200000000000000000024 /* MarkdownAttributedRenderer.swift in Sources */,
+				AA3200000000000000000025 /* CodeSyntaxHighlighter.swift in Sources */,
+				AA3200000000000000000026 /* SearchHighlight.swift in Sources */,
+				AA3200000000000000000027 /* NerdSymbolsFont.swift in Sources */,
+				AA3200000000000000000028 /* ImageThumbnail.swift in Sources */,
+				AA3200000000000000000029 /* CopySelectionOnSelect.swift in Sources */,
+				AA320000000000000000002A /* NotificationToken.swift in Sources */,
+				AA320000000000000000002B /* Paster.swift in Sources */,
+				AA320000000000000000002C /* Permissions.swift in Sources */,
+				AA320000000000000000002D /* ClipboardManager.swift in Sources */,
+				AA320000000000000000002E /* AppSettings.swift in Sources */,
+				AA320000000000000000002F /* PasteTransaction.swift in Sources */,
+				AA3200000000000000000030 /* LaunchAtLogin.swift in Sources */,
+				AA3200000000000000000031 /* TestHelpers.swift in Sources */,
+				AA3200000000000000000039 /* AppCoreStub.swift in Sources */,
+				AA3200000000000000000032 /* PinyinTests.swift in Sources */,
+				AA3200000000000000000033 /* ClipboardTextClassifierTests.swift in Sources */,
+				AA3200000000000000000034 /* ClipboardItemTests.swift in Sources */,
+				AA3200000000000000000035 /* ClipboardRetentionTests.swift in Sources */,
+				AA3200000000000000000036 /* ClipboardStoreTests.swift in Sources */,
+				AA3200000000000000000037 /* ClipboardCapturePipelineTests.swift in Sources */,
+				AA3200000000000000000038 /* IPCTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -759,6 +877,46 @@
 			};
 			name = Release;
 		};
+		AA3200000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5Q5QT76MJU;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.eli.PasteTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AA3200000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5Q5QT76MJU;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.eli.PasteTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -785,6 +943,15 @@
 			buildConfigurations = (
 				AA310000000000000000000E /* Debug */,
 				AA310000000000000000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AA3200000000000000000007 /* Build configuration list for PBXNativeTarget "PasteTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA3200000000000000000005 /* Debug */,
+				AA3200000000000000000006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
