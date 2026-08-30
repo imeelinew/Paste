@@ -55,7 +55,6 @@
 		E2C25F35DF0B1F8C9960CD38 /* ClipboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCFFE5C6B9CC83C972FD0B0D /* ClipboardStore.swift */; };
 		E46B1E8BC06FFD19A99AA8A3 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = B8B134FA6B0C91BE3263830E /* README.md */; };
 		E640C47775B8E5E915E0166A /* MacAppSettingsUI in Frameworks */ = {isa = PBXBuildFile; productRef = 18A3FC690CC58367A65F87C9 /* MacAppSettingsUI */; };
-		E8EB228A4D377029F8905182 /* Paste.icon in Resources */ = {isa = PBXBuildFile; fileRef = 17E41EBE2A05B16FBF699B0A /* Paste.icon */; };
 		EE9F57DEDBD7C12EA72E7D9E /* InputSourceSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22A18A2E99B807E7716432E /* InputSourceSwitcher.swift */; };
 		F1E4B87385492A86C5F5CDFE /* ImageThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2FD6AB5017BBFF5EE420A4 /* ImageThumbnail.swift */; };
 		F2793D8EFF543BEDD5DF57C1 /* PaletteViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11927303CFC909AE918568B6 /* PaletteViewModel.swift */; };
@@ -102,7 +101,6 @@
 		0C1D141FBB730290AF3CA00C /* AppCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCore.swift; sourceTree = "<group>"; };
 		11927303CFC909AE918568B6 /* PaletteViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteViewModel.swift; sourceTree = "<group>"; };
 		123A20E6FCB60D259A0CC145 /* PalettePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PalettePanel.swift; sourceTree = "<group>"; };
-		17E41EBE2A05B16FBF699B0A /* Paste.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Paste.icon; sourceTree = "<group>"; };
 		19FB08D4568B366C9339712C /* ImageQuickLook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageQuickLook.swift; sourceTree = "<group>"; };
 		1F3166EA8852EDBCC9A0D3DF /* ScrollIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollIntent.swift; sourceTree = "<group>"; };
 		27D1C525A6F1C83A87346D62 /* ThinScrollbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinScrollbar.swift; sourceTree = "<group>"; };
@@ -340,7 +338,6 @@
 				BA150DA7FBE4819BF19B7F31 /* Assets.xcassets */,
 				94A422E6E59C06BEAFB4BFA2 /* Info.plist */,
 				D3E59B58F324A9600EE4325C /* Paste.entitlements */,
-				17E41EBE2A05B16FBF699B0A /* Paste.icon */,
 			);
 			path = Paste;
 			sourceTree = "<group>";
@@ -538,7 +535,6 @@
 				BB41B0000000000000000006 /* sound-effect-3.mp3 in Resources */,
 				BB41B0000000000000000008 /* sound-effect-4.mp3 in Resources */,
 				548476F13FAEFBC9FE5F0632 /* SymbolsNerdFontMono-Regular.ttf in Resources */,
-				E8EB228A4D377029F8905182 /* Paste.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -733,7 +729,7 @@
 		7601B03AE78A00DEFEB07DF3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = Paste;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Paste/Paste.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 40;
@@ -825,7 +821,7 @@
 		EBF74BE4850FCB80ADA141F4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = Paste;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Paste/Paste.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 40;
