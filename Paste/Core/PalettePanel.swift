@@ -6,6 +6,8 @@ import SwiftUI
 /// The sole keyboard gateway for the palette window. It receives key events before the current
 /// first responder, so embedded AppKit views and SwiftUI focus changes cannot disable commands.
 final class PalettePanel: NSPanel {
+    private let visualStyle: PaletteVisualStyle
+    var auxiliaryInputActive = false
     weak var paletteViewModel: PaletteViewModel? {
         didSet {
             paletteViewModel?.onMenuOpenChanged = { [weak self] open in
@@ -34,6 +36,8 @@ final class PalettePanel: NSPanel {
     }
 
     private func route(_ event: NSEvent) -> Bool {
+        // The in-panel Pinboard editor owns text editing, Return and Escape.
+        if auxiliaryInputActive { return false }
         guard let paletteViewModel else { return false }
         let keyCode = Int(event.keyCode)
         let modifiers = event.modifierFlags.intersection(Self.relevantModifiers)
@@ -41,6 +45,8 @@ final class PalettePanel: NSPanel {
 
         if modifiers == .command {
             switch keyCode {
+            case kVK_ANSI_N:
+                return handleOnce(.newTextItem, event: event)
             case kVK_ANSI_Comma:
                 return handleOnce(.settings, event: event)
             case kVK_ANSI_Q:
@@ -91,6 +97,10 @@ final class PalettePanel: NSPanel {
             case kVK_DownArrow:
                 return paletteViewModel.handle(.move(1))
             case kVK_UpArrow:
+                return paletteViewModel.handle(.move(-1))
+            case kVK_RightArrow where visualStyle == .past:
+                return paletteViewModel.handle(.move(1))
+            case kVK_LeftArrow where visualStyle == .past:
                 return paletteViewModel.handle(.move(-1))
             case kVK_Return, kVK_ANSI_KeypadEnter:
                 return handleOnce(.activate, event: event)
@@ -174,7 +184,7 @@ final class PalettePanel: NSPanel {
 
     @discardableResult
     private func focusSearch(for request: UUID) -> Bool {
-        guard pendingSearchFocusRequest == request, isVisible, isKeyWindow,
+        guard pendingSearchFocusRequest == request, isVisible, isKeyWindow, !auxiliaryInputActive,
             paletteViewModel?.renamingID == nil, let searchField, searchField.isEnabled
         else { return false }
         guard makeFirstResponder(searchField) else { return false }
@@ -236,10 +246,12 @@ final class PalettePanel: NSPanel {
         }
     }
 
-    init<Content: View>(rootView: Content) {
+    init<Content: View>(rootView: Content, visualStyle: PaletteVisualStyle) {
+        self.visualStyle = visualStyle
+        let panelSize = Theme.Size.panelSize(for: visualStyle)
         super.init(
             contentRect: NSRect(
-                x: 0, y: 0, width: Theme.Size.panelWidth, height: Theme.Size.panelHeight),
+                x: 0, y: 0, width: panelSize.width, height: panelSize.height),
             styleMask: [.borderless, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -258,12 +270,67 @@ final class PalettePanel: NSPanel {
         animationBehavior = .none
         isReleasedWhenClosed = false
 
-        let hosting = NSHostingView(rootView: rootView)
+        let frame = NSRect(
+            x: 0, y: 0, width: panelSize.width, height: panelSize.height)
+        let hosting = TransparentPaletteHostingView(rootView: rootView)
+        hosting.frame = frame
         hosting.wantsLayer = true
+        hosting.layer?.backgroundColor = NSColor.clear.cgColor
         hosting.sizingOptions = []
-        contentView = hosting
+        hosting.autoresizingMask = [.width, .height]
+
+        if visualStyle == .daycast {
+            // Daycast owns its original vibrancy surface in SwiftUI.
+            contentView = hosting
+        } else if #available(macOS 26.0, *) {
+            // Match Obelisk's Search Panel: the whole window is a single native glass sampling
+            // surface, with SwiftUI hosted inside its content view.
+            let glass = NSGlassEffectView(frame: frame)
+            glass.autoresizingMask = [.width, .height]
+            glass.style = .regular
+            glass.cornerRadius = Self.cornerRadius(for: visualStyle)
+            let content = NSView(frame: frame)
+            content.autoresizingMask = [.width, .height]
+            content.wantsLayer = true
+            content.layer?.backgroundColor = NSColor.clear.cgColor
+            content.layer?.cornerRadius = Theme.Radius.pastPanel
+            content.layer?.masksToBounds = true
+            content.addSubview(hosting)
+            glass.contentView = content
+
+            let shell = NSView(frame: frame)
+            shell.wantsLayer = true
+            shell.layer?.backgroundColor = NSColor.clear.cgColor
+            shell.layer?.cornerRadius = Theme.Radius.pastPanel
+            shell.layer?.masksToBounds = true
+            shell.addSubview(glass)
+            contentView = shell
+            hasShadow = false
+        } else {
+            let material = NSVisualEffectView(frame: frame)
+            material.autoresizingMask = [.width, .height]
+            material.material = .hudWindow
+            material.blendingMode = .behindWindow
+            material.state = .active
+            material.addSubview(hosting)
+            contentView = material
+        }
+    }
+
+    func applyVisualStyle(_ visualStyle: PaletteVisualStyle) {
+        if #available(macOS 26.0, *), let glass = contentView as? NSGlassEffectView {
+            glass.cornerRadius = Self.cornerRadius(for: visualStyle)
+        }
+    }
+
+    private static func cornerRadius(for visualStyle: PaletteVisualStyle) -> CGFloat {
+        visualStyle == .past ? Theme.Radius.pastPanel : Theme.Radius.panel
     }
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+}
+
+private final class TransparentPaletteHostingView<Content: View>: NSHostingView<Content> {
+    override var isOpaque: Bool { false }
 }
