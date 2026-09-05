@@ -21,6 +21,7 @@ final class ClipboardManager {
     private var timer: Timer?
     private var lastObservedChangeCount = 0
     private var captureTail: Task<Void, Never>?
+    private(set) var isPaused = false
 
     init(store: ClipboardStore, settings: AppSettings) {
         self.store = store
@@ -41,6 +42,16 @@ final class ClipboardManager {
         self.timer = timer
     }
 
+    func setPaused(_ paused: Bool) {
+        isPaused = paused
+        if paused {
+            captureTail?.cancel()
+            captureTail = nil
+        }
+        // Ignore changes made during the pause instead of importing them when monitoring resumes.
+        lastObservedChangeCount = NSPasteboard.general.changeCount
+    }
+
     /// Observe quickly, snapshot off-main, then process captures in observed order. Reading the
     /// source and exclusion list at change detection narrows the old 0.5-second attribution race.
     private func poll() {
@@ -48,6 +59,7 @@ final class ClipboardManager {
         let changeCount = pasteboard.changeCount
         guard changeCount != lastObservedChangeCount else { return }
         lastObservedChangeCount = changeCount
+        guard !isPaused else { return }
 
         let types = pasteboard.types ?? []
         if types.contains(Self.internalType) { return }
