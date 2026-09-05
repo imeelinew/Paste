@@ -1005,15 +1005,11 @@ private final class ClipboardThumbnailView: NSView {
     private static let imageMaxPixel: CGFloat = 128
     private static let markdownCache = NSCache<NSUUID, NSNumber>()
 
-    private enum Placeholder {
-        case lucide(LucideIconName)
-    }
-
     private let symbolView = NSImageView()
     private var representedID: ClipboardItem.ID?
     private var loadTask: Task<Void, Never>?
     private var displayedImage: NSImage?
-    private var placeholder = Placeholder.lucide(.image)
+    private var placeholder: LucideIconName = .image
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1113,9 +1109,7 @@ private final class ClipboardThumbnailView: NSView {
 
     func refreshAppearance() {
         guard let displayedImage else {
-            switch placeholder {
-            case .lucide(let name): showLucide(name)
-            }
+            showLucide(placeholder)
             return
         }
         showImage(displayedImage)
@@ -1144,7 +1138,7 @@ private final class ClipboardThumbnailView: NSView {
     }
 
     private func showLucide(_ name: LucideIconName) {
-        placeholder = .lucide(name)
+        placeholder = name
         displayedImage = nil
         layer?.contents = nil
         layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
