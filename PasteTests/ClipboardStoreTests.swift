@@ -124,6 +124,42 @@ final class ClipboardStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.item(id: item.id)?.customTitle, "Final")
     }
 
+    // MARK: - Pinboards
+
+    func testPinboardMetadataAndMembershipPersist() async throws {
+        let directory = TestSupport.makeTemporaryDirectory("pinboards")
+        defer { TestSupport.removeTemporaryDirectory(directory) }
+
+        let store = ClipboardStore(directory: directory)
+        let item = try XCTUnwrap(store.addText("grouped", sourceBundleID: nil))
+        let group = try XCTUnwrap(store.createGroup(named: "Ideas", color: .orange))
+        store.setItem(item.id, in: group.id, member: true)
+        store.renameGroup(group, to: "Research")
+        store.setColor(.purple, for: store.groups[0])
+
+        let reloaded = ClipboardStore(directory: directory)
+        reloaded.load()
+        let loadedGroup = try XCTUnwrap(reloaded.groups.first)
+        XCTAssertEqual(loadedGroup.name, "Research")
+        XCTAssertEqual(loadedGroup.color, .purple)
+        XCTAssertTrue(reloaded.contains(item.id, in: loadedGroup.id))
+    }
+
+    func testPinboardSearchFiltersBeforeReturningResults() async throws {
+        let directory = TestSupport.makeTemporaryDirectory("pinboard-search")
+        defer { TestSupport.removeTemporaryDirectory(directory) }
+
+        let store = ClipboardStore(directory: directory)
+        let included = try XCTUnwrap(store.addText("needle included", sourceBundleID: nil))
+        _ = try XCTUnwrap(store.addText("needle excluded", sourceBundleID: nil))
+        let group = try XCTUnwrap(store.createGroup(named: "Keep"))
+        store.setItem(included.id, in: group.id, member: true)
+
+        let results = await store.searchAsync(
+            "needle", allowedItemIDs: store.itemIDs(in: group.id))
+        XCTAssertEqual(results.map(\.id), [included.id])
+    }
+
     // MARK: - Removal
 
     func testRemoveDeletesRow() {
@@ -333,6 +369,33 @@ final class ClipboardStoreTests: XCTestCase {
         // is not a contiguous substring and does not.
         let byFullSpelling = await reloaded.searchAsync("nihao")
         XCTAssertEqual(byFullSpelling.map(\.id), [item.id])
+    }
+
+    func testTypeFilterFindsMarkdownBeyondMemoryAndSearchLimits() async throws {
+        let directory = TestSupport.makeTemporaryDirectory("search-type-history")
+        defer { TestSupport.removeTemporaryDirectory(directory) }
+        let store = ClipboardStore(directory: directory)
+        let markdown = try XCTUnwrap(store.addText("# needle", sourceBundleID: nil))
+        XCTAssertEqual(markdown.displayKind, .markdown)
+        store.setCustomTitle("recipe", for: markdown.id)
+
+        // Newer plain-text matches must not consume the Markdown result budget.
+        let dbURL = directory.appendingPathComponent("clipboard.sqlite3")
+        for index in 0..<2100 {
+            let id = UUID()
+            XCTAssertTrue(TestSupport.seedRow(
+                dbURL: dbURL, id: id, text: "needle plain entry \(index)", createdAt: Date()))
+            store.setCustomTitle("recipe \(index)", for: id)
+        }
+        let reloaded = ClipboardStore(directory: directory)
+        reloaded.load()
+        XCTAssertFalse(reloaded.items.contains { $0.id == markdown.id })
+
+        // Empty query, LIKE, FTS, and custom-title fallback all filter before truncation.
+        for query in ["", "ne", "needle", "recipe"] {
+            let results = await reloaded.searchAsync(query, displayKind: .markdown)
+            XCTAssertEqual(results.map(\.id), [markdown.id], "Query: \(query)")
+        }
     }
 
     func testCustomTitleIsSearchable() async throws {
