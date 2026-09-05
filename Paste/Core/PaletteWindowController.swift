@@ -5,6 +5,7 @@ import SwiftUI
 final class PaletteWindowController: NSObject, NSWindowDelegate {
     private unowned let core: AppCore
     private var panel: PalettePanel?
+    private var panelStyle: PaletteVisualStyle?
     private(set) var previousApp: NSRunningApplication?
 
     init(core: AppCore) {
@@ -31,7 +32,13 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         }
 
         let panel = ensurePanel()
+        let animateEntrance = !panel.isVisible && core.settings.paletteVisualStyle == .past
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         position(panel)
+        let destination = panel.frame
+        if animateEntrance {
+            panel.setFrameOrigin(NSPoint(x: destination.minX, y: destination.minY - destination.height))
+        }
         panel.contentView?.layoutSubtreeIfNeeded()
         if core.settings.switchToEnglishInputOnOpen {
             InputSourceSwitcher.selectEnglish()
@@ -39,6 +46,13 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(nil)
         panel.orderFrontRegardless()
+        if animateEntrance {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.24
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().setFrame(destination, display: true)
+            }
+        }
         panel.requestSearchFocus()
         DispatchQueue.main.async { [weak panel] in
             guard let panel, panel.isVisible, !panel.isKeyWindow else { return }
@@ -62,28 +76,46 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     }
 
     private func ensurePanel() -> PalettePanel {
-        if let panel { return panel }
-        let root = RootPaletteView()
+        let style = core.settings.paletteVisualStyle
+        if let panel, panelStyle == style { return panel }
+        panel?.orderOut(nil)
+        let root = RootPaletteView(visualStyle: style)
             .environmentObject(core)
             .environmentObject(core.palette)
             .environmentObject(core.clipboardStore)
-        let panel = PalettePanel(rootView: root)
+        let panel = PalettePanel(rootView: root, visualStyle: core.settings.paletteVisualStyle)
         panel.delegate = self
         panel.paletteViewModel = core.palette
         self.panel = panel
+        panelStyle = style
         return panel
     }
 
-    private func position(_ panel: NSPanel) {
+    private func position(_ panel: PalettePanel) {
         guard let screen = targetScreen() else { return }
         let visible = screen.visibleFrame
-        let topEdge = visible.maxY - visible.height * Theme.Size.paletteTopMarginFraction
+        let visualStyle = core.settings.paletteVisualStyle
+        if visualStyle == .past {
+            let bounds = screen.frame
+            panel.setFrame(
+                NSRect(x: bounds.minX + 8, y: bounds.minY + 8,
+                       width: max(1, bounds.width - 16),
+                       height: min(Theme.Size.pastPanelHeight, bounds.height - 16)),
+                display: true)
+            return
+        }
+        let panelSize = Theme.Size.panelSize(for: visualStyle)
+        let width = min(panelSize.width, max(1, visible.width - 32))
+        let height = min(panelSize.height, max(1, visible.height - 32))
+        let topEdge = visible.maxY
+            - visible.height * Theme.Size.paletteTopMarginFraction(for: visualStyle)
+        panel.applyVisualStyle(visualStyle)
         panel.setFrame(
             NSRect(
-                x: visible.midX - Theme.Size.panelWidth / 2,
-                y: topEdge - Theme.Size.panelHeight,
-                width: Theme.Size.panelWidth,
-                height: Theme.Size.panelHeight),
+                x: visible.midX - width / 2,
+                y: topEdge - height,
+                width: width,
+                height: height),
             display: true)
     }
 
